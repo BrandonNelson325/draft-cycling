@@ -14,6 +14,8 @@ export interface Athlete {
   subscription_status?: 'active' | 'past_due' | 'canceled' | 'trialing';
   subscription_id?: string;
   subscription_current_period_end?: string;
+  beta_access_code?: string;
+  beta_access_activated_at?: string;
   created_at: string;
   updated_at: string;
 }

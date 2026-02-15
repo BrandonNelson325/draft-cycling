@@ -13,10 +13,10 @@ export const checkSubscription = async (
       return;
     }
 
-    // Get athlete subscription status
+    // Get athlete subscription status and beta access
     const { data: athlete, error } = await supabaseAdmin
       .from('athletes')
-      .select('subscription_status, subscription_current_period_end')
+      .select('subscription_status, subscription_current_period_end, beta_access_code')
       .eq('id', req.user.id)
       .single();
 
@@ -26,10 +26,16 @@ export const checkSubscription = async (
       return;
     }
 
+    // Check if user has beta access (bypass subscription check)
+    if (athlete?.beta_access_code) {
+      next();
+      return;
+    }
+
     // Check if subscription is active
     if (athlete?.subscription_status !== 'active' && athlete?.subscription_status !== 'trialing') {
       res.status(403).json({
-        error: 'Active subscription required',
+        error: 'Active subscription or beta access required',
         subscription_status: athlete?.subscription_status || 'none',
       });
       return;

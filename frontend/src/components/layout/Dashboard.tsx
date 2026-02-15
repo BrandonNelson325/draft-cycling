@@ -2,6 +2,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { authService } from '../../services/authService';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { StravaConnect } from '../strava/StravaConnect';
 
 export function Dashboard() {
   const user = useAuthStore((state) => state.user);
@@ -25,7 +26,7 @@ export function Dashboard() {
       </header>
 
       <main className="container mx-auto px-4 py-8">
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-6">
           <Card>
             <CardHeader>
               <CardTitle>Welcome{user?.full_name ? `, ${user.full_name}` : ''}!</CardTitle>
@@ -59,18 +60,35 @@ export function Dashboard() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Get Started</CardTitle>
-              <CardDescription>Next steps</CardDescription>
+              <CardTitle>Access Status</CardTitle>
+              <CardDescription>Your account type</CardDescription>
             </CardHeader>
             <CardContent>
-              <ul className="space-y-2 text-sm">
-                <li>✅ Create account</li>
-                <li>⬜ Subscribe to premium</li>
-                <li>⬜ Connect Strava</li>
-                <li>⬜ Chat with AI coach</li>
-              </ul>
+              <div className="space-y-3">
+                {user?.beta_access_code && (
+                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <span className="text-blue-700 font-semibold">🧪 Beta Tester</span>
+                    </div>
+                    <p className="text-xs text-blue-600 mt-1">
+                      Full access enabled
+                    </p>
+                  </div>
+                )}
+                <ul className="space-y-2 text-sm">
+                  <li>✅ Create account</li>
+                  <li>✅ Beta access activated</li>
+                  <li>⬜ Connect Strava</li>
+                  <li>⬜ Chat with AI coach</li>
+                </ul>
+              </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Strava Connection */}
+        <div className="max-w-2xl">
+          <StravaConnect />
         </div>
       </main>
     </div>
