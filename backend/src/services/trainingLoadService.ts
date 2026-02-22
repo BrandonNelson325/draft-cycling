@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../utils/supabase';
+import { logger } from '../utils/logger';
 
 interface TrainingLoad {
   ctl: number; // Chronic Training Load (42-day exponential moving average)
@@ -43,7 +44,7 @@ export const trainingLoadService = {
         .single();
 
       if (!athlete?.ftp) {
-        console.log('No FTP set for athlete, cannot calculate TSS');
+        logger.debug('No FTP set for athlete, cannot calculate TSS');
         return;
       }
 
@@ -73,9 +74,9 @@ export const trainingLoadService = {
           .eq('id', activity.id);
       }
 
-      console.log(`Updated TSS for ${activities.length} activities`);
+      logger.debug(`Updated TSS for ${activities.length} activities`);
     } catch (error) {
-      console.error('Error updating activity TSS:', error);
+      logger.error('Error updating activity TSS:', error);
     }
   },
 
@@ -125,7 +126,7 @@ export const trainingLoadService = {
         tsb: Math.round(tsb * 10) / 10,
       };
     } catch (error) {
-      console.error('Error calculating training load:', error);
+      logger.error('Error calculating training load:', error);
       return null;
     }
   },
@@ -184,7 +185,7 @@ export const trainingLoadService = {
           onConflict: 'athlete_id,date',
         });
     } catch (error) {
-      console.error('Error storing metrics:', error);
+      logger.error('Error storing metrics:', error);
     }
   },
 
@@ -201,9 +202,11 @@ export const trainingLoadService = {
 
       if (!load) {
         return {
-          message: 'Not enough training data available',
-          load: null,
-          status: null,
+          ctl: 0,
+          atl: 0,
+          tsb: 0,
+          form_status: 'No training data available',
+          last_updated: new Date().toISOString(),
         };
       }
 
@@ -214,11 +217,14 @@ export const trainingLoadService = {
       const status = this.determineStatus(load.tsb);
 
       return {
-        load,
-        status,
+        ctl: load.ctl,
+        atl: load.atl,
+        tsb: load.tsb,
+        form_status: status.description,
+        last_updated: new Date().toISOString(),
       };
     } catch (error) {
-      console.error('Error getting training status:', error);
+      logger.error('Error getting training status:', error);
       return null;
     }
   },
@@ -240,7 +246,7 @@ export const trainingLoadService = {
 
       return metrics;
     } catch (error) {
-      console.error('Error getting metrics history:', error);
+      logger.error('Error getting metrics history:', error);
       return null;
     }
   },

@@ -1,51 +1,78 @@
 import { useState } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/useAuthStore';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
 import { BetaAccessForm } from './components/auth/BetaAccessForm';
-import { Dashboard } from './components/layout/Dashboard';
+import { AppLayout } from './components/layout/AppLayout';
+import { DashboardPage } from './pages/DashboardPage';
+import { WorkoutsPage } from './pages/WorkoutsPage';
+import { CalendarPage } from './pages/CalendarPage';
+import { ChatPage } from './pages/ChatPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { StravaCallback } from './pages/StravaCallback';
+import { TrainingPlanPage } from './pages/TrainingPlanPage';
+import { DailyMorningModal } from './components/modals/DailyMorningModal';
+import { useDailyMorning } from './hooks/useDailyMorning';
 
-function App() {
-  const [showLogin, setShowLogin] = useState(true);
+function ProtectedRoutes() {
   const user = useAuthStore((state) => state.user);
+  const { shouldShow, analysis, readiness, dismiss } = useDailyMorning();
 
-  // Strava callback route (accessible without full auth)
-  if (window.location.pathname === '/strava/callback') {
-    return <StravaCallback />;
-  }
+  // Check if user has beta access or subscription
+  const hasAccess = !!(
+    user?.beta_access_code ||
+    user?.subscription_status === 'active' ||
+    user?.subscription_status === 'trialing'
+  );
 
-  // If user is logged in, check for beta access
-  if (user) {
-    // Check if user has beta access or subscription
-    const hasAccess = !!(
-      user.beta_access_code ||
-      user.subscription_status === 'active' ||
-      user.subscription_status === 'trialing'
+  // If no access, show beta access form
+  if (!hasAccess) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <BetaAccessForm />
+      </div>
     );
-
-    // If no access, show beta access form
-    if (!hasAccess) {
-      return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-4">
-          <BetaAccessForm />
-        </div>
-      );
-    }
-
-    // Has access, show dashboard
-    return <Dashboard />;
   }
 
-  // Otherwise show auth forms
+  // Has access, show app with routing
+  return (
+    <>
+      <Routes>
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/workouts" element={<WorkoutsPage />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/training-plan" element={<TrainingPlanPage />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat/:conversationId" element={<ChatPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+
+      {/* Morning modal — only shows when user hasn't checked in today */}
+      {shouldShow && readiness && (
+        <DailyMorningModal
+          analysis={analysis}
+          readiness={readiness}
+          onClose={dismiss}
+        />
+      )}
+    </>
+  );
+}
+
+function AuthScreen() {
+  const [showLogin, setShowLogin] = useState(true);
+
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2">🚴 AI Cycling Coach</h1>
-          <p className="text-muted-foreground">
-            Your personalized AI-powered cycling training companion
-          </p>
+          <div className="flex justify-center mb-6">
+            <img src="/logo.png" alt="Draft" className="h-32" />
+          </div>
         </div>
 
         {showLogin ? (
@@ -55,6 +82,24 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function App() {
+  const user = useAuthStore((state) => state.user);
+
+  return (
+    <Routes>
+      {/* Strava callback route (accessible without full auth) */}
+      <Route path="/strava/callback" element={<StravaCallback />} />
+
+      {/* Protected routes if user is logged in */}
+      {user ? (
+        <Route path="*" element={<ProtectedRoutes />} />
+      ) : (
+        <Route path="*" element={<AuthScreen />} />
+      )}
+    </Routes>
   );
 }
 

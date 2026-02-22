@@ -10,6 +10,9 @@ router.get('/analyze-training', authenticateJWT, checkSubscription, aiCoachContr
 router.get('/analyze-ride/:activityId', authenticateJWT, checkSubscription, aiCoachController.analyzeRide);
 router.post('/suggest-workout', authenticateJWT, checkSubscription, aiCoachController.suggestWorkout);
 router.post('/chat', authenticateJWT, checkSubscription, aiCoachController.chat);
+router.post('/start-conversation', authenticateJWT, checkSubscription, aiCoachController.startConversation);
 router.get('/conversations', authenticateJWT, checkSubscription, aiCoachController.getConversations);
+router.get('/conversations/:conversationId/messages', authenticateJWT, checkSubscription, aiCoachController.getConversationMessages);
+router.delete('/conversations/:conversationId', authenticateJWT, checkSubscription, aiCoachController.deleteConversation);
 
 export default router;

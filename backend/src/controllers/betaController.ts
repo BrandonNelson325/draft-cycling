@@ -1,14 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { supabaseAdmin } from '../utils/supabase';
-
-// Valid beta codes (in production, store these securely or in database)
-const VALID_BETA_CODES = [
-  'CYCLECOACH2026',
-  'EARLYACCESS',
-  'BETATESTER',
-  'STRAVATEST',
-];
+import { config } from '../config';
 
 export const activateBetaAccess = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -24,8 +17,8 @@ export const activateBetaAccess = async (req: AuthRequest, res: Response): Promi
       return;
     }
 
-    // Validate the code
-    if (!VALID_BETA_CODES.includes(code.toUpperCase())) {
+    // Validate the code against the global beta access code
+    if (code.toUpperCase() !== config.beta.accessCode.toUpperCase()) {
       res.status(400).json({ error: 'Invalid beta code' });
       return;
     }

@@ -66,6 +66,37 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
+export const refreshToken = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+      res.status(400).json({ error: 'Refresh token is required' });
+      return;
+    }
+
+    // Refresh the session using Supabase
+    const { data, error } = await supabaseAdmin.auth.refreshSession({
+      refresh_token,
+    });
+
+    if (error || !data.session) {
+      res.status(401).json({ error: 'Invalid or expired refresh token' });
+      return;
+    }
+
+    res.json({
+      session: {
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      },
+    });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(500).json({ error: 'Token refresh failed' });
+  }
+};
+
 export const login = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password } = req.body;
@@ -161,12 +192,13 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { full_name, ftp, weight_kg } = req.body;
+    const { full_name, ftp, weight_kg, unit_system } = req.body;
 
     const updateData: any = { updated_at: new Date().toISOString() };
     if (full_name !== undefined) updateData.full_name = full_name;
     if (ftp !== undefined) updateData.ftp = ftp;
     if (weight_kg !== undefined) updateData.weight_kg = weight_kg;
+    if (unit_system !== undefined) updateData.unit_system = unit_system;
 
     const { data: athlete, error } = await supabaseAdmin
       .from('athletes')

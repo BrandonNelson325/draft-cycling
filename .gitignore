@@ -43,3 +43,26 @@ Thumbs.db
 *.log
 .cache
 .temp
+
+# Security - DO NOT COMMIT
+*.pem
+*.key
+*.p8
+*.p12
+*.mobileprovision
+google-play-service-account.json
+
+# Mobile
+mobile/.expo/
+mobile/ios/
+mobile/android/
+*.apk
+*.aab
+*.ipa
+
+# Railway
+.railway/
+
+# Docker
+.dockerignore
+Dockerfile

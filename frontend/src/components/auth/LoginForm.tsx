@@ -32,7 +32,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Welcome Back</CardTitle>
-        <CardDescription>Sign in to your AI Cycling Coach account</CardDescription>
+        <CardDescription>Sign in to your Draft account</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">

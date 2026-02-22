@@ -40,7 +40,7 @@ export function BetaAccessForm() {
       <CardHeader>
         <CardTitle>Beta Access Required</CardTitle>
         <CardDescription>
-          Enter your beta access code to start using AI Cycling Coach
+          Enter your beta access code to start using Draft
         </CardDescription>
       </CardHeader>
       <CardContent>

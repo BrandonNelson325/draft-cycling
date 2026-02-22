@@ -6,6 +6,7 @@ export interface Athlete {
   full_name?: string;
   ftp?: number;
   weight_kg?: number;
+  unit_system?: 'metric' | 'imperial';
   strava_athlete_id?: number;
   strava_access_token?: string;
   strava_refresh_token?: string;

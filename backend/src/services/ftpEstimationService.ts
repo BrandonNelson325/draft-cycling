@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../utils/supabase';
+import { logger } from '../utils/logger';
 
 export const ftpEstimationService = {
   /**
@@ -25,7 +26,7 @@ export const ftpEstimationService = {
         .not('power_20min', 'is', null);
 
       if (error || !curves || curves.length === 0) {
-        console.log('No power curve data available for FTP estimation');
+        logger.debug('No power curve data available for FTP estimation');
         return null;
       }
 
@@ -60,7 +61,7 @@ export const ftpEstimationService = {
         activity_count: curves.length,
       };
     } catch (error) {
-      console.error('Error estimating FTP:', error);
+      logger.error('Error estimating FTP:', error);
       return null;
     }
   },
@@ -78,7 +79,7 @@ export const ftpEstimationService = {
 
       // Only auto-update if high confidence
       if (estimation.confidence !== 'high') {
-        console.log(`FTP estimation confidence too low (${estimation.confidence})`);
+        logger.debug(`FTP estimation confidence too low (${estimation.confidence})`);
         return false;
       }
 
@@ -102,7 +103,7 @@ export const ftpEstimationService = {
           })
           .eq('id', athleteId);
 
-        console.log(
+        logger.debug(
           `Auto-updated FTP for athlete ${athleteId}: ${athlete?.ftp || 'none'} -> ${estimation.estimated_ftp}W`
         );
         return true;
@@ -110,7 +111,7 @@ export const ftpEstimationService = {
 
       return false;
     } catch (error) {
-      console.error('Error auto-updating FTP:', error);
+      logger.error('Error auto-updating FTP:', error);
       return false;
     }
   },
@@ -158,7 +159,7 @@ export const ftpEstimationService = {
 
       return weeklyBest.sort((a, b) => a.week.localeCompare(b.week));
     } catch (error) {
-      console.error('Error getting FTP history:', error);
+      logger.error('Error getting FTP history:', error);
       return null;
     }
   },

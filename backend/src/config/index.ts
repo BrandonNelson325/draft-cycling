@@ -30,6 +30,10 @@ export const config = {
   },
 
   jwtSecret: process.env.JWT_SECRET!,
+
+  beta: {
+    accessCode: process.env.BETA_ACCESS_CODE || 'CYCLECOACH2026',
+  },
 };
 
 // Validate required environment variables

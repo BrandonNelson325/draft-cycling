@@ -1,11 +1,27 @@
+import { useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authService } from '../../services/authService';
+import { stravaService } from '../../services/stravaService';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { StravaConnect } from '../strava/StravaConnect';
 
 export function Dashboard() {
   const user = useAuthStore((state) => state.user);
+  const [stravaConnected, setStravaConnected] = useState(false);
+
+  useEffect(() => {
+    const checkStravaStatus = async () => {
+      try {
+        const status = await stravaService.getConnectionStatus() as any;
+        setStravaConnected(status?.connected || false);
+      } catch (error) {
+        console.error('Failed to check Strava status:', error);
+      }
+    };
+
+    checkStravaStatus();
+  }, []);
 
   const handleLogout = async () => {
     await authService.logout();
@@ -15,7 +31,7 @@ export function Dashboard() {
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-2xl font-bold">🚴 AI Cycling Coach</h1>
+          <img src="/logo.png" alt="Draft" className="h-12" />
           <div className="flex items-center gap-4">
             <span className="text-sm text-muted-foreground">{user?.email}</span>
             <Button variant="outline" onClick={handleLogout}>
@@ -30,7 +46,7 @@ export function Dashboard() {
           <Card>
             <CardHeader>
               <CardTitle>Welcome{user?.full_name ? `, ${user.full_name}` : ''}!</CardTitle>
-              <CardDescription>Your AI Cycling Coach Dashboard</CardDescription>
+              <CardDescription>Your Draft Dashboard</CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
@@ -78,7 +94,7 @@ export function Dashboard() {
                 <ul className="space-y-2 text-sm">
                   <li>✅ Create account</li>
                   <li>✅ Beta access activated</li>
-                  <li>⬜ Connect Strava</li>
+                  <li>{stravaConnected ? '✅' : '⬜'} Connect Strava</li>
                   <li>⬜ Chat with AI coach</li>
                 </ul>
               </div>

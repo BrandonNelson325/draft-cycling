@@ -8,6 +8,7 @@ interface RequestOptions extends RequestInit {
 
 class ApiClient {
   private baseUrl: string;
+  private refreshing: Promise<boolean> | null = null;
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl;
@@ -28,9 +29,56 @@ class ApiClient {
     return headers;
   }
 
+  private async refreshToken(): Promise<boolean> {
+    // Prevent multiple simultaneous refresh attempts
+    if (this.refreshing) {
+      return this.refreshing;
+    }
+
+    this.refreshing = (async () => {
+      try {
+        const refreshToken = useAuthStore.getState().refreshToken;
+        if (!refreshToken) {
+          return false;
+        }
+
+        const response = await fetch(`${this.baseUrl}/api/auth/refresh`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+
+        if (!response.ok) {
+          // Refresh failed, logout user
+          useAuthStore.getState().logout();
+          return false;
+        }
+
+        const data = await response.json();
+
+        // Update tokens in store
+        useAuthStore.getState().setTokens(
+          data.session.access_token,
+          data.session.refresh_token
+        );
+
+        return true;
+      } catch (error) {
+        console.error('Token refresh failed:', error);
+        useAuthStore.getState().logout();
+        return false;
+      } finally {
+        this.refreshing = null;
+      }
+    })();
+
+    return this.refreshing;
+  }
+
   async request<T>(
     endpoint: string,
-    options: RequestOptions = {}
+    options: RequestOptions = {},
+    retryCount = 0
   ): Promise<{ data?: T; error?: any }> {
     const { requireAuth = false, ...fetchOptions } = options;
 
@@ -43,6 +91,21 @@ class ApiClient {
         },
       });
 
+      // If unauthorized and we haven't retried yet, try to refresh token
+      if (response.status === 401 && requireAuth && retryCount === 0) {
+        const refreshed = await this.refreshToken();
+        if (refreshed) {
+          // Retry the original request with new token
+          return this.request<T>(endpoint, options, retryCount + 1);
+        }
+      }
+
+      // Handle 204 No Content (successful delete with no body)
+      if (response.status === 204) {
+        return { data: undefined as T };
+      }
+
+      // Parse JSON response
       const data = await response.json();
 
       if (!response.ok) {

@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { stravaService } from './stravaService';
+import { logger } from '../utils/logger';
 
 interface PowerCurve {
   duration_seconds: number;
@@ -58,7 +59,7 @@ export const powerAnalysisService = {
       // Check if activity has power data
       const streamsData = streams as any;
       if (!streamsData || !streamsData.watts || !streamsData.watts.data) {
-        console.log(`Activity ${stravaActivityId} has no power data`);
+        logger.debug(`Activity ${stravaActivityId} has no power data`);
         return null;
       }
 
@@ -66,6 +67,9 @@ export const powerAnalysisService = {
 
       // Calculate best efforts for standard durations
       const durations = {
+        power_5sec: 5,
+        power_15sec: 15,
+        power_30sec: 30,
         power_1min: 60,
         power_3min: 180,
         power_5min: 300,
@@ -100,13 +104,13 @@ export const powerAnalysisService = {
         .single();
 
       if (error) {
-        console.error('Error storing power curve:', error);
+        logger.error('Error storing power curve:', error);
         return null;
       }
 
       return data;
     } catch (error) {
-      console.error('Error analyzing power curve:', error);
+      logger.error('Error analyzing power curve:', error);
       return null;
     }
   },
@@ -127,6 +131,9 @@ export const powerAnalysisService = {
 
       // Calculate PRs for each duration
       const prs: any = {
+        power_5sec: { power: 0, activity_id: null, date: null },
+        power_15sec: { power: 0, activity_id: null, date: null },
+        power_30sec: { power: 0, activity_id: null, date: null },
         power_1min: { power: 0, activity_id: null, date: null },
         power_3min: { power: 0, activity_id: null, date: null },
         power_5min: { power: 0, activity_id: null, date: null },
@@ -153,7 +160,7 @@ export const powerAnalysisService = {
 
       return prs;
     } catch (error) {
-      console.error('Error getting personal records:', error);
+      logger.error('Error getting personal records:', error);
       return null;
     }
   },
@@ -176,7 +183,7 @@ export const powerAnalysisService = {
 
       return data;
     } catch (error) {
-      console.error('Error getting activity power curve:', error);
+      logger.error('Error getting activity power curve:', error);
       return null;
     }
   },

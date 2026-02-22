@@ -13,13 +13,24 @@ export const getEstimatedFTP = async (req: AuthRequest, res: Response): Promise<
 
     if (!estimation) {
       res.json({
-        message: 'Not enough data to estimate FTP. Complete more rides with power data.',
-        estimation: null,
+        estimated_ftp: 0,
+        confidence: 0,
+        based_on_rides: 0,
+        last_updated: new Date().toISOString(),
       });
       return;
     }
 
-    res.json({ estimation });
+    // Convert confidence to number (0-1)
+    const confidenceMap = { low: 0.5, medium: 0.7, high: 0.9 };
+    const confidenceNum = confidenceMap[estimation.confidence];
+
+    res.json({
+      estimated_ftp: estimation.estimated_ftp,
+      confidence: confidenceNum,
+      based_on_rides: estimation.activity_count,
+      last_updated: new Date().toISOString(),
+    });
   } catch (error) {
     console.error('Get estimated FTP error:', error);
     res.status(500).json({ error: 'Failed to estimate FTP' });

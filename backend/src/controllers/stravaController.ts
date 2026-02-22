@@ -5,6 +5,7 @@ import { stravaClient } from '../utils/strava';
 import { stravaService } from '../services/stravaService';
 import { ftpEstimationService } from '../services/ftpEstimationService';
 import crypto from 'crypto';
+import { logger } from '../utils/logger';
 
 export const getAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -21,7 +22,7 @@ export const getAuthUrl = async (req: AuthRequest, res: Response): Promise<void>
 
     res.json({ auth_url: authUrl, state });
   } catch (error) {
-    console.error('Get auth URL error:', error);
+    logger.error('Get auth URL error:', error);
     res.status(500).json({ error: 'Failed to generate auth URL' });
   }
 };
@@ -58,7 +59,7 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
         `athlete_id=${tokenData.athlete.id}`
     );
   } catch (error) {
-    console.error('Strava callback error:', error);
+    logger.error('Strava callback error:', error);
     res.redirect(`${process.env.FRONTEND_URL}?strava_error=callback_failed`);
   }
 };
@@ -92,7 +93,7 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
       .single();
 
     if (error) {
-      console.error('Error connecting Strava:', error);
+      logger.error('Error connecting Strava:', error);
       res.status(500).json({ error: 'Failed to connect Strava' });
       return;
     }
@@ -104,7 +105,7 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
         after: new Date(Date.now() - 6 * 7 * 24 * 60 * 60 * 1000),
       })
       .then(async (result) => {
-        console.log(`Initial Strava sync for ${req.user!.id}: ${result.synced} activities`);
+        logger.debug(`Initial Strava sync for ${req.user!.id}: ${result.synced} activities`);
 
         // Auto-update FTP after sync
         if (result.analyzed > 0) {
@@ -112,7 +113,7 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
         }
       })
       .catch((err) => {
-        console.error('Initial sync error:', err);
+        logger.error('Initial sync error:', err);
       });
 
     res.json({
@@ -120,7 +121,7 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
       athlete,
     });
   } catch (error) {
-    console.error('Connect Strava error:', error);
+    logger.error('Connect Strava error:', error);
     res.status(500).json({ error: 'Failed to connect Strava' });
   }
 };
@@ -144,14 +145,14 @@ export const disconnectStrava = async (req: AuthRequest, res: Response): Promise
       .eq('id', req.user.id);
 
     if (error) {
-      console.error('Error disconnecting Strava:', error);
+      logger.error('Error disconnecting Strava:', error);
       res.status(500).json({ error: 'Failed to disconnect Strava' });
       return;
     }
 
     res.json({ message: 'Strava disconnected successfully' });
   } catch (error) {
-    console.error('Disconnect Strava error:', error);
+    logger.error('Disconnect Strava error:', error);
     res.status(500).json({ error: 'Failed to disconnect Strava' });
   }
 };
@@ -163,9 +164,14 @@ export const syncActivities = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
+    logger.debug(`Starting Strava sync for athlete ${req.user.id}...`);
+
     const result = await stravaService.syncActivities(req.user.id, {
       after: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+      before: new Date(Date.now() + 24 * 60 * 60 * 1000), // Include today + tomorrow to catch recent activities
     });
+
+    logger.debug(`Sync complete: ${result.synced}/${result.total} activities stored, ${result.analyzed} analyzed`);
 
     // Auto-update FTP after manual sync
     if (result.analyzed > 0) {
@@ -174,7 +180,7 @@ export const syncActivities = async (req: AuthRequest, res: Response): Promise<v
 
     res.json(result);
   } catch (error: any) {
-    console.error('Sync activities error:', error);
+    logger.error('Sync activities error:', error);
     res.status(500).json({ error: error.message || 'Failed to sync activities' });
   }
 };
@@ -194,14 +200,21 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
       .limit(50);
 
     if (error) {
-      console.error('Error fetching activities:', error);
+      logger.error('Error fetching activities:', error);
       res.status(500).json({ error: 'Failed to fetch activities' });
       return;
     }
 
-    res.json(activities);
+    // Map database field names to frontend-expected names
+    const mappedActivities = (activities || []).map((activity: any) => ({
+      ...activity,
+      distance: activity.distance_meters, // Map distance_meters → distance
+      moving_time: activity.moving_time_seconds, // Map moving_time_seconds → moving_time
+    }));
+
+    res.json({ activities: mappedActivities });
   } catch (error) {
-    console.error('Get activities error:', error);
+    logger.error('Get activities error:', error);
     res.status(500).json({ error: 'Failed to fetch activities' });
   }
 };
@@ -225,7 +238,7 @@ export const getConnectionStatus = async (req: AuthRequest, res: Response): Prom
       token_expires_at: athlete?.strava_token_expires_at,
     });
   } catch (error) {
-    console.error('Get connection status error:', error);
+    logger.error('Get connection status error:', error);
     res.status(500).json({ error: 'Failed to get connection status' });
   }
 };
