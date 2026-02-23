@@ -1,4 +1,4 @@
-import type { Athlete } from '../../../shared/types';
+import type { Athlete } from '../types/shared';
 
 export type UnitSystem = 'metric' | 'imperial';
 

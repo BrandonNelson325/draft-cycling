@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { AuthResponse, Athlete } from '../../../shared/types';
+import type { AuthResponse, Athlete } from '../types/shared';
 import { useAuthStore } from '../stores/useAuthStore';
 
 export const authService = {
