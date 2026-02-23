@@ -65,4 +65,3 @@ mobile/android/
 
 # Docker
 .dockerignore
-Dockerfile
