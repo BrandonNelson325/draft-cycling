@@ -20,6 +20,7 @@ import integrationsRoutes from './routes/integrationsRoutes';
 import dailyAnalysisRoutes from './routes/dailyAnalysisRoutes';
 import trainingPlanRoutes from './routes/trainingPlanRoutes';
 import dailyCheckInRoutes from './routes/dailyCheckInRoutes';
+import activityFeedbackRoutes from './routes/activityFeedbackRoutes';
 import { stravaCronService } from './services/stravaCronService';
 
 const app = express();
@@ -86,6 +87,7 @@ app.use('/api/integrations', integrationsRoutes);
 app.use('/api/daily-analysis', dailyAnalysisRoutes);
 app.use('/api/training-plans', trainingPlanRoutes);
 app.use('/api/daily-check-in', dailyCheckInRoutes);
+app.use('/api/activities', activityFeedbackRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

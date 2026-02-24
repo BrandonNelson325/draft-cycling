@@ -65,7 +65,7 @@ export const authService = {
     return data;
   },
 
-  async updateProfile(updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial' }) {
+  async updateProfile(updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial'; display_mode?: 'simple' | 'advanced' }) {
     const { data, error } = await api.put<Athlete>('/api/auth/me', updates, true);
 
     if (error) {

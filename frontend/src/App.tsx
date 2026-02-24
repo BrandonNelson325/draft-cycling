@@ -13,11 +13,15 @@ import { SettingsPage } from './pages/SettingsPage';
 import { StravaCallback } from './pages/StravaCallback';
 import { TrainingPlanPage } from './pages/TrainingPlanPage';
 import { DailyMorningModal } from './components/modals/DailyMorningModal';
+import { PostRideModal } from './components/modals/PostRideModal';
 import { useDailyMorning } from './hooks/useDailyMorning';
+import { useNewActivities } from './hooks/useNewActivities';
 
 function ProtectedRoutes() {
   const user = useAuthStore((state) => state.user);
   const { shouldShow, analysis, readiness, dismiss } = useDailyMorning();
+  const { activities, currentIndex, acknowledge, skip } = useNewActivities();
+  const currentActivity = activities[currentIndex] ?? null;
 
   // Check if user has beta access or subscription
   const hasAccess = !!(
@@ -57,6 +61,18 @@ function ProtectedRoutes() {
           analysis={analysis}
           readiness={readiness}
           onClose={dismiss}
+        />
+      )}
+
+      {/* Post-ride modal — only shows when morning modal is not active */}
+      {!shouldShow && currentActivity && (
+        <PostRideModal
+          activity={currentActivity}
+          displayMode={user?.display_mode ?? 'advanced'}
+          onAcknowledge={acknowledge}
+          onSkip={skip}
+          activityNumber={currentIndex + 1}
+          totalActivities={activities.length}
         />
       )}
     </>

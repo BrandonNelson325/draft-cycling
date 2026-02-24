@@ -17,6 +17,9 @@ export function ProfileEditForm() {
   const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>(
     user?.unit_system || 'metric'
   );
+  const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(
+    user?.display_mode || 'advanced'
+  );
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -26,7 +29,7 @@ export function ProfileEditForm() {
     setMessage(null);
 
     try {
-      const updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial' } = {};
+      const updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial'; display_mode?: 'simple' | 'advanced' } = {};
 
       if (fullName !== user?.full_name) {
         updates.full_name = fullName;
@@ -48,6 +51,10 @@ export function ProfileEditForm() {
 
       if (unitSystem !== user?.unit_system) {
         updates.unit_system = unitSystem;
+      }
+
+      if (displayMode !== user?.display_mode) {
+        updates.display_mode = displayMode;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -137,6 +144,34 @@ export function ProfileEditForm() {
               className="w-4 h-4"
             />
             <span className="text-sm">Imperial (mi, lbs)</span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">App Detail Level</label>
+        <div className="flex gap-4">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="displayMode"
+              value="simple"
+              checked={displayMode === 'simple'}
+              onChange={(e) => setDisplayMode(e.target.value as 'simple' | 'advanced')}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Simple — quick &amp; concise</span>
+          </label>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="radio"
+              name="displayMode"
+              value="advanced"
+              checked={displayMode === 'advanced'}
+              onChange={(e) => setDisplayMode(e.target.value as 'simple' | 'advanced')}
+              className="w-4 h-4"
+            />
+            <span className="text-sm">Advanced — full details</span>
           </label>
         </div>
       </div>
