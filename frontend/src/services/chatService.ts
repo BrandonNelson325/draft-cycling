@@ -1,4 +1,5 @@
 import { api } from './api';
+import { useAuthStore } from '../stores/useAuthStore';
 
 export interface ChatMessage {
   id: string;
@@ -49,12 +50,14 @@ export const chatService = {
   },
 
   async sendMessage(message: string, conversationId?: string) {
+    const user = useAuthStore.getState().user;
     const { data, error } = await api.post<SendMessageResponse>(
       '/api/ai/chat',
       {
         message,
         conversation_id: conversationId,
         client_date: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD in local time
+        display_mode: user?.display_mode ?? 'advanced',
       },
       true
     );

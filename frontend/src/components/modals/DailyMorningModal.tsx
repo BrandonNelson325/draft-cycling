@@ -10,12 +10,13 @@ interface DailyMorningModalProps {
   analysis: DailyAnalysis | null;
   readiness: DailyReadiness;
   onClose: () => void;
+  displayMode?: 'simple' | 'advanced';
 }
 
 type SleepQuality = 'poor' | 'good' | 'great';
 type Feeling = 'tired' | 'normal' | 'energized';
 
-export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorningModalProps) {
+export function DailyMorningModal({ analysis, readiness, onClose, displayMode = 'advanced' }: DailyMorningModalProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState<'checkin' | 'analysis'>('checkin');
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>(null);
@@ -235,9 +236,11 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                   {getStatusIcon()}
                   <div>
                     <div className="font-semibold text-lg">{getStatusText()}</div>
-                    <div className="text-sm text-gray-600">
-                      Form: {analysis.currentTSB.toFixed(1)} · Fitness: {analysis.currentCTL.toFixed(1)}
-                    </div>
+                    {displayMode === 'advanced' && (
+                      <div className="text-sm text-gray-600">
+                        Form: {analysis.currentTSB.toFixed(1)} · Fitness: {analysis.currentCTL.toFixed(1)}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -259,11 +262,13 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                         className="flex items-center justify-between text-sm bg-gray-50 rounded-lg p-3"
                       >
                         <span className="font-medium">{ride.name}</span>
-                        <div className="flex gap-3 text-gray-500">
-                          <span>{ride.duration}min</span>
-                          <span>{ride.tss} TSS</span>
-                          {ride.avgPower > 0 && <span>{ride.avgPower}W</span>}
-                        </div>
+                        {displayMode === 'advanced' && (
+                          <div className="flex gap-3 text-gray-500">
+                            <span>{ride.duration}min</span>
+                            <span>{ride.tss} TSS</span>
+                            {ride.avgPower > 0 && <span>{ride.avgPower}W</span>}
+                          </div>
+                        )}
                       </div>
                     ))}
                     <div className="text-right text-sm font-medium text-gray-700">

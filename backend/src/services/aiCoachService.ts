@@ -320,7 +320,13 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 - Reference their recent power outputs, duration patterns, and training consistency
 - Don't just create generic workouts - tailor them to what they've been doing
 
-You can discuss training, analyze their rides, suggest workouts, answer questions about cycling physiology, and provide personalized coaching advice based on their data.`;
+You can discuss training, analyze their rides, suggest workouts, answer questions about cycling physiology, and provide personalized coaching advice based on their data.
+
+RESPONSE STYLE: ${athlete.display_mode === 'simple' ? 'simple' : 'advanced'}
+${athlete.display_mode === 'simple'
+  ? `Keep responses brief and conversational. Avoid technical jargon like CTL, ATL, TSB, and power zones unless the athlete specifically asks. Focus on clear, actionable takeaways. Aim for 2-4 sentences per response unless more detail is genuinely needed.`
+  : `Provide detailed analysis with specific metrics where relevant. Reference CTL, ATL, TSB, power zones, and TSS to explain the reasoning behind recommendations.`
+}`;
 
     return prompt;
   },

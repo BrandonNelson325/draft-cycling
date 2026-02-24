@@ -61,6 +61,7 @@ function ProtectedRoutes() {
           analysis={analysis}
           readiness={readiness}
           onClose={dismiss}
+          displayMode={user?.display_mode ?? 'advanced'}
         />
       )}
 
