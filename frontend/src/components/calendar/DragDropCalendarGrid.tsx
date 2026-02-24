@@ -185,7 +185,7 @@ export function DragDropCalendarGrid({
   const getWeekInfo = (date: Date) => {
     if (!trainingPlan) return null;
 
-    const planStart = new Date(trainingPlan.start_date);
+    const planStart = parseLocalDate(trainingPlan.start_date);
     const daysSinceStart = Math.floor((date.getTime() - planStart.getTime()) / (1000 * 60 * 60 * 24));
     const weekNumber = Math.floor(daysSinceStart / 7) + 1;
 

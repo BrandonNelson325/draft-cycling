@@ -48,7 +48,8 @@ export function CalendarGrid({ activities, onDayClick }: CalendarGridProps) {
 
   // Group activities by date
   const activitiesByDate = activities.reduce((acc, activity) => {
-    const date = new Date(activity.start_date).toDateString();
+    const [y, mo, d] = activity.start_date.split('T')[0].split('-').map(Number);
+    const date = new Date(y, mo - 1, d).toDateString();
     if (!acc[date]) {
       acc[date] = [];
     }

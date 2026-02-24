@@ -37,7 +37,8 @@ export function WeekBreakdown({ weeks, startDate }: WeekBreakdownProps) {
   };
 
   const getWeekDates = (weekNumber: number) => {
-    const start = new Date(startDate);
+    const [y, mo, d] = startDate.split('-').map(Number);
+    const start = new Date(y, mo - 1, d);
     start.setDate(start.getDate() + (weekNumber - 1) * 7);
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
