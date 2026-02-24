@@ -35,7 +35,7 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
     <div className="space-y-3">
       {/* Simple Progress Bar Gauge */}
       <div className="relative">
-        <div className="h-2.5 bg-gradient-to-r from-red-400 via-orange-400 via-green-400 to-blue-400 rounded-full" />
+        <div className="h-2.5 bg-gradient-to-r from-red-400 via-green-400 to-blue-400 rounded-full" />
         {/* Indicator */}
         <div
           className="absolute top-0 w-1 h-2.5 bg-white border-2 transition-all"
