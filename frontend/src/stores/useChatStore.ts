@@ -86,16 +86,11 @@ export const useChatStore = create<ChatStore>()(
             });
           }
 
-          console.log('Sending message to API:', { message, activeConversationId });
-
           // Send message to API
           const response = await chatService.sendMessage(message, activeConversationId || undefined);
 
-          console.log('Received response:', response);
-
           // Validate response
           if (!response || !response.conversation_id) {
-            console.error('Invalid response from API:', response);
             throw new Error('Invalid response from server');
           }
 
@@ -121,13 +116,8 @@ export const useChatStore = create<ChatStore>()(
 
           // Only add assistant message if it exists and is valid
           if (response.message && response.message.id && response.message.content) {
-            console.log('Adding assistant message:', response.message);
             newMessages.push(response.message);
-          } else {
-            console.warn('No valid assistant message in response:', response.message);
           }
-
-          console.log('Setting messages:', { conversationId, messageCount: newMessages.length });
 
           set({
             messages: {

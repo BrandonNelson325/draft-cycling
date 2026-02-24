@@ -31,22 +31,20 @@ export const dailyAnalysisService = {
    * Generate daily analysis for athlete
    */
   async generateDailyAnalysis(athleteId: string): Promise<DailyAnalysisResult> {
-    // Get yesterday's date
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    yesterday.setHours(0, 0, 0, 0);
+    // Get yesterday's date as a YYYY-MM-DD string (timezone-safe date comparison)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const yesterdayDate = new Date(todayStr + 'T00:00:00');
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
-    const yesterdayEnd = new Date(yesterday);
-    yesterdayEnd.setHours(23, 59, 59, 999);
-
-    // Get yesterday's activities
+    // Get yesterday's activities using local date to avoid UTC offset mismatches
     const { data: yesterdayActivities } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', athleteId)
-      .gte('start_date', yesterday.toISOString())
-      .lte('start_date', yesterdayEnd.toISOString())
-      .order('start_date', { ascending: false });
+      .gte('start_date_local', yesterdayStr + 'T00:00:00')
+      .lte('start_date_local', yesterdayStr + 'T23:59:59')
+      .order('start_date_local', { ascending: false });
 
     // Get current training status
     const trainingStatus = await trainingLoadService.getTrainingStatus(athleteId);
