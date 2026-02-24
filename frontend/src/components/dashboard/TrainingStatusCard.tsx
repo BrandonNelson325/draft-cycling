@@ -112,7 +112,7 @@ export function TrainingStatusCard() {
         <div className="space-y-4">
           {/* Freshness Gauge */}
           <div>
-            <h4 className="text-xs font-semibold mb-2 text-center text-muted-foreground">Freshness</h4>
+            <h4 className="text-xs font-semibold mb-2 text-center text-muted-foreground">TSB — Freshness</h4>
             <FreshnessGauge tsb={status.tsb || 0} />
           </div>
 
@@ -141,22 +141,6 @@ export function TrainingStatusCard() {
               </p>
             </div>
 
-            <div className="border-l-4 border-blue-400 pl-2">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-muted-foreground">TSB (Form)</span>
-                <span className={`text-xl font-bold ${
-                  status.tsb > 5 ? 'text-blue-500' :
-                  status.tsb >= -10 ? 'text-green-500' :
-                  status.tsb >= -20 ? 'text-orange-500' :
-                  'text-red-500'
-                }`}>
-                  {status.tsb != null ? status.tsb.toFixed(1) : '0.0'}
-                </span>
-              </div>
-              <p className="text-[10px] text-muted-foreground">
-                Training Stress Balance (CTL − ATL)
-              </p>
-            </div>
           </div>
 
           {/* Health Data Section */}
