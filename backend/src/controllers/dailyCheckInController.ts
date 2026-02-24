@@ -10,7 +10,8 @@ export const getDailyReadiness = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const readiness = await dailyReadinessService.getDailyReadiness(req.user.id);
+    const localDate = (req.query.localDate as string) || new Date().toISOString().split('T')[0];
+    const readiness = await dailyReadinessService.getDailyReadiness(req.user.id, localDate);
 
     res.json(readiness);
   } catch (error: any) {
@@ -26,7 +27,8 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const { sleepQuality, feeling, notes } = req.body;
+    const { sleepQuality, feeling, notes, localDate } = req.body;
+    const dateToUse = localDate || new Date().toISOString().split('T')[0];
 
     if (!sleepQuality || !feeling) {
       res.status(400).json({ error: 'Sleep quality and feeling are required' });
@@ -47,10 +49,10 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       sleepQuality,
       feeling,
       notes,
-    });
+    }, dateToUse);
 
     // Return updated readiness after saving
-    const readiness = await dailyReadinessService.getDailyReadiness(req.user.id);
+    const readiness = await dailyReadinessService.getDailyReadiness(req.user.id, dateToUse);
 
     res.json({
       success: true,
@@ -70,7 +72,8 @@ export const getTodayMetrics = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const metrics = await dailyReadinessService.getTodayMetrics(req.user.id);
+    const localDate = (req.query.localDate as string) || new Date().toISOString().split('T')[0];
+    const metrics = await dailyReadinessService.getTodayMetrics(req.user.id, localDate);
 
     res.json({ metrics });
   } catch (error: any) {

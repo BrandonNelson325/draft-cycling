@@ -34,10 +34,17 @@ export interface DailyCheckInData {
   notes?: string;
 }
 
+// Returns today's date in YYYY-MM-DD format using the user's local timezone
+function getLocalDate(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
 export const dailyCheckInService = {
   async getDailyReadiness(): Promise<DailyReadiness> {
+    const localDate = getLocalDate();
     const { data, error } = await api.get<DailyReadiness>(
-      '/api/daily-check-in/readiness',
+      `/api/daily-check-in/readiness?localDate=${localDate}`,
       true
     );
 
@@ -51,7 +58,7 @@ export const dailyCheckInService = {
   async saveDailyCheckIn(checkInData: DailyCheckInData): Promise<DailyReadiness> {
     const { data, error } = await api.post<{ readiness: DailyReadiness }>(
       '/api/daily-check-in/check-in',
-      checkInData,
+      { ...checkInData, localDate: getLocalDate() },
       true
     );
 

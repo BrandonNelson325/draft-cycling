@@ -21,8 +21,8 @@ export const dailyReadinessService = {
   /**
    * Get comprehensive daily readiness for an athlete
    */
-  async getDailyReadiness(athleteId: string): Promise<DailyReadiness> {
-    const today = new Date().toISOString().split('T')[0];
+  async getDailyReadiness(athleteId: string, localDate?: string): Promise<DailyReadiness> {
+    const today = localDate || new Date().toISOString().split('T')[0];
 
     // Check if already checked in today
     const { data: todayMetrics } = await supabaseAdmin
@@ -228,9 +228,10 @@ export const dailyReadinessService = {
       sleepQuality: 'poor' | 'good' | 'great';
       feeling: 'tired' | 'normal' | 'energized';
       notes?: string;
-    }
+    },
+    localDate?: string
   ): Promise<void> {
-    const today = new Date().toISOString().split('T')[0];
+    const today = localDate || new Date().toISOString().split('T')[0];
 
     // Convert quality to scores
     const sleepScoreMap = { poor: 3, good: 7, great: 10 };
@@ -269,8 +270,8 @@ export const dailyReadinessService = {
   /**
    * Get today's metrics (if checked in)
    */
-  async getTodayMetrics(athleteId: string) {
-    const today = new Date().toISOString().split('T')[0];
+  async getTodayMetrics(athleteId: string, localDate?: string) {
+    const today = localDate || new Date().toISOString().split('T')[0];
 
     const { data } = await supabaseAdmin
       .from('daily_metrics')
