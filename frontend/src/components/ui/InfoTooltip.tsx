@@ -7,12 +7,20 @@ interface InfoTooltipProps {
 
 /**
  * Small ⓘ icon that shows a tooltip on hover (desktop) or tap (mobile).
- * Automatically flips left when too close to the right edge of the screen.
+ * Automatically opens downward when near the top of the viewport.
  */
 export function InfoTooltip({ content }: InfoTooltipProps) {
   const [visible, setVisible] = useState(false);
+  const [openDown, setOpenDown] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Decide open direction based on available space above the icon
+  useEffect(() => {
+    if (!visible || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    // If less than 260px above the icon, open downward instead
+    setOpenDown(rect.top < 260);
+  }, [visible]);
 
   // Close on outside click (mobile tap-away)
   useEffect(() => {
@@ -38,12 +46,17 @@ export function InfoTooltip({ content }: InfoTooltipProps) {
 
       {visible && (
         <div
-          ref={tooltipRef}
-          className="absolute z-50 bottom-full mb-2 left-1/2 -translate-x-1/2 w-72 bg-popover border border-border rounded-lg shadow-lg p-3 text-xs text-popover-foreground"
+          className={`absolute z-50 left-1/2 -translate-x-1/2 w-72 rounded-lg border border-gray-200 dark:border-gray-700 shadow-xl p-3 text-xs text-gray-900 dark:text-gray-100 bg-white dark:bg-gray-900 ${
+            openDown ? 'top-full mt-2' : 'bottom-full mb-2'
+          }`}
           style={{ maxWidth: 'min(288px, calc(100vw - 2rem))' }}
         >
           {/* Arrow */}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-r border-b border-border rotate-45 -mt-1" />
+          {openDown ? (
+            <div className="absolute bottom-full left-1/2 -translate-x-1/2 w-2 h-2 bg-white dark:bg-gray-900 border-l border-t border-gray-200 dark:border-gray-700 rotate-45 mb-[-1px]" />
+          ) : (
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-2 h-2 bg-white dark:bg-gray-900 border-r border-b border-gray-200 dark:border-gray-700 rotate-45 -mt-1" />
+          )}
           {content}
         </div>
       )}
