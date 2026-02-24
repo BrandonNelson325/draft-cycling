@@ -92,11 +92,11 @@ export const stravaService = {
       logger.debug(`\n--- Processing activity: ${activity.name} (${activity.id}) ---`);
       logger.debug(`Raw data: distance=${activity.distance}m, moving_time=${activity.moving_time}s, watts=${activity.average_watts}`);
 
-      // Calculate TSS if power data is available
+      // Calculate TSS if power data is available (use NP when available)
       let tss = null;
       if (activity.average_watts && activity.moving_time && ftp) {
-        tss = calculateTSS(activity.moving_time, activity.average_watts, ftp);
-        logger.debug(`Calculated TSS: ${tss}`);
+        tss = calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts);
+        logger.debug(`Calculated TSS: ${tss} (NP: ${activity.weighted_average_watts || 'N/A'})`);
       }
 
       const activityData = {

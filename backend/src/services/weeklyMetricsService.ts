@@ -22,7 +22,7 @@ export const weeklyMetricsService = {
 
     const { data, error } = await supabaseAdmin
       .from('strava_activities')
-      .select('start_date, distance_meters, moving_time_seconds, average_watts')
+      .select('start_date, distance_meters, moving_time_seconds, tss')
       .eq('athlete_id', athleteId)
       .gte('start_date', startDate.toISOString())
       .order('start_date', { ascending: true });
@@ -30,15 +30,6 @@ export const weeklyMetricsService = {
     if (error) {
       throw new Error(`Failed to fetch weekly data: ${error.message}`);
     }
-
-    // Get athlete's FTP for TSS calculation
-    const { data: athlete } = await supabaseAdmin
-      .from('athletes')
-      .select('ftp')
-      .eq('id', athleteId)
-      .single();
-
-    const ftp = athlete?.ftp || 200;
 
     // Group by week
     const weeklyMap = new Map<string, WeeklyData>();
@@ -64,13 +55,8 @@ export const weeklyMetricsService = {
       week.total_time_seconds += activity.moving_time_seconds || 0;
       week.ride_count += 1;
 
-      // Calculate TSS (simplified)
-      if (activity.average_watts && activity.moving_time_seconds) {
-        const hours = activity.moving_time_seconds / 3600;
-        const intensity = activity.average_watts / ftp;
-        const tss = hours * intensity * intensity * 100;
-        week.total_tss += tss;
-      }
+      // Use stored TSS (already calculated with NP when available)
+      week.total_tss += activity.tss || 0;
     });
 
     return Array.from(weeklyMap.values()).sort((a, b) =>

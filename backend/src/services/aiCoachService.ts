@@ -16,6 +16,8 @@ interface AthleteContext {
   trainingStatus: any;
   upcomingWorkouts: any[];
   preferences: AthletePreferences;
+  healthData: any;
+  dailyCheckIn: any;
 }
 
 export const aiCoachService = {
@@ -90,6 +92,23 @@ export const aiCoachService = {
     // Get athlete preferences
     const preferences = await athletePreferencesService.getPreferences(athleteId);
 
+    // Get today's health data (HRV, resting HR, sleep hours, etc.)
+    const today = new Date().toISOString().split('T')[0];
+    const { data: healthData } = await supabaseAdmin
+      .from('health_data')
+      .select('*')
+      .eq('athlete_id', athleteId)
+      .eq('date', today)
+      .single();
+
+    // Get today's daily check-in (sleep quality, feeling)
+    const { data: dailyCheckIn } = await supabaseAdmin
+      .from('daily_metrics')
+      .select('*')
+      .eq('athlete_id', athleteId)
+      .eq('date', today)
+      .single();
+
     return {
       athlete,
       recentRides: recentRides || [],
@@ -98,6 +117,8 @@ export const aiCoachService = {
       trainingStatus,
       upcomingWorkouts: upcomingWorkouts || [],
       preferences,
+      healthData,
+      dailyCheckIn,
     };
   },
 
@@ -105,7 +126,7 @@ export const aiCoachService = {
    * Build system prompt with athlete context
    */
   buildSystemPrompt(context: AthleteContext, clientDate?: string): string {
-    const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences } = context;
+    const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn } = context;
 
     // Use client-provided date to avoid UTC timezone mismatch (server runs in UTC)
     const isoDate = clientDate || new Date().toISOString().split('T')[0];
@@ -186,6 +207,25 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 - Recommendation: ${status.recommendation}
 
 `;
+    }
+
+    // Add sleep & readiness data (context only — not mixed into CTL/ATL math)
+    if (healthData || dailyCheckIn) {
+      prompt += `SLEEP & READINESS (Today):
+`;
+      if (healthData) {
+        if (healthData.sleep_hours) prompt += `- Sleep: ${healthData.sleep_hours} hours${healthData.sleep_quality ? ` (Quality: ${healthData.sleep_quality}/5)` : ''}\n`;
+        if (healthData.hrv) prompt += `- HRV: ${healthData.hrv}ms\n`;
+        if (healthData.resting_heart_rate) prompt += `- Resting HR: ${healthData.resting_heart_rate} bpm\n`;
+        if (healthData.body_battery) prompt += `- Body Battery: ${healthData.body_battery}/100\n`;
+        if (healthData.readiness_score) prompt += `- Readiness Score: ${healthData.readiness_score}/100\n`;
+      }
+      if (dailyCheckIn) {
+        if (dailyCheckIn.sleep_quality) prompt += `- Check-in Sleep: ${dailyCheckIn.sleep_quality} (score: ${dailyCheckIn.sleep_score}/10)\n`;
+        if (dailyCheckIn.feeling) prompt += `- Feeling: ${dailyCheckIn.feeling} (score: ${dailyCheckIn.feeling_score}/10)\n`;
+        if (dailyCheckIn.notes) prompt += `- Notes: ${dailyCheckIn.notes}\n`;
+      }
+      prompt += `(Use this as subjective context for coaching — do NOT factor into CTL/ATL calculations)\n\n`;
     }
 
     // Add power records

@@ -3,7 +3,7 @@
  *
  * TSS (Training Stress Score) = (duration_seconds * NP * IF) / (FTP * 3600) * 100
  * Where:
- * - NP = Normalized Power (approximated as average power for simplicity)
+ * - NP = Normalized Power (from Strava's weighted_average_watts, falls back to average power)
  * - IF = Intensity Factor = NP / FTP
  *
  * CTL (Chronic Training Load / Fitness) = Exponentially weighted average of last 42 days TSS
@@ -20,19 +20,23 @@ interface Activity {
 
 /**
  * Calculate TSS from power data
+ * Uses Normalized Power (NP) when available for accurate variable-power TSS.
+ * Falls back to average power when NP is not provided.
  */
 export function calculateTSS(
   durationSeconds: number,
   averageWatts: number,
-  ftp: number
+  ftp: number,
+  normalizedPower?: number
 ): number {
   if (!durationSeconds || !averageWatts || !ftp || ftp === 0) {
     return 0;
   }
 
-  // Simplified TSS calculation using average power as NP
-  const intensityFactor = averageWatts / ftp;
-  const tss = (durationSeconds * averageWatts * intensityFactor) / (ftp * 3600) * 100;
+  // Use Normalized Power when available, fall back to average power
+  const np = normalizedPower && normalizedPower > 0 ? normalizedPower : averageWatts;
+  const intensityFactor = np / ftp;
+  const tss = (durationSeconds * np * intensityFactor) / (ftp * 3600) * 100;
 
   return Math.round(tss * 10) / 10; // Round to 1 decimal
 }

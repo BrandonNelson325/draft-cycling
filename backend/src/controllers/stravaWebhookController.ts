@@ -5,6 +5,7 @@ import { stravaService } from '../services/stravaService';
 import { powerAnalysisService } from '../services/powerAnalysisService';
 import { ftpEstimationService } from '../services/ftpEstimationService';
 import { trainingLoadService } from '../services/trainingLoadService';
+import { calculateTSS } from '../services/trainingCalculations';
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
 
@@ -118,6 +119,18 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
       return;
     }
 
+    // Calculate TSS with Normalized Power if available
+    let tss = null;
+    const { data: athleteData } = await supabaseAdmin
+      .from('athletes')
+      .select('ftp')
+      .eq('id', athleteId)
+      .single();
+    const ftp = athleteData?.ftp;
+    if (activity.average_watts && activity.moving_time && ftp) {
+      tss = calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts);
+    }
+
     // Store activity
     await supabaseAdmin
       .from('strava_activities')
@@ -129,6 +142,7 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
         distance_meters: Math.round(activity.distance),
         moving_time_seconds: activity.moving_time,
         average_watts: activity.average_watts || null,
+        tss,
         raw_data: activity,
         synced_at: new Date().toISOString(),
       });
@@ -166,6 +180,18 @@ async function handleActivityUpdated(athleteId: string, stravaActivityId: number
     const accessToken = await stravaService.ensureValidToken(athleteId);
     const activity: any = await stravaClient.getActivity(accessToken, stravaActivityId);
 
+    // Recompute TSS with Normalized Power if available
+    let tss = null;
+    const { data: athleteData } = await supabaseAdmin
+      .from('athletes')
+      .select('ftp')
+      .eq('id', athleteId)
+      .single();
+    const ftp = athleteData?.ftp;
+    if (activity.average_watts && activity.moving_time && ftp) {
+      tss = calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts);
+    }
+
     // Update in database
     await supabaseAdmin
       .from('strava_activities')
@@ -174,6 +200,7 @@ async function handleActivityUpdated(athleteId: string, stravaActivityId: number
         distance_meters: Math.round(activity.distance),
         moving_time_seconds: activity.moving_time,
         average_watts: activity.average_watts || null,
+        tss,
         raw_data: activity,
         synced_at: new Date().toISOString(),
       })

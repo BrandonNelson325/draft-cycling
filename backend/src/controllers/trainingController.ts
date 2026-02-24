@@ -23,6 +23,25 @@ export const getTrainingStatus = async (req: AuthRequest, res: Response): Promis
   }
 };
 
+export const recalculateTSS = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await trainingLoadService.recalculateAllTSS(req.user.id);
+
+    res.json({
+      message: `Recalculated TSS for ${result.updated} of ${result.total} activities`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Recalculate TSS error:', error);
+    res.status(500).json({ error: 'Failed to recalculate TSS' });
+  }
+};
+
 export const getMetricsHistory = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {

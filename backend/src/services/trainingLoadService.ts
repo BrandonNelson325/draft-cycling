@@ -17,22 +17,24 @@ export const trainingLoadService = {
   /**
    * Calculate TSS (Training Stress Score) for a ride
    * Formula: TSS = (seconds * NP * IF) / (FTP * 3600) * 100
-   * Simplified: TSS ≈ (hours * avg_power / FTP)^2 * 100
+   * Uses Normalized Power when available for accurate variable-power TSS.
    */
-  calculateTSS(durationSeconds: number, avgPower: number, ftp: number): number {
+  calculateTSS(durationSeconds: number, avgPower: number, ftp: number, normalizedPower?: number): number {
     if (!ftp || ftp === 0) {
       return 0;
     }
 
+    // Use Normalized Power when available, fall back to average power
+    const np = normalizedPower && normalizedPower > 0 ? normalizedPower : avgPower;
     const hours = durationSeconds / 3600;
-    const intensityFactor = avgPower / ftp;
+    const intensityFactor = np / ftp;
     const tss = hours * intensityFactor * intensityFactor * 100;
 
     return Math.round(tss);
   },
 
   /**
-   * Update TSS for all activities that have power data
+   * Update TSS for all activities that have power data but no TSS yet
    */
   async updateActivityTSS(athleteId: string) {
     try {
@@ -51,7 +53,7 @@ export const trainingLoadService = {
       // Get activities without TSS that have power data
       const { data: activities } = await supabaseAdmin
         .from('strava_activities')
-        .select('id, strava_activity_id, average_watts, moving_time_seconds')
+        .select('id, strava_activity_id, average_watts, moving_time_seconds, raw_data')
         .eq('athlete_id', athleteId)
         .not('average_watts', 'is', null)
         .is('tss', null);
@@ -60,12 +62,14 @@ export const trainingLoadService = {
         return;
       }
 
-      // Calculate and update TSS
+      // Calculate and update TSS (using NP from raw_data when available)
       for (const activity of activities) {
+        const normalizedPower = activity.raw_data?.weighted_average_watts || undefined;
         const tss = this.calculateTSS(
           activity.moving_time_seconds,
           activity.average_watts!,
-          athlete.ftp
+          athlete.ftp,
+          normalizedPower
         );
 
         await supabaseAdmin
@@ -81,19 +85,22 @@ export const trainingLoadService = {
   },
 
   /**
-   * Calculate CTL, ATL, TSB for a given date
+   * Calculate CTL, ATL, TSB for a given date using per-day EMA.
+   * Iterates every calendar day (including rest days) so decay is applied correctly.
+   * Uses 90-day lookback to let the 42-day CTL EMA seed properly.
    */
   async calculateTrainingLoad(athleteId: string, date: Date = new Date()): Promise<TrainingLoad | null> {
     try {
-      // Get activities for calculation window (last 42 days for CTL)
-      const fortyTwoDaysAgo = new Date(date);
-      fortyTwoDaysAgo.setDate(fortyTwoDaysAgo.getDate() - 42);
+      // 90-day lookback lets the 42-day EMA seed properly
+      const lookbackDays = 90;
+      const startDate = new Date(date);
+      startDate.setDate(startDate.getDate() - lookbackDays);
 
       const { data: activities } = await supabaseAdmin
         .from('strava_activities')
         .select('start_date, tss')
         .eq('athlete_id', athleteId)
-        .gte('start_date', fortyTwoDaysAgo.toISOString())
+        .gte('start_date', startDate.toISOString())
         .lte('start_date', date.toISOString())
         .not('tss', 'is', null)
         .order('start_date', { ascending: true });
@@ -102,20 +109,34 @@ export const trainingLoadService = {
         return null;
       }
 
-      // Calculate exponential moving averages
+      // Build Map<dayString, summedTSS> to aggregate multiple activities per day
+      const dailyTSS = new Map<string, number>();
+      for (const activity of activities) {
+        const dayKey = new Date(activity.start_date).toISOString().split('T')[0];
+        dailyTSS.set(dayKey, (dailyTSS.get(dayKey) || 0) + (activity.tss || 0));
+      }
+
+      // Iterate every calendar day from start to target, applying decay on rest days
       const ctlTimeConstant = 42;
       const atlTimeConstant = 7;
 
       let ctl = 0;
       let atl = 0;
 
-      for (const activity of activities) {
-        const tss = activity.tss || 0;
+      const current = new Date(startDate);
+      current.setUTCHours(0, 0, 0, 0);
+      const target = new Date(date);
+      target.setUTCHours(0, 0, 0, 0);
 
-        // Exponential moving average formula:
-        // EMA_today = EMA_yesterday + (TSS_today - EMA_yesterday) * (1 / time_constant)
-        ctl = ctl + (tss - ctl) * (1 / ctlTimeConstant);
-        atl = atl + (tss - atl) * (1 / atlTimeConstant);
+      while (current <= target) {
+        const dayKey = current.toISOString().split('T')[0];
+        const tss = dailyTSS.get(dayKey) || 0;
+
+        // Standard EMA: EMA_today = EMA_yesterday + (dailyTSS - EMA_yesterday) / timeConstant
+        ctl = ctl + (tss - ctl) / ctlTimeConstant;
+        atl = atl + (tss - atl) / atlTimeConstant;
+
+        current.setDate(current.getDate() + 1);
       }
 
       const tsb = ctl - atl;
@@ -227,6 +248,57 @@ export const trainingLoadService = {
       logger.error('Error getting training status:', error);
       return null;
     }
+  },
+
+  /**
+   * Recalculate TSS for ALL activities using Normalized Power from raw_data.
+   * One-time historical fix to update activities that were calculated with avg power only.
+   */
+  async recalculateAllTSS(athleteId: string): Promise<{ updated: number; total: number }> {
+    // Get athlete FTP
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('ftp')
+      .eq('id', athleteId)
+      .single();
+
+    if (!athlete?.ftp) {
+      logger.debug('No FTP set for athlete, cannot recalculate TSS');
+      return { updated: 0, total: 0 };
+    }
+
+    // Get all activities with power data
+    const { data: activities } = await supabaseAdmin
+      .from('strava_activities')
+      .select('id, average_watts, moving_time_seconds, raw_data, tss')
+      .eq('athlete_id', athleteId)
+      .not('average_watts', 'is', null);
+
+    if (!activities || activities.length === 0) {
+      return { updated: 0, total: 0 };
+    }
+
+    let updated = 0;
+    for (const activity of activities) {
+      const normalizedPower = activity.raw_data?.weighted_average_watts || undefined;
+      const newTSS = this.calculateTSS(
+        activity.moving_time_seconds,
+        activity.average_watts!,
+        athlete.ftp,
+        normalizedPower
+      );
+
+      if (newTSS !== activity.tss) {
+        await supabaseAdmin
+          .from('strava_activities')
+          .update({ tss: newTSS })
+          .eq('id', activity.id);
+        updated++;
+      }
+    }
+
+    logger.debug(`Recalculated TSS for ${updated}/${activities.length} activities`);
+    return { updated, total: activities.length };
   },
 
   /**
