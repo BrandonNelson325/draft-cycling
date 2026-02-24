@@ -289,7 +289,7 @@ ${preferences.rest_days && preferences.rest_days.length > 0
     if (context.upcomingWorkouts && context.upcomingWorkouts.length > 0) {
       prompt += `UPCOMING SCHEDULED WORKOUTS:\n`;
       context.upcomingWorkouts.slice(0, 7).forEach((entry: any) => {
-        const date = new Date(entry.scheduled_date).toLocaleDateString();
+        const date = new Date(entry.scheduled_date + 'T12:00:00').toLocaleDateString();
         if (entry.workouts && entry.workouts.name) {
           prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS)\n`;
         }
