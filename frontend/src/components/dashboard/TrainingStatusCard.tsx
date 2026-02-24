@@ -4,6 +4,7 @@ import { healthDataService, type HealthData } from '../../services/healthDataSer
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { FreshnessGauge } from './FreshnessGauge';
 import { Moon, Activity, Heart, Battery, TrendingUp, AlertCircle } from 'lucide-react';
+import { InfoTooltip } from '../ui/InfoTooltip';
 
 interface TrainingStatus {
   ctl: number;
@@ -92,7 +93,20 @@ export function TrainingStatusCard() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Training Status</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-lg">Training Status</CardTitle>
+          <InfoTooltip content={
+            <div className="space-y-2.5">
+              <p className="font-semibold text-foreground">Training Load Metrics</p>
+              <div className="space-y-1.5">
+                <p><span className="font-medium">TSB (Form / Freshness)</span> = CTL − ATL. Positive means rested and ready. Negative means carrying fatigue from recent training. The productive zone is roughly −10 to +5.</p>
+                <p><span className="font-medium">CTL (Fitness)</span> — 42-day rolling average of daily TSS. Represents your long-term aerobic fitness base. Higher = more fit.</p>
+                <p><span className="font-medium">ATL (Fatigue)</span> — 7-day rolling average of daily TSS. Represents short-term fatigue from recent training. Rises quickly with hard weeks, drops on rest days.</p>
+                <p><span className="font-medium">TSS (Training Stress Score)</span> — a single number for how hard a ride was, combining duration and intensity relative to your FTP. An hour at FTP = 100 TSS.</p>
+              </div>
+            </div>
+          } />
+        </div>
         <CardDescription className="text-xs">Your current fitness metrics</CardDescription>
       </CardHeader>
       <CardContent className="pb-4">

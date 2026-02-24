@@ -5,6 +5,7 @@ import { useAuthStore } from '../../stores/useAuthStore';
 import { getConversionUtils } from '../../utils/units';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
+import { InfoTooltip } from '../ui/InfoTooltip';
 
 interface FTPEstimate {
   estimated_ftp: number;
@@ -100,8 +101,21 @@ export function FTPEstimateCard() {
   return (
     <Card className="border-t-4 border-t-primary">
       <CardHeader>
-        <CardTitle>FTP Estimate</CardTitle>
-        <CardDescription>AI-powered FTP calculation</CardDescription>
+        <div className="flex items-center gap-2">
+          <CardTitle>FTP Estimate</CardTitle>
+          <InfoTooltip content={
+            <div className="space-y-2.5">
+              <p className="font-semibold text-foreground">What is FTP?</p>
+              <p>Functional Threshold Power — the highest average power you can sustain for ~1 hour. It's the basis for all training zones and stress calculations.</p>
+              <p className="font-semibold text-foreground mt-1">How we estimate it</p>
+              <p>We use the <span className="font-medium">Critical Power (CP) model</span> — a sports science formula that describes the relationship between power and how long you can hold it:</p>
+              <p className="font-mono bg-muted px-2 py-1 rounded text-[10px]">FTP ≈ P − W′ ÷ t</p>
+              <p>Where <span className="font-medium">P</span> is your best power at duration <span className="font-medium">t</span>, and <span className="font-medium">W′</span> (W-prime) is your anaerobic work capacity (~20 kJ for most trained cyclists).</p>
+              <p>We apply this to your best efforts at every duration (5, 8, 10, 15, 20, 30 min) and take the highest result. When enough data exists we also run a regression to solve for both FTP and W′ simultaneously — the same approach used by intervals.icu.</p>
+            </div>
+          } />
+        </div>
+        <CardDescription>Critical Power model estimation</CardDescription>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
