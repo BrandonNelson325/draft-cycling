@@ -100,9 +100,8 @@ export function TrainingStatusCard() {
               <p className="font-semibold text-foreground">Training Load Metrics</p>
               <div className="space-y-1.5">
                 <p><span className="font-medium">TSB (Form / Freshness)</span> = CTL − ATL. Positive means rested and ready. Negative means carrying fatigue from recent training. The productive zone is roughly −10 to +5.</p>
-                <p><span className="font-medium">CTL (Fitness)</span> — 42-day rolling average of daily TSS. Represents your long-term aerobic fitness base. Higher = more fit.</p>
-                <p><span className="font-medium">ATL (Fatigue)</span> — 7-day rolling average of daily TSS. Represents short-term fatigue from recent training. Rises quickly with hard weeks, drops on rest days.</p>
-                <p><span className="font-medium">TSS (Training Stress Score)</span> — a single number for how hard a ride was, combining duration and intensity relative to your FTP. An hour at FTP = 100 TSS.</p>
+                <p><span className="font-medium">CTL (Fitness)</span> — 42-day rolling average of daily training stress. Represents your long-term aerobic fitness base. Higher = more fit.</p>
+                <p><span className="font-medium">ATL (Fatigue)</span> — 7-day rolling average of daily training stress. Represents short-term fatigue from recent training. Rises quickly with hard weeks, drops on rest days.</p>
               </div>
             </div>
           } />
@@ -139,6 +138,23 @@ export function TrainingStatusCard() {
               </div>
               <p className="text-[10px] text-muted-foreground">
                 Acute Training Load
+              </p>
+            </div>
+
+            <div className="border-l-4 border-blue-400 pl-2">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-medium text-muted-foreground">TSB (Form)</span>
+                <span className={`text-xl font-bold ${
+                  status.tsb > 5 ? 'text-blue-500' :
+                  status.tsb >= -10 ? 'text-green-500' :
+                  status.tsb >= -20 ? 'text-orange-500' :
+                  'text-red-500'
+                }`}>
+                  {status.tsb != null ? status.tsb.toFixed(1) : '0.0'}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Training Stress Balance (CTL − ATL)
               </p>
             </div>
           </div>
