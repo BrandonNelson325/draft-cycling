@@ -28,7 +28,7 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
       return;
     }
 
-    const { conversation_id, message } = req.body;
+    const { conversation_id, message, client_date } = req.body;
 
     if (!message) {
       res.status(400).json({ error: 'Message is required' });
@@ -38,7 +38,8 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
     const result = await aiCoachService.chat(
       req.user.id,
       conversation_id || null,
-      message
+      message,
+      client_date
     );
 
     logger.debug('AI Coach service returned:', result);

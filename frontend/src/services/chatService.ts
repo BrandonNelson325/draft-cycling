@@ -54,6 +54,7 @@ export const chatService = {
       {
         message,
         conversation_id: conversationId,
+        client_date: new Date().toLocaleDateString('en-CA'), // YYYY-MM-DD in local time
       },
       true
     );
@@ -64,11 +65,9 @@ export const chatService = {
     }
 
     if (!data) {
-      console.error('No data returned from chat API');
       throw new Error('No data returned from server');
     }
 
-    console.log('Chat service returning:', data);
     return data;
   },
 

@@ -104,17 +104,18 @@ export const aiCoachService = {
   /**
    * Build system prompt with athlete context
    */
-  buildSystemPrompt(context: AthleteContext): string {
+  buildSystemPrompt(context: AthleteContext, clientDate?: string): string {
     const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences } = context;
 
-    const today = new Date();
+    // Use client-provided date to avoid UTC timezone mismatch (server runs in UTC)
+    const isoDate = clientDate || new Date().toISOString().split('T')[0];
+    const today = new Date(isoDate + 'T12:00:00'); // noon avoids DST edge cases
     const dateStr = today.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
-    const isoDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
 
     // Calculate tomorrow for easy reference
     const tomorrow = new Date(today);
@@ -204,11 +205,22 @@ ${preferences.rest_days && preferences.rest_days.length > 0
     if (recentRides.length > 0) {
       prompt += `RECENT RIDES (Last 2 weeks - ${recentRides.length} rides):
 `;
+      const todayMidnight = new Date(isoDate + 'T00:00:00');
       recentRides.slice(0, 10).forEach((ride, i) => {
-        const date = new Date(ride.start_date).toLocaleDateString();
+        // Use start_date_local if available, else fall back to start_date
+        const rideDate = ride.start_date_local
+          ? ride.start_date_local.split('T')[0]
+          : new Date(ride.start_date).toISOString().split('T')[0];
+        const rideMidnight = new Date(rideDate + 'T00:00:00');
+        const diffDays = Math.round((todayMidnight.getTime() - rideMidnight.getTime()) / (1000 * 60 * 60 * 24));
+        const relativeLabel =
+          diffDays === 0 ? 'TODAY' :
+          diffDays === 1 ? 'YESTERDAY' :
+          `${diffDays} days ago`;
+
         const duration = Math.round(ride.moving_time_seconds / 60);
         const distance = (ride.distance_meters / 1000).toFixed(1);
-        prompt += `${i + 1}. ${date}: "${ride.name}" - ${distance}km, ${duration}min`;
+        prompt += `${i + 1}. ${relativeLabel} (${rideDate}): "${ride.name}" - ${distance}km, ${duration}min`;
         if (ride.average_watts) {
           prompt += `, ${ride.average_watts}W avg`;
         }
@@ -276,8 +288,8 @@ You can discuss training, analyze their rides, suggest workouts, answer question
   /**
    * Build system prompt with tool capabilities
    */
-  buildSystemPromptWithTools(context: AthleteContext): string {
-    let prompt = this.buildSystemPrompt(context);
+  buildSystemPromptWithTools(context: AthleteContext, clientDate?: string): string {
+    let prompt = this.buildSystemPrompt(context, clientDate);
 
     prompt += `
 
@@ -803,7 +815,8 @@ Format it clearly so I can follow it during my ride.`;
   async chat(
     athleteId: string,
     conversationId: string | null,
-    message: string
+    message: string,
+    clientDate?: string
   ): Promise<{
     response: string;
     conversationId: string;
@@ -813,7 +826,7 @@ Format it clearly so I can follow it during my ride.`;
 
       // Always use tools and Sonnet for reliable coaching
       // The AI will decide when to use tools based on context
-      const systemPrompt = this.buildSystemPromptWithTools(context);
+      const systemPrompt = this.buildSystemPromptWithTools(context, clientDate);
       // Use Haiku for chat (10x faster, 12x cheaper than Sonnet)
       // Sonnet only needed for complex multi-step tool use
       const model = selectModel('chat');

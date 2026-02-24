@@ -267,7 +267,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                       </div>
                     ))}
                     <div className="text-right text-sm font-medium text-gray-700">
-                      Total TSS: {analysis.yesterdayTotalTSS}
+                      Total TSS: {Math.round(analysis.yesterdayTotalTSS)}
                     </div>
                   </div>
                 </div>
