@@ -103,6 +103,25 @@ export const useChatStore = create<ChatStore>()(
 
         let resolvedConvId = initialConversationId;
 
+        // Buffer tokens and flush via requestAnimationFrame to avoid per-token re-renders
+        let tokenBuffer = '';
+        let rafPending = false;
+        const flushTokens = () => {
+          rafPending = false;
+          if (!tokenBuffer) return;
+          const toFlush = tokenBuffer;
+          tokenBuffer = '';
+          const convId = resolvedConvId || get().activeConversationId;
+          if (!convId) return;
+          const convMessages = get().messages[convId] || [];
+          const idx = convMessages.findIndex((m) => m.id === streamingId);
+          if (idx !== -1) {
+            const updated = [...convMessages];
+            updated[idx] = { ...updated[idx], content: updated[idx].content + toFlush };
+            set({ messages: { ...get().messages, [convId]: updated } });
+          }
+        };
+
         try {
 
           await chatService.sendMessageStream(message, initialConversationId, {
@@ -112,27 +131,27 @@ export const useChatStore = create<ChatStore>()(
                 set({ activeConversationId: conversationId });
                 addOptimistic(conversationId);
               }
+              // Unblock the input as soon as the connection is established
+              set({ loading: false });
             },
             onToken: (text) => {
-              const convId = resolvedConvId || get().activeConversationId;
-              if (!convId) return;
-              const convMessages = get().messages[convId] || [];
-              const idx = convMessages.findIndex((m) => m.id === streamingId);
-              if (idx !== -1) {
-                const updated = [...convMessages];
-                updated[idx] = { ...updated[idx], content: updated[idx].content + text };
-                set({ messages: { ...get().messages, [convId]: updated } });
+              tokenBuffer += text;
+              if (!rafPending) {
+                rafPending = true;
+                requestAnimationFrame(flushTokens);
               }
             },
             onDone: async () => {
+              // Flush any tokens that didn't make it through rAF yet
+              flushTokens();
               const convId = resolvedConvId || get().activeConversationId;
               if (convId) {
-                // Fetch real messages from DB to replace the streaming placeholder
+                // Replace streaming placeholder with real persisted messages
                 try {
                   const realMessages = await chatService.getMessages(convId);
                   set({ messages: { ...get().messages, [convId]: realMessages } });
                 } catch (e) {
-                  // If fetch fails, the streamed content is already in the store — leave it
+                  // Leave streamed content as-is if DB fetch fails
                 }
               }
               // Reload conversation list for new conversations

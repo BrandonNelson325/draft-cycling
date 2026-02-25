@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { MessageCircle } from 'lucide-react';
@@ -29,13 +29,25 @@ function ChatPageContent() {
     deleteConversation,
   } = useChatStore();
 
-  // Load conversations and auto-select most recent on first visit
+  // Track whether the user explicitly clicked "New Conversation" so we don't auto-re-select
+  const userClickedNew = useRef(false);
+
+  // Load conversations once on mount, then auto-select the most recent if nothing is active.
+  // Intentionally runs only on mount — reactive auto-select was causing "New Conversation" to
+  // immediately re-select the last conversation.
   useEffect(() => {
     const init = async () => {
       await loadConversations();
+      if (!conversationId && !userClickedNew.current) {
+        const state = useChatStore.getState();
+        if (!state.activeConversationId && state.conversations.length > 0) {
+          selectConversation(state.conversations[0].id);
+        }
+      }
     };
     init();
-  }, [loadConversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Select conversation from URL param
   useEffect(() => {
@@ -43,13 +55,6 @@ function ChatPageContent() {
       selectConversation(conversationId);
     }
   }, [conversationId, selectConversation]);
-
-  // Auto-select most recent conversation if none is active and no URL param
-  useEffect(() => {
-    if (!conversationId && !activeConversationId && conversations.length > 0) {
-      selectConversation(conversations[0].id);
-    }
-  }, [conversations, conversationId, activeConversationId, selectConversation]);
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
@@ -66,6 +71,7 @@ function ChatPageContent() {
   };
 
   const handleNewConversation = () => {
+    userClickedNew.current = true;
     clearActiveConversation();
     setShowConversations(false);
   };
