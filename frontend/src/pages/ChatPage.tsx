@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { MessageCircle } from 'lucide-react';
@@ -29,23 +29,9 @@ function ChatPageContent() {
     deleteConversation,
   } = useChatStore();
 
-  // Track whether the user explicitly clicked "New Conversation" so we don't auto-re-select
-  const userClickedNew = useRef(false);
-
-  // Load conversations once on mount, then auto-select the most recent if nothing is active.
-  // Intentionally runs only on mount — reactive auto-select was causing "New Conversation" to
-  // immediately re-select the last conversation.
+  // Load conversations on mount
   useEffect(() => {
-    const init = async () => {
-      await loadConversations();
-      if (!conversationId && !userClickedNew.current) {
-        const state = useChatStore.getState();
-        if (!state.activeConversationId && state.conversations.length > 0) {
-          selectConversation(state.conversations[0].id);
-        }
-      }
-    };
-    init();
+    loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -71,7 +57,6 @@ function ChatPageContent() {
   };
 
   const handleNewConversation = () => {
-    userClickedNew.current = true;
     clearActiveConversation();
     setShowConversations(false);
   };
