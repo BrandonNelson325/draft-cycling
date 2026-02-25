@@ -713,45 +713,50 @@ export const trainingPlanService = {
     plan: TrainingPlan
   ): Promise<{ scheduledCount: number; workoutIds: string[] }> {
     const startDate = new Date(plan.start_date);
-    const workoutIds: string[] = [];
-    let scheduledCount = 0;
 
-    for (const week of plan.weeks) {
-      for (const workoutTemplate of week.workouts) {
-        // Create workout
-        const workout = await workoutService.createWorkout(athleteId, {
-          name: workoutTemplate.name,
-          description: workoutTemplate.description,
-          workout_type: workoutTemplate.workout_type as any,
-          duration_minutes: workoutTemplate.duration_minutes,
-          intervals: workoutTemplate.intervals,
+    // Flatten all week+workout combos so we can work with them as a flat list
+    const items = plan.weeks.flatMap((week) =>
+      week.workouts.map((wt) => ({ week, wt }))
+    );
+
+    // Step 1: Create all workouts in parallel (was sequential — big speedup for 20+ workout plans)
+    const createdWorkouts = await Promise.all(
+      items.map(({ week, wt }) =>
+        workoutService.createWorkout(athleteId, {
+          name: wt.name,
+          description: wt.description,
+          workout_type: wt.workout_type as any,
+          duration_minutes: wt.duration_minutes,
+          intervals: wt.intervals,
           generated_by_ai: true,
           ai_prompt: `Training plan: ${plan.goal_event} - Week ${week.week_number} (${week.phase} phase)`,
           training_plan_id: plan.id,
-        });
+        })
+      )
+    );
 
-        workoutIds.push(workout.id);
-
-        // Calculate scheduled date
+    // Step 2: Schedule all calendar entries in parallel
+    await Promise.all(
+      createdWorkouts.map((workout, i) => {
+        const { week, wt } = items[i];
         const weekOffset = week.week_number - 1;
         const scheduledDate = new Date(startDate);
-        scheduledDate.setDate(scheduledDate.getDate() + weekOffset * 7 + workoutTemplate.day_of_week);
+        scheduledDate.setDate(scheduledDate.getDate() + weekOffset * 7 + wt.day_of_week);
 
-        // Schedule to calendar
-        await calendarService.scheduleWorkout(
+        return calendarService.scheduleWorkout(
           athleteId,
           workout.id,
           scheduledDate,
-          workoutTemplate.rationale ||
-            `Week ${week.week_number} - ${week.phase} phase: ${workoutTemplate.name}`,
+          wt.rationale || `Week ${week.week_number} - ${week.phase} phase: ${wt.name}`,
           plan.id,
           week.week_number
         );
+      })
+    );
 
-        scheduledCount++;
-      }
-    }
-
-    return { scheduledCount, workoutIds };
+    return {
+      scheduledCount: createdWorkouts.length,
+      workoutIds: createdWorkouts.map((w) => w.id),
+    };
   },
 };

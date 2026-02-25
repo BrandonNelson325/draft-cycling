@@ -60,81 +60,111 @@ export const useChatStore = create<ChatStore>()(
       },
 
       sendMessage: async (message: string) => {
-        const { activeConversationId, messages } = get();
+        const initialConversationId = get().activeConversationId;
 
-        try {
-          set({ loading: true });
+        const userTempId = `temp-user-${Date.now()}`;
+        const streamingId = `streaming-${Date.now()}`;
 
-          // Add user message optimistically
-          const userMessage: ChatMessage = {
-            id: `temp-${Date.now()}`,
-            conversation_id: activeConversationId || 'new',
-            role: 'user',
-            content: message,
-            created_at: new Date().toISOString(),
-          };
+        // Add optimistic user message + empty streaming placeholder
+        const userMessage: ChatMessage = {
+          id: userTempId,
+          conversation_id: initialConversationId || 'new',
+          role: 'user',
+          content: message,
+          created_at: new Date().toISOString(),
+        };
+        const streamingMessage: ChatMessage = {
+          id: streamingId,
+          conversation_id: initialConversationId || 'new',
+          role: 'assistant',
+          content: '',
+          created_at: new Date().toISOString(),
+        };
 
-          if (activeConversationId) {
-            set({
-              messages: {
-                ...messages,
-                [activeConversationId]: [
-                  ...(messages[activeConversationId] || []),
-                  userMessage,
-                ],
-              },
-            });
-          }
-
-          // Send message to API
-          const response = await chatService.sendMessage(message, activeConversationId || undefined);
-
-          // Validate response
-          if (!response || !response.conversation_id) {
-            throw new Error('Invalid response from server');
-          }
-
-          // Update with real conversation ID if it was a new conversation
-          if (!activeConversationId && response.conversation_id) {
-            set({ activeConversationId: response.conversation_id });
-
-            // Reload conversations to get the new one
-            await get().loadConversations();
-          }
-
-          // Add assistant response
-          const conversationId = response.conversation_id;
-          const existingMessages = get().messages[conversationId] || [];
-
-          // Build new messages array with proper validation
-          const newMessages = [
-            ...existingMessages.filter(
-              (msg) => msg && msg.id && msg.id !== userMessage.id
-            ),
-            { ...userMessage, id: `user-${Date.now()}`, conversation_id: conversationId },
-          ];
-
-          // Only add assistant message if it exists and is valid
-          if (response.message && response.message.id && response.message.content) {
-            newMessages.push(response.message);
-          }
-
+        const addOptimistic = (convId: string) => {
+          const existing = get().messages[convId] || [];
           set({
             messages: {
               ...get().messages,
-              [conversationId]: newMessages,
+              [convId]: [
+                ...existing.filter((m) => !m.id.startsWith('temp-') && m.id !== streamingId),
+                { ...userMessage, conversation_id: convId },
+                { ...streamingMessage, conversation_id: convId },
+              ],
+            },
+          });
+        };
+
+        if (initialConversationId) {
+          addOptimistic(initialConversationId);
+        }
+
+        set({ loading: true });
+
+        let resolvedConvId = initialConversationId;
+
+        try {
+
+          await chatService.sendMessageStream(message, initialConversationId, {
+            onStart: (conversationId) => {
+              resolvedConvId = conversationId;
+              if (!initialConversationId) {
+                set({ activeConversationId: conversationId });
+                addOptimistic(conversationId);
+              }
+            },
+            onToken: (text) => {
+              const convId = resolvedConvId || get().activeConversationId;
+              if (!convId) return;
+              const convMessages = get().messages[convId] || [];
+              const idx = convMessages.findIndex((m) => m.id === streamingId);
+              if (idx !== -1) {
+                const updated = [...convMessages];
+                updated[idx] = { ...updated[idx], content: updated[idx].content + text };
+                set({ messages: { ...get().messages, [convId]: updated } });
+              }
+            },
+            onDone: async () => {
+              const convId = resolvedConvId || get().activeConversationId;
+              if (convId) {
+                // Fetch real messages from DB to replace the streaming placeholder
+                try {
+                  const realMessages = await chatService.getMessages(convId);
+                  set({ messages: { ...get().messages, [convId]: realMessages } });
+                } catch (e) {
+                  // If fetch fails, the streamed content is already in the store — leave it
+                }
+              }
+              // Reload conversation list for new conversations
+              if (!initialConversationId) {
+                await get().loadConversations();
+              }
+            },
+            onError: (error) => {
+              console.error('Stream error:', error);
+              // Remove optimistic messages
+              const convId = resolvedConvId || initialConversationId;
+              if (convId) {
+                set({
+                  messages: {
+                    ...get().messages,
+                    [convId]: (get().messages[convId] || []).filter(
+                      (m) => m.id !== userTempId && m.id !== streamingId
+                    ),
+                  },
+                });
+              }
             },
           });
         } catch (error) {
           console.error('Failed to send message:', error);
-          // Remove optimistic message on error
-          if (get().activeConversationId) {
-            const conversationId = get().activeConversationId!;
+          const convId = resolvedConvId || initialConversationId;
+          if (convId) {
             set({
               messages: {
                 ...get().messages,
-                [conversationId]: (get().messages[conversationId] || []).filter(
-                  (msg) => msg && msg.id && !msg.id.startsWith('temp-')
+                [convId]: (get().messages[convId] || []).filter(
+                  (m) => m.id !== userTempId && m.id !== streamingId
                 ),
               },
             });

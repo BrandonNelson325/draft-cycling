@@ -52,62 +52,44 @@ export const aiCoachService = {
    * Build comprehensive context for AI coaching
    */
   async buildAthleteContext(athleteId: string): Promise<AthleteContext> {
-    // Get athlete profile
-    const { data: athlete } = await supabaseAdmin
-      .from('athletes')
-      .select('*')
-      .eq('id', athleteId)
-      .single();
-
-    // Get recent rides (last 2 weeks)
     const twoWeeksAgo = new Date();
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
-    const { data: recentRides } = await supabaseAdmin
-      .from('strava_activities')
-      .select('*')
-      .eq('athlete_id', athleteId)
-      .gte('start_date', twoWeeksAgo.toISOString())
-      .order('start_date', { ascending: false })
-      .limit(20);
-
-    // Get power records
-    const powerRecords = await powerAnalysisService.getPersonalRecords(athleteId);
-
-    // Get FTP estimation
-    const ftpEstimation = await ftpEstimationService.estimateFTP(athleteId);
-
-    // Get training status
-    const trainingStatus = await trainingLoadService.getTrainingStatus(athleteId);
-
-    // Get upcoming workouts from calendar (if any)
-    const { data: upcomingWorkouts } = await supabaseAdmin
-      .from('calendar_entries')
-      .select('*, workouts(*)')
-      .eq('athlete_id', athleteId)
-      .gte('scheduled_date', new Date().toISOString().split('T')[0])
-      .order('scheduled_date', { ascending: true })
-      .limit(7);
-
-    // Get athlete preferences
-    const preferences = await athletePreferencesService.getPreferences(athleteId);
-
-    // Get today's health data (HRV, resting HR, sleep hours, etc.)
     const today = new Date().toISOString().split('T')[0];
-    const { data: healthData } = await supabaseAdmin
-      .from('health_data')
-      .select('*')
-      .eq('athlete_id', athleteId)
-      .eq('date', today)
-      .single();
 
-    // Get today's daily check-in (sleep quality, feeling)
-    const { data: dailyCheckIn } = await supabaseAdmin
-      .from('daily_metrics')
-      .select('*')
-      .eq('athlete_id', athleteId)
-      .eq('date', today)
-      .single();
+    // Fetch all context in parallel — reduces sequential DB round-trips from ~800ms to ~200ms
+    const [
+      { data: athlete },
+      { data: recentRides },
+      powerRecords,
+      ftpEstimation,
+      trainingStatus,
+      { data: upcomingWorkouts },
+      preferences,
+      { data: healthData },
+      { data: dailyCheckIn },
+    ] = await Promise.all([
+      supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
+      supabaseAdmin
+        .from('strava_activities')
+        .select('*')
+        .eq('athlete_id', athleteId)
+        .gte('start_date', twoWeeksAgo.toISOString())
+        .order('start_date', { ascending: false })
+        .limit(10),
+      powerAnalysisService.getPersonalRecords(athleteId),
+      ftpEstimationService.estimateFTP(athleteId),
+      trainingLoadService.getTrainingStatus(athleteId),
+      supabaseAdmin
+        .from('calendar_entries')
+        .select('*, workouts(*)')
+        .eq('athlete_id', athleteId)
+        .gte('scheduled_date', today)
+        .order('scheduled_date', { ascending: true })
+        .limit(5),
+      athletePreferencesService.getPreferences(athleteId),
+      supabaseAdmin.from('health_data').select('*').eq('athlete_id', athleteId).eq('date', today).single(),
+      supabaseAdmin.from('daily_metrics').select('*').eq('athlete_id', athleteId).eq('date', today).single(),
+    ]);
 
     return {
       athlete,
@@ -326,7 +308,13 @@ RESPONSE STYLE: ${athlete.display_mode === 'simple' ? 'simple' : 'advanced'}
 ${athlete.display_mode === 'simple'
   ? `Keep responses brief and conversational. Avoid technical jargon like CTL, ATL, TSB, and power zones unless the athlete specifically asks. Focus on clear, actionable takeaways. Aim for 2-4 sentences per response unless more detail is genuinely needed.`
   : `Provide detailed analysis with specific metrics where relevant. Reference CTL, ATL, TSB, power zones, and TSS to explain the reasoning behind recommendations.`
-}`;
+}
+
+RESPONSE TONE (always apply regardless of style):
+- Never open with filler phrases like "Great question!", "Sure!", "Absolutely!", or "Of course!"
+- Lead immediately with the answer or the action
+- No unnecessary preamble or summary at the end
+- Be direct: a coach gives the answer, not a speech about giving the answer`;
 
     return prompt;
   },
@@ -403,7 +391,8 @@ You have the ability to create structured workouts and manage the athlete's INTE
 
 You have access to these tools:
 
-**create_workout** - Build complete workouts with intervals and power targets
+**get_workout_templates** - Browse the global template library of professionally designed workouts. USE THIS FIRST when building any plan or scheduling workouts — pick templates instead of creating from scratch.
+**create_workout** - Build a custom workout from scratch (use only when no suitable template exists)
 **schedule_workout** - Add workouts to specific dates on the calendar
 **move_workout** - Reschedule workouts to different dates
 **delete_workout_from_calendar** - Remove scheduled workouts
@@ -1036,6 +1025,193 @@ Format it clearly so I can follow it during my ride.`;
       };
     } catch (error) {
       console.error('Error in AI chat:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Save user + assistant messages to DB (shared by chat and chatStream)
+   */
+  async persistMessages(
+    convId: string,
+    athleteId: string,
+    userMessage: string,
+    aiResponse: string
+  ): Promise<void> {
+    await supabaseAdmin.from('chat_messages').insert({
+      conversation_id: convId,
+      athlete_id: athleteId,
+      role: 'user',
+      content: userMessage,
+    });
+    await supabaseAdmin.from('chat_messages').insert({
+      conversation_id: convId,
+      athlete_id: athleteId,
+      role: 'assistant',
+      content: aiResponse,
+      tool_calls: null,
+    });
+    await supabaseAdmin
+      .from('chat_conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', convId);
+  },
+
+  /**
+   * Streaming chat — SSE version.
+   * Calls onEvent for each stream event: start, progress, token, done, error.
+   * Simple Q&A responses stream from the first token.
+   * Tool-using responses send a progress event immediately, execute tools,
+   * then stream the final text response.
+   */
+  async chatStream(
+    athleteId: string,
+    conversationId: string | null,
+    message: string,
+    clientDate: string | undefined,
+    onEvent: (event: Record<string, any>) => void
+  ): Promise<void> {
+    try {
+      const context = await this.buildAthleteContext(athleteId);
+      const systemPrompt = this.buildSystemPromptWithTools(context, clientDate);
+      const model = selectModel('chat');
+
+      // Get or create conversation
+      let convId: string = conversationId || '';
+      if (!conversationId) {
+        const { data: newConv } = await supabaseAdmin
+          .from('chat_conversations')
+          .insert({ athlete_id: athleteId, title: message.slice(0, 50) })
+          .select()
+          .single();
+        convId = newConv!.id;
+      }
+
+      onEvent({ type: 'start', conversation_id: convId });
+
+      // Get conversation history
+      const { data: history } = await supabaseAdmin
+        .from('chat_messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true })
+        .limit(20);
+
+      const messages: any[] = [];
+      if (history) {
+        history.forEach((msg) => messages.push({ role: msg.role, content: msg.content }));
+      }
+      messages.push({ role: 'user', content: message });
+
+      // Stream the first response — for pure Q&A this IS the final response
+      const firstStream = anthropic.messages.stream({
+        model,
+        max_tokens: 4000,
+        system: systemPrompt,
+        messages,
+        tools: AI_TOOLS,
+      });
+
+      let streamedText = '';
+      let hasTools = false;
+
+      for await (const event of firstStream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          streamedText += event.delta.text;
+          onEvent({ type: 'token', text: event.delta.text });
+        }
+        if (
+          event.type === 'content_block_start' &&
+          (event.content_block as any).type === 'tool_use'
+        ) {
+          hasTools = true;
+        }
+      }
+
+      const firstMessage = await firstStream.finalMessage();
+
+      if (!hasTools) {
+        // Pure text response — already streamed above
+        await this.persistMessages(convId, athleteId, message, streamedText);
+        onEvent({ type: 'done' });
+        return;
+      }
+
+      // Tool loop (blocking) — let user know something is happening
+      if (streamedText === '') {
+        onEvent({ type: 'progress', message: 'Working on it...' });
+      }
+
+      let conversationMessages = [...messages];
+      let finalResponse: any = firstMessage;
+
+      for (let i = 0; i < 5 && this.hasToolUse(finalResponse); i++) {
+        logger.debug(`[stream] Tool calling iteration ${i + 1}`);
+
+        const toolCalls = finalResponse.content.filter(
+          (b: any) => b.type === 'tool_use'
+        ) as any[];
+        const toolResults = await aiToolExecutor.executeTools(athleteId, toolCalls);
+
+        conversationMessages.push({ role: 'assistant', content: finalResponse.content });
+        conversationMessages.push({ role: 'user', content: toolResults });
+
+        finalResponse = await anthropic.messages.create({
+          model: SONNET,
+          max_tokens: 4000,
+          system: systemPrompt,
+          messages: conversationMessages,
+          tools: AI_TOOLS,
+        });
+      }
+
+      // Build final message context
+      const finalMessages = [...conversationMessages];
+
+      if (this.hasToolUse(finalResponse)) {
+        // Hit 5-iteration limit — execute remaining tools and ask for summary
+        const lastToolCalls = finalResponse.content.filter(
+          (b: any) => b.type === 'tool_use'
+        ) as any[];
+        const lastToolResults = await aiToolExecutor.executeTools(athleteId, lastToolCalls);
+        finalMessages.push({ role: 'assistant', content: finalResponse.content });
+        finalMessages.push({
+          role: 'user',
+          content: [
+            ...lastToolResults,
+            { type: 'text', text: 'Please provide a text summary of what you just completed.' },
+          ],
+        });
+      } else {
+        // Natural exit — finalResponse has text; ask model to summarise for clean formatting
+        finalMessages.push({ role: 'assistant', content: finalResponse.content });
+        finalMessages.push({
+          role: 'user',
+          content: [{ type: 'text', text: 'Please provide a text summary of what you just completed.' }],
+        });
+      }
+
+      // Stream the final summary response
+      const finalStream = anthropic.messages.stream({
+        model: SONNET,
+        max_tokens: 2000,
+        system: systemPrompt,
+        messages: finalMessages,
+      });
+
+      let finalText = '';
+      for await (const event of finalStream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          finalText += event.delta.text;
+          onEvent({ type: 'token', text: event.delta.text });
+        }
+      }
+
+      await this.persistMessages(convId, athleteId, message, finalText);
+      onEvent({ type: 'done' });
+    } catch (error: any) {
+      logger.error('Error in chatStream:', error);
+      onEvent({ type: 'error', error: error.message || 'Unknown error' });
       throw error;
     }
   },

@@ -81,6 +81,45 @@ export const chat = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 };
 
+export const chatStream = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!req.user) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const { conversation_id, message, client_date } = req.body;
+
+  if (!message) {
+    res.status(400).json({ error: 'Message is required' });
+    return;
+  }
+
+  // SSE headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable nginx/proxy buffering
+  res.flushHeaders();
+
+  const sendEvent = (data: Record<string, any>) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    await aiCoachService.chatStream(
+      req.user.id,
+      conversation_id || null,
+      message,
+      client_date,
+      sendEvent
+    );
+  } catch (error: any) {
+    sendEvent({ type: 'error', error: error.message || 'Chat failed' });
+  } finally {
+    res.end();
+  }
+};
+
 export const getConversations = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {

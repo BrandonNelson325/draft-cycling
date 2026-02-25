@@ -1,6 +1,15 @@
 import { api } from './api';
 import { useAuthStore } from '../stores/useAuthStore';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+interface StreamCallbacks {
+  onStart: (conversationId: string) => void;
+  onToken: (text: string) => void;
+  onDone: () => void;
+  onError: (error: string) => void;
+}
+
 export interface ChatMessage {
   id: string;
   conversation_id: string;
@@ -93,6 +102,71 @@ export const chatService = {
 
     if (error) {
       throw new Error(error.error || 'Failed to delete conversation');
+    }
+  },
+
+  async sendMessageStream(
+    message: string,
+    conversationId: string | null | undefined,
+    callbacks: StreamCallbacks
+  ): Promise<void> {
+    const user = useAuthStore.getState().user;
+    const token = useAuthStore.getState().accessToken;
+
+    const response = await fetch(`${API_URL}/api/ai/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({
+        message,
+        conversation_id: conversationId || null,
+        client_date: new Date().toLocaleDateString('en-CA'),
+        display_mode: user?.display_mode ?? 'advanced',
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ error: 'Stream connection failed' }));
+      throw new Error(err.error || 'Stream connection failed');
+    }
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const event = JSON.parse(line.slice(6));
+          switch (event.type) {
+            case 'start':
+              callbacks.onStart(event.conversation_id);
+              break;
+            case 'token':
+              callbacks.onToken(event.text);
+              break;
+            case 'done':
+              callbacks.onDone();
+              break;
+            case 'error':
+              callbacks.onError(event.error);
+              break;
+            // 'progress' events are informational only (handled by onToken to show status)
+          }
+        } catch {
+          // Skip malformed events
+        }
+      }
     }
   },
 };

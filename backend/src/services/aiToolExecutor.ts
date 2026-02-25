@@ -58,6 +58,9 @@ export const aiToolExecutor = {
           case 'generate_training_plan':
             result = await this.generateTrainingPlan(athleteId, toolCall.input);
             break;
+          case 'get_workout_templates':
+            result = await this.getWorkoutTemplates(toolCall.input);
+            break;
           case 'update_athlete_preferences':
             result = await this.updateAthletePreferences(athleteId, toolCall.input);
             break;
@@ -123,24 +126,26 @@ export const aiToolExecutor = {
 
     const workout = await workoutService.createWorkout(athleteId, workoutData);
 
-    // Try to generate and upload files, but don't fail workout creation if it errors
-    let zwoUrl: string | undefined;
-    let fitUrl: string | undefined;
+    // Generate and upload ZWO + FIT files in parallel
+    const [zwoResult, fitResult] = await Promise.allSettled([
+      (async () => {
+        const content = zwoGenerator.generate(workout, athlete.ftp);
+        return storageService.uploadWorkoutFile(athleteId, workout.id, 'zwo', content);
+      })(),
+      (async () => {
+        const content = fitGenerator.generate(workout, athlete.ftp);
+        return storageService.uploadWorkoutFile(athleteId, workout.id, 'fit', content);
+      })(),
+    ]);
 
-    try {
-      const zwoContent = zwoGenerator.generate(workout, athlete.ftp);
-      zwoUrl = await storageService.uploadWorkoutFile(athleteId, workout.id, 'zwo', zwoContent);
-    } catch (zwoError: any) {
-      console.error('ZWO generation/upload failed, but workout created:', zwoError.message);
-      // Continue without ZWO file
+    const zwoUrl = zwoResult.status === 'fulfilled' ? zwoResult.value : undefined;
+    const fitUrl = fitResult.status === 'fulfilled' ? fitResult.value : undefined;
+
+    if (zwoResult.status === 'rejected') {
+      console.error('ZWO generation/upload failed, but workout created:', (zwoResult.reason as any)?.message);
     }
-
-    try {
-      const fitContent = fitGenerator.generate(workout, athlete.ftp);
-      fitUrl = await storageService.uploadWorkoutFile(athleteId, workout.id, 'fit', fitContent);
-    } catch (fitError: any) {
-      console.error('FIT generation/upload failed, but workout created:', fitError.message);
-      // Continue without FIT file
+    if (fitResult.status === 'rejected') {
+      console.error('FIT generation/upload failed, but workout created:', (fitResult.reason as any)?.message);
     }
 
     // Update workout with file URLs if they were successfully generated
@@ -413,6 +418,43 @@ export const aiToolExecutor = {
       },
       workouts_scheduled: scheduledCount,
       workout_ids: workoutIds,
+    };
+  },
+
+  /**
+   * Get workout templates from the global library
+   */
+  async getWorkoutTemplates(input: any): Promise<any> {
+    let query = supabaseAdmin.from('workout_templates').select('*');
+
+    if (input.workout_type) {
+      query = query.eq('workout_type', input.workout_type);
+    }
+    if (input.difficulty) {
+      query = query.eq('difficulty', input.difficulty);
+    }
+
+    const limit = Math.min(input.max_results || 10, 20);
+    query = query.limit(limit);
+
+    const { data: templates, error } = await query;
+    if (error) {
+      throw new Error(`Failed to fetch templates: ${error.message}`);
+    }
+
+    return {
+      templates: (templates || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        workout_type: t.workout_type,
+        duration_minutes: t.duration_minutes,
+        tss_estimate: t.tss_estimate,
+        difficulty: t.difficulty,
+        tags: t.tags,
+        intervals: t.intervals,
+      })),
+      note: 'Use create_workout with these intervals to add a template-based workout to the athlete\'s library.',
     };
   },
 

@@ -236,6 +236,31 @@ export const AI_TOOLS: Tool[] = [
   },
 
   {
+    name: 'get_workout_templates',
+    description:
+      'Browse the global workout template library. Use this to find pre-built, professionally designed workouts instead of creating workouts from scratch. Preferred for building training plans — pick templates that fit the training phase and difficulty level.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workout_type: {
+          type: 'string',
+          enum: ['endurance', 'tempo', 'threshold', 'vo2max', 'sprint', 'recovery'],
+          description: 'Filter by workout type',
+        },
+        difficulty: {
+          type: 'string',
+          enum: ['easy', 'moderate', 'hard', 'very_hard'],
+          description: 'Filter by difficulty',
+        },
+        max_results: {
+          type: 'integer',
+          description: 'Max templates to return (default 10, max 20)',
+        },
+      },
+    },
+  },
+
+  {
     name: 'update_athlete_preferences',
     description:
       'Save athlete preferences and training details so you remember them for future conversations. Use this AUTOMATICALLY when you learn new information about the athlete through conversation (goals, preferences, constraints, etc.). This makes you smarter over time!',
