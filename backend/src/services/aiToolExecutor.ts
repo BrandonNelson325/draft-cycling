@@ -1,3 +1,4 @@
+import { v4 as uuidv4 } from 'uuid';
 import { ToolUseBlock } from '@anthropic-ai/sdk/resources';
 import { workoutService } from './workoutService';
 import { calendarService } from './calendarService';
@@ -463,9 +464,14 @@ export const aiToolExecutor = {
   /**
    * Schedule a full training plan from template IDs + dates in one shot.
    * Creates athlete workout records from templates and schedules them all in parallel.
+   * Also saves a training_plans record so the Training Plan page shows the plan.
    */
   async schedulePlanFromTemplates(athleteId: string, input: any): Promise<any> {
-    const { workouts } = input as { workouts: { template_id: string; date: string }[] };
+    const { workouts, goal_event, event_date } = input as {
+      workouts: { template_id: string; date: string; phase?: string }[];
+      goal_event?: string;
+      event_date?: string;
+    };
 
     if (!workouts || workouts.length === 0) {
       throw new Error('No workouts provided');
@@ -502,7 +508,7 @@ export const aiToolExecutor = {
           generated_by_ai: true,
           ai_prompt: 'Training plan template',
         });
-        return { workout, date: item.date };
+        return { workout, date: item.date, phase: item.phase || 'build', template: t };
       })
     );
 
@@ -513,6 +519,78 @@ export const aiToolExecutor = {
         return calendarService.scheduleWorkout(athleteId, workout.id, new Date(year, month - 1, day));
       })
     );
+
+    // Save a training_plans record so the Training Plan page shows the plan
+    if (goal_event && event_date) {
+      try {
+        // Find the earliest date as plan start
+        const startDate = [...workouts].map((w) => w.date).sort()[0];
+
+        // Group workouts into calendar weeks relative to plan start
+        const [sy, sm, sd] = startDate.split('-').map(Number);
+        const planStart = new Date(sy, sm - 1, sd);
+
+        const weekMap = new Map<number, { workouts: any[]; phase: string; tss: number }>();
+
+        for (const item of created) {
+          const [iy, im, id] = item.date.split('-').map(Number);
+          const itemDate = new Date(iy, im - 1, id);
+          const diffDays = Math.floor(
+            (itemDate.getTime() - planStart.getTime()) / (1000 * 60 * 60 * 24)
+          );
+          const weekNum = Math.floor(diffDays / 7) + 1;
+
+          if (!weekMap.has(weekNum)) {
+            weekMap.set(weekNum, { workouts: [], phase: item.phase, tss: 0 });
+          }
+          const weekData = weekMap.get(weekNum)!;
+          weekData.workouts.push({
+            name: item.template.name,
+            description: item.template.description,
+            workout_type: item.template.workout_type,
+            duration_minutes: item.template.duration_minutes,
+            day_of_week: new Date(iy, im - 1, id).getDay(),
+            intervals: item.template.intervals || [],
+            rationale: item.template.description,
+          });
+          weekData.tss += item.workout.tss || item.template.tss_estimate || 0;
+        }
+
+        const weeks = Array.from(weekMap.entries())
+          .sort(([a], [b]) => a - b)
+          .map(([week_number, data]) => ({
+            week_number,
+            phase: data.phase as 'base' | 'build' | 'peak' | 'taper',
+            tss: Math.round(data.tss),
+            workouts: data.workouts,
+          }));
+
+        const totalTss = weeks.reduce((sum, w) => sum + w.tss, 0);
+
+        // Deactivate any existing active plan
+        await supabaseAdmin
+          .from('training_plans')
+          .update({ status: 'cancelled' })
+          .eq('athlete_id', athleteId)
+          .eq('status', 'active');
+
+        await supabaseAdmin.from('training_plans').insert({
+          id: uuidv4(),
+          athlete_id: athleteId,
+          goal_event,
+          event_date,
+          start_date: startDate,
+          end_date: event_date,
+          weeks,
+          total_tss: totalTss,
+          total_weeks: weeks.length,
+          status: 'active',
+        });
+      } catch (planError: any) {
+        // Don't fail the whole operation if plan record saving fails
+        logger.error('Failed to save training_plans record:', planError.message);
+      }
+    }
 
     return {
       success: true,

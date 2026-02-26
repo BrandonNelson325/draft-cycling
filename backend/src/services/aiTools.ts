@@ -238,10 +238,18 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'schedule_plan_from_templates',
     description:
-      'Build and schedule a complete training plan in one call by selecting templates and dates. Use this instead of calling create_workout + schedule_workout individually. The server handles all workout creation and scheduling in parallel — far faster than one-by-one.',
+      'Build and schedule a complete training plan in one call by selecting templates and dates. Use this instead of calling create_workout + schedule_workout individually. The server handles all workout creation and scheduling in parallel — far faster than one-by-one. Pass goal_event and event_date so the plan appears on the Training Plan page.',
     input_schema: {
       type: 'object',
       properties: {
+        goal_event: {
+          type: 'string',
+          description: 'Name of the goal event (e.g. "Gran Fondo", "Century Ride", "Local Crit")',
+        },
+        event_date: {
+          type: 'string',
+          description: 'Date of the goal event in YYYY-MM-DD format',
+        },
         workouts: {
           type: 'array',
           description: 'All workouts to schedule. Each item is a template + date pair.',
@@ -255,6 +263,11 @@ export const AI_TOOLS: Tool[] = [
               date: {
                 type: 'string',
                 description: 'Scheduled date in YYYY-MM-DD format',
+              },
+              phase: {
+                type: 'string',
+                enum: ['base', 'build', 'peak', 'taper'],
+                description: 'Training phase this workout belongs to',
               },
             },
             required: ['template_id', 'date'],

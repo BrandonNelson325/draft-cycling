@@ -422,7 +422,7 @@ When creating workouts:
 
 **WORKFLOW (2 tool calls total):**
 1. get_workout_templates — fetch all templates (call once or twice by type), note their IDs, types, TSS, duration
-2. schedule_plan_from_templates — pass the complete list of {template_id, date} pairs for the entire plan in ONE call
+2. schedule_plan_from_templates — pass goal_event, event_date, and the complete list of {template_id, date, phase} pairs for the entire plan in ONE call. ALWAYS include goal_event and event_date so the plan appears on the Training Plan page.
 
 Never call create_workout or schedule_workout in a loop for plan building — use schedule_plan_from_templates.
 
