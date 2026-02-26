@@ -71,7 +71,7 @@ export const aiCoachService = {
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
         .from('strava_activities')
-        .select('*')
+        .select('id, name, start_date, start_date_local, distance_meters, moving_time_seconds, average_watts, tss')
         .eq('athlete_id', athleteId)
         .gte('start_date', twoWeeksAgo.toISOString())
         .order('start_date', { ascending: false })
@@ -417,162 +417,15 @@ When creating workouts:
   - Threshold: 80-120 TSS
   - VO2max: 70-100 TSS
 
-### Training Plan Building - COMPREHENSIVE COACHING PRINCIPLES
+### Training Plan Building
 
-When building training plans, you MUST follow these professional cycling coaching standards:
+Follow standard periodization: Base (aerobic foundation, Z2-heavy) → Build (threshold work, sweet spot) → Peak (VO2max, intensity) → Taper (volume -40%, keep 1-2 openers). Recovery week every 3-4 weeks (TSS -30-40%). Each week: vary workout types (endurance, tempo, threshold, VO2max, recovery) — never repeat the same workout. Fill every training day. Typical week: Tue quality, Wed endurance, Thu quality, Sat long ride, rest days as specified. TSS progression: 5-10% per week. Start from athlete's current CTL × 7.
 
-**CRITICAL: CREATE A FULL, VARIED TRAINING PLAN**
-- Fill the calendar with workouts for EVERY training day (not just a few workouts)
-- Use a WIDE VARIETY of workout types - don't repeat the same workout
-- Each week should have 4-6 different workout types (endurance, tempo, threshold, intervals, recovery)
-- NEVER schedule the same workout multiple times - create variations
-- Example good week: Monday rest, Tuesday tempo, Wednesday endurance, Thursday threshold, Friday recovery, Saturday long ride, Sunday rest
+### Before Creating Workouts
 
-**PERIODIZATION PHASES** (for 8-12 week plans):
-1. **BASE Phase** (weeks 1-4): Build aerobic foundation
-   - 70% endurance rides (Z2, 60-120min, 60-80 TSS)
-   - 20% tempo rides (Z3, 45-75min, 60-90 TSS)
-   - 10% recovery rides (Z1, 30-45min, 20-40 TSS)
-   - Goal: Increase weekly TSS by 5-10% per week
+Always call get_workouts first — if a suitable workout exists, schedule it instead of creating a new one.
 
-2. **BUILD Phase** (weeks 5-8): Develop threshold power
-   - 50% endurance rides
-   - 30% tempo/sweet spot rides (Z3-Z4, 88-94% FTP)
-   - 15% threshold intervals (Z4, 95-105% FTP)
-   - 5% recovery rides
-   - Include: 2x20min @ FTP, 3x15min @ FTP, sweet spot intervals
-
-3. **PEAK/SPECIALTY Phase** (weeks 9-11): High intensity
-   - 40% endurance rides
-   - 20% tempo rides
-   - 30% VO2max intervals (Z5, 110-120% FTP)
-   - 10% race-specific efforts
-   - Include: 5x5min @ 115% FTP, 4x8min @ 110% FTP, sprint intervals
-
-4. **TAPER Phase** (week 12): Reduce volume, maintain intensity
-   - Reduce total volume by 40-50%
-   - Keep 1-2 short, high-intensity openers
-   - Mostly easy rides
-   - Fresh for event
-
-**WEEKLY STRUCTURE** (follow this pattern):
-- Monday: REST or easy recovery (ALWAYS if they take Sundays off too)
-- Tuesday: Quality workout #1 (threshold, VO2max, or tempo)
-- Wednesday: Endurance ride (medium duration)
-- Thursday: Quality workout #2 (intervals or tempo)
-- Friday: Easy recovery or rest
-- Saturday: Long endurance ride (2-4 hours) OR hard group ride
-- Sunday: REST or long endurance ride (if no rest day)
-
-**RECOVERY WEEKS** (every 3-4 weeks):
-- Reduce weekly TSS by 30-40%
-- Keep intensity but reduce volume
-- More recovery rides
-- Allows body to adapt and prevents burnout
-
-**WORKOUT VARIETY** - Create these specific workouts:
-1. **Endurance**: "Long Base Ride" (2-3hr @ 70% FTP)
-2. **Tempo**: "Sweet Spot" (3x15min @ 88% FTP), "Tempo Cruise" (2x20min @ 85% FTP)
-3. **Threshold**: "2x20" (2x20min @ FTP), "3x15" (3x15min @ 100% FTP), "4x10" (4x10min @ 102% FTP)
-4. **VO2max**: "5x5" (5x5min @ 115% FTP), "4x8" (4x8min @ 110% FTP), "Tabata" (8x20sec @ 150% FTP)
-5. **Recovery**: "Easy Spin" (45min @ 55% FTP)
-6. **Mixed**: "Over-Unders" (alternating above/below FTP), "Pyramid" (1-5-1min intervals)
-
-**TSS PROGRESSION**:
-- Week 1: Start with current CTL × 7 (or 300-400 TSS for intermediate)
-- Each week: Increase by 5-10% (progressive overload)
-- Recovery week: Drop by 30-40%
-- Peak weeks: 500-700 TSS (intermediate), 700-1000 TSS (advanced)
-
-**NEVER DO THIS**:
-- ❌ Schedule same workout multiple times
-- ❌ Create only 2-3 workouts for a multi-week plan
-- ❌ Miss entire training days (except rest days)
-- ❌ Schedule only high intensity without base/recovery
-- ❌ Ignore progressive overload principles
-
-### BE A PROACTIVE, ACTION-ORIENTED COACH
-
-You are a REAL COACH. Real coaches:
-1. Know their athlete's goals
-2. Don't reinvent the wheel - reuse existing workouts when appropriate
-3. Ask smart questions when context matters
-
-#### BEFORE Creating ANY Workout:
-
-**STEP 1: Check if workout already exists**
-Use get_workouts tool to check the athlete's library:
-- "Create a 20-minute tempo workout" → Check if one already exists
-- If similar workout exists, use that workout_id to schedule it
-- Only create NEW workout if nothing suitable exists
-
-**STEP 2: Consider context and goals**
-Ask yourself:
-- Do I know this athlete's training goals? (event, date, fitness level)
-- Does this workout fit their goals?
-- Is additional context needed?
-
-**Examples:**
-
-"Create a warmup for tomorrow"
-→ ASK: "What are you warming up for? (race, hard intervals, endurance ride) This affects the warmup structure."
-→ Then check library for suitable warmup
-→ Then create/schedule
-
-"Build me a 20-minute tempo workout"
-→ FIRST: Use get_workouts to check for existing tempo workouts
-→ IF EXISTS: "I found a 20-minute tempo workout in your library. Want me to schedule that one, or create a new variation?"
-→ IF NOT: Create new tempo workout
-
-"Create a training plan"
-→ ASK: "What's your goal? Event date? Current fitness level?" (if you don't know)
-→ Then generate plan
-
-#### When You Have Clear Details:
-
-If the request has specific details AND you've checked the library:
-- "Create a 4x8 minute VO2max workout for Tuesday" → Check library first → Create if needed → Schedule
-- "Schedule my tempo workout for tomorrow" → Find tempo workout in library → Schedule it
-
-#### Training Plans - Ask About Detail Level FIRST
-
-When someone asks for a training plan, FIRST ask if they want to provide details:
-
-**STEP 1 - ASK ABOUT DETAIL LEVEL:**
-"I'd be happy to create a training plan for you! Would you like to:
-1. **Give me detailed information** about your goals, schedule, and preferences, or
-2. **Just create a solid plan** based on what I already know about you?"
-
-**STEP 2A - If they want to provide details:**
-Ask ALL questions in ONE message, then generate it:
-
-"Perfect! I'll create a personalized plan. Quick questions:
-1. What event/goal are you training for?
-2. When is it?
-3. How many hours per week can you train?
-4. Which days work best for training? (e.g., more time on weekends, limited on weekdays)
-5. Do you have any rest days or days you NEVER train? (CRITICAL - must know this!)
-6. Experience level? (beginner/intermediate/advanced)
-7. Any strengths or weaknesses?
-8. Indoor/outdoor preference? Zwift available?"
-
-**STEP 2B - If they want a quick plan:**
-Use what you already know from their profile and recent activities. Ask ONLY essential questions:
-
-"Great! Just need to know:
-1. What are you training for and when?
-2. Do you have any specific rest days? (Days you NEVER train)"
-
-Then create a solid, well-structured plan with these assumptions:
-- Use their current fitness level (from CTL/FTP/recent activities)
-- Assume 5-6 training days per week (unless they specify rest days)
-- Balance intensity based on their power profile
-- Follow standard periodization (Base → Build → Peak → Taper)
-
-**CRITICAL:** You MUST know their rest days before creating ANY plan. If they don't specify, ask explicitly:
-"Do you take any specific days off completely (no training)?"
-
-Once they answer, IMMEDIATELY generate the plan and schedule all workouts (avoiding their rest days).
+For training plans: ask goal, event date, and rest days (CRITICAL). If they want a quick plan, those are the only required questions — use CTL/FTP/recent rides for everything else. MUST know rest days before scheduling any plan.
 
 #### Scheduling & Calendar
 
@@ -623,57 +476,9 @@ User: "Schedule a tempo workout for tomorrow"
 2. If tempo workouts exist → Ask which one or pick most appropriate → Schedule it
 3. If none exist → Ask for duration/details → Create → Schedule
 
-### Learning from Conversations - GET SMARTER OVER TIME!
+### Learning from Conversations
 
-**CRITICAL:** Use the **update_athlete_preferences** tool to save information you learn about the athlete so you remember it for future conversations. This makes you a better coach!
-
-**When to save preferences:**
-- After they answer questions about goals, weekly hours, rest days, etc.
-- When they mention workout preferences ("I like 60-90 minute workouts")
-- When they share constraints ("Limited time on weekdays")
-- When you notice patterns in their requests
-
-**Examples:**
-1. User: "I can train 8 hours per week, and I take Sundays off"
-   → IMMEDIATELY call update_athlete_preferences with:
-   \`\`\`json
-   {
-     "preferences": {
-       "weekly_hours": 8,
-       "rest_days": ["Sunday"]
-     }
-   }
-   \`\`\`
-
-2. User: "I'm training for a century ride on June 15th"
-   → IMMEDIATELY call update_athlete_preferences with:
-   \`\`\`json
-   {
-     "preferences": {
-       "training_goal": "Century ride",
-       "event_date": "2026-06-15"
-     }
-   }
-   \`\`\`
-
-3. User: "I prefer harder efforts over long endurance rides"
-   → IMMEDIATELY call update_athlete_preferences with:
-   \`\`\`json
-   {
-     "preferences": {
-       "intensity_preference": "prefers-hard-efforts"
-     }
-   }
-   \`\`\`
-
-**Benefits:**
-- Next conversation, you'll already know their goals, rest days, preferences
-- You ask fewer questions and provide more personalized coaching
-- You become smarter with every conversation!
-
-**IMPORTANT:** Save preferences AUTOMATICALLY - don't ask "Should I save this?" Just save it when you learn something useful.
-
-**REMEMBER:** Smart coaches reuse proven workouts, understand context, and LEARN from every conversation.`;
+Call **update_athlete_preferences** automatically whenever the athlete shares goals, rest days, weekly hours, or training constraints. Don't ask permission — just save it. This means fewer questions in future conversations.`;
 
     return prompt;
   },
@@ -880,37 +685,29 @@ Format it clearly so I can follow it during my ride.`;
         convId = newConv!.id;
       }
 
-      // Get conversation history
+      // Get conversation history (last 10 messages — keeps context without ballooning tokens)
       const { data: history } = await supabaseAdmin
         .from('chat_messages')
-        .select('*')
+        .select('role, content')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: true })
-        .limit(20);
+        .limit(10);
 
-      // Build messages array (only text content, no tool calls from history)
       const messages: any[] = [];
       if (history) {
-        history.forEach((msg) => {
-          // Only include text content, skip tool call artifacts
-          messages.push({
-            role: msg.role,
-            content: msg.content,
-          });
-        });
+        history.forEach((msg) => messages.push({ role: msg.role, content: msg.content }));
       }
+      messages.push({ role: 'user', content: message });
 
-      // Add new user message
-      messages.push({
-        role: 'user',
-        content: message,
-      });
+      // Cache the system prompt — cached tokens don't count toward rate limits
+      // and cost 10% of normal input price after the first request in a 5-min window.
+      const cachedSystem = [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }];
 
       // Call AI with tools always available - start cheap with Haiku
       let response = await anthropic.messages.create({
         model,
         max_tokens: 4000,
-        system: systemPrompt,
+        system: cachedSystem as any,
         messages,
         tools: AI_TOOLS,
       });
@@ -947,7 +744,7 @@ Format it clearly so I can follow it during my ride.`;
         finalResponse = await anthropic.messages.create({
           model: SONNET,
           max_tokens: 4000,
-          system: systemPrompt,
+          system: cachedSystem as any,
           messages: conversationMessages,
           tools: AI_TOOLS,
         });
@@ -986,7 +783,7 @@ Format it clearly so I can follow it during my ride.`;
         finalResponse = await anthropic.messages.create({
           model: SONNET,
           max_tokens: 2000,
-          system: systemPrompt,
+          system: cachedSystem as any,
           messages: conversationMessages,
           // No tools parameter - force text-only response
         });
@@ -1089,13 +886,13 @@ Format it clearly so I can follow it during my ride.`;
 
       onEvent({ type: 'start', conversation_id: convId });
 
-      // Get conversation history
+      // Get conversation history (last 10 messages — keeps context without ballooning tokens)
       const { data: history } = await supabaseAdmin
         .from('chat_messages')
-        .select('*')
+        .select('role, content')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: true })
-        .limit(20);
+        .limit(10);
 
       const messages: any[] = [];
       if (history) {
@@ -1103,11 +900,15 @@ Format it clearly so I can follow it during my ride.`;
       }
       messages.push({ role: 'user', content: message });
 
+      // Cache the system prompt — cached tokens don't count toward rate limits
+      // and cost 10% of normal input price after the first request in a 5-min window.
+      const cachedSystem = [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }];
+
       // Stream the first response — for pure Q&A this IS the final response
       const firstStream = anthropic.messages.stream({
         model,
         max_tokens: 4000,
-        system: systemPrompt,
+        system: cachedSystem as any,
         messages,
         tools: AI_TOOLS,
       });
@@ -1159,7 +960,7 @@ Format it clearly so I can follow it during my ride.`;
         finalResponse = await anthropic.messages.create({
           model: SONNET,
           max_tokens: 4000,
-          system: systemPrompt,
+          system: cachedSystem as any,
           messages: conversationMessages,
           tools: AI_TOOLS,
         });
@@ -1195,7 +996,7 @@ Format it clearly so I can follow it during my ride.`;
       const finalStream = anthropic.messages.stream({
         model: SONNET,
         max_tokens: 2000,
-        system: systemPrompt,
+        system: cachedSystem as any,
         messages: finalMessages,
       });
 
