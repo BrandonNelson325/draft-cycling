@@ -39,11 +39,30 @@ function cleanAIResponse(content: string): string {
 }
 
 export function MessageBubble({ message }: MessageBubbleProps) {
-  if (!message || !message.content) {
-    return null;
-  }
+  if (!message) return null;
 
   const isUser = message.role === 'user';
+
+  // Empty assistant message = tools are running, show thinking indicator
+  if (!isUser && !message.content?.trim()) {
+    return (
+      <div className="flex justify-start mb-6">
+        <div className="bg-gray-100 text-foreground rounded-3xl rounded-bl-md px-5 py-3.5 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Working on it</span>
+            <div className="flex gap-1">
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+              <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!message.content) return null;
+
   const displayContent = !isUser ? cleanAIResponse(message.content) : message.content;
 
   return (

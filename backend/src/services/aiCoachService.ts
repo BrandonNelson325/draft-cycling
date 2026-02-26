@@ -980,7 +980,7 @@ Format it clearly so I can follow it during my ride.`;
           role: 'user',
           content: [
             ...lastToolResults,
-            { type: 'text', text: 'Please provide a text summary of what you just completed.' },
+            { type: 'text', text: 'Confirm in one sentence what was done.' },
           ],
         });
       } else {
@@ -988,7 +988,7 @@ Format it clearly so I can follow it during my ride.`;
         finalMessages.push({ role: 'assistant', content: finalResponse.content });
         finalMessages.push({
           role: 'user',
-          content: [{ type: 'text', text: 'Please provide a text summary of what you just completed.' }],
+          content: [{ type: 'text', text: 'Confirm in one sentence what was done.' }],
         });
       }
 

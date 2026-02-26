@@ -51,10 +51,10 @@ export function ChatThread({ messages, loading }: ChatThreadProps) {
     return () => clearInterval(interval);
   }, [loading]);
 
-  // Safety check for messages
+  // Safety check for messages — keep empty assistant messages (streaming placeholders)
   const safeMessages = (messages || []).filter((msg) => {
     try {
-      return msg && msg.id && msg.content && msg.role;
+      return msg && msg.id && msg.role && (msg.content || msg.role === 'assistant');
     } catch (error) {
       console.error('Error filtering message:', msg, error);
       return false;
