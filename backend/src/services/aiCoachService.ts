@@ -421,8 +421,8 @@ When creating workouts:
 ### Training Plan Building
 
 **WORKFLOW (2 tool calls total):**
-1. `get_workout_templates` — fetch all templates (call once or twice by type), note their IDs, types, TSS, duration
-2. `schedule_plan_from_templates` — pass the complete list of {template_id, date} pairs for the entire plan in ONE call
+1. get_workout_templates — fetch all templates (call once or twice by type), note their IDs, types, TSS, duration
+2. schedule_plan_from_templates — pass the complete list of {template_id, date} pairs for the entire plan in ONE call
 
 Never call create_workout or schedule_workout in a loop for plan building — use schedule_plan_from_templates.
 
