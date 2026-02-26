@@ -236,6 +236,36 @@ export const AI_TOOLS: Tool[] = [
   },
 
   {
+    name: 'schedule_plan_from_templates',
+    description:
+      'Build and schedule a complete training plan in one call by selecting templates and dates. Use this instead of calling create_workout + schedule_workout individually. The server handles all workout creation and scheduling in parallel — far faster than one-by-one.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        workouts: {
+          type: 'array',
+          description: 'All workouts to schedule. Each item is a template + date pair.',
+          items: {
+            type: 'object',
+            properties: {
+              template_id: {
+                type: 'string',
+                description: 'UUID of the workout template from get_workout_templates',
+              },
+              date: {
+                type: 'string',
+                description: 'Scheduled date in YYYY-MM-DD format',
+              },
+            },
+            required: ['template_id', 'date'],
+          },
+        },
+      },
+      required: ['workouts'],
+    },
+  },
+
+  {
     name: 'get_workout_templates',
     description:
       'Browse the global workout template library. Use this to find pre-built, professionally designed workouts instead of creating workouts from scratch. Preferred for building training plans — pick templates that fit the training phase and difficulty level.',

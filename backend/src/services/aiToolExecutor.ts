@@ -61,6 +61,9 @@ export const aiToolExecutor = {
           case 'get_workout_templates':
             result = await this.getWorkoutTemplates(toolCall.input);
             break;
+          case 'schedule_plan_from_templates':
+            result = await this.schedulePlanFromTemplates(athleteId, toolCall.input);
+            break;
           case 'update_athlete_preferences':
             result = await this.updateAthletePreferences(athleteId, toolCall.input);
             break;
@@ -452,9 +455,74 @@ export const aiToolExecutor = {
         tss_estimate: t.tss_estimate,
         difficulty: t.difficulty,
         tags: t.tags,
-        intervals: t.intervals,
       })),
-      note: 'Use create_workout with these intervals to add a template-based workout to the athlete\'s library.',
+      note: 'Use schedule_plan_from_templates with these IDs and dates to build a full plan in one call.',
+    };
+  },
+
+  /**
+   * Schedule a full training plan from template IDs + dates in one shot.
+   * Creates athlete workout records from templates and schedules them all in parallel.
+   */
+  async schedulePlanFromTemplates(athleteId: string, input: any): Promise<any> {
+    const { workouts } = input as { workouts: { template_id: string; date: string }[] };
+
+    if (!workouts || workouts.length === 0) {
+      throw new Error('No workouts provided');
+    }
+
+    // Fetch all unique templates in one query
+    const templateIds = [...new Set(workouts.map((w) => w.template_id))];
+    const { data: templates, error: tplError } = await supabaseAdmin
+      .from('workout_templates')
+      .select('*')
+      .in('id', templateIds);
+
+    if (tplError) throw new Error(`Failed to fetch templates: ${tplError.message}`);
+
+    const templateMap = new Map((templates || []).map((t) => [t.id, t]));
+
+    // Validate all template IDs exist before doing any work
+    for (const w of workouts) {
+      if (!templateMap.has(w.template_id)) {
+        throw new Error(`Template not found: ${w.template_id}`);
+      }
+    }
+
+    // Create all athlete workouts in parallel (no ZWO/FIT generation — done on demand)
+    const created = await Promise.all(
+      workouts.map(async (item) => {
+        const t = templateMap.get(item.template_id)!;
+        const workout = await workoutService.createWorkout(athleteId, {
+          name: t.name,
+          description: t.description,
+          workout_type: t.workout_type,
+          duration_minutes: t.duration_minutes,
+          intervals: t.intervals,
+          generated_by_ai: true,
+          ai_prompt: 'Training plan template',
+        });
+        return { workout, date: item.date };
+      })
+    );
+
+    // Schedule all calendar entries in parallel
+    await Promise.all(
+      created.map(({ workout, date }) => {
+        const [year, month, day] = date.split('-').map(Number);
+        return calendarService.scheduleWorkout(athleteId, workout.id, new Date(year, month - 1, day));
+      })
+    );
+
+    return {
+      success: true,
+      scheduled: created.length,
+      workouts: created.map(({ workout, date }) => ({
+        name: workout.name,
+        type: workout.workout_type,
+        date,
+        tss: workout.tss,
+      })),
     };
   },
 
