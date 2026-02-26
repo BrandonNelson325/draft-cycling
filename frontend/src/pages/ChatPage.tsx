@@ -22,6 +22,7 @@ function ChatPageContent() {
     activeConversationId,
     messages,
     loading,
+    toolStatus,
     loadConversations,
     selectConversation,
     sendMessage,
@@ -114,7 +115,7 @@ function ChatPageContent() {
         ) : (
           <>
             {activeConversationId ? (
-              <ChatThread messages={activeMessages} loading={loading} />
+              <ChatThread messages={activeMessages} loading={loading} toolStatus={toolStatus} />
             ) : (
               emptyState
             )}

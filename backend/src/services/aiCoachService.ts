@@ -945,10 +945,8 @@ Format it clearly so I can follow it during my ride.`;
         return;
       }
 
-      // Tool loop (blocking) — let user know something is happening
-      if (streamedText === '') {
-        onEvent({ type: 'progress', message: 'Working on it...' });
-      }
+      // Tool loop (blocking) — always notify the frontend so it can show a status indicator
+      onEvent({ type: 'progress', message: 'Building your plan...' });
 
       let conversationMessages = [...messages];
       let finalResponse: any = firstMessage;

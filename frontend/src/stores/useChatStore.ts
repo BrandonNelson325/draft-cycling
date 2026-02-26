@@ -7,6 +7,7 @@ interface ChatStore {
   activeConversationId: string | null;
   messages: Record<string, ChatMessage[]>;
   loading: boolean;
+  toolStatus: string | null; // non-null while server-side tools are running
 
   loadConversations: () => Promise<void>;
   selectConversation: (id: string) => void;
@@ -23,6 +24,7 @@ export const useChatStore = create<ChatStore>()(
       activeConversationId: null,
       messages: {},
       loading: false,
+      toolStatus: null,
 
       loadConversations: async () => {
         try {
@@ -134,7 +136,11 @@ export const useChatStore = create<ChatStore>()(
               // Unblock the input as soon as the connection is established
               set({ loading: false });
             },
+            onProgress: (message) => {
+              set({ toolStatus: message });
+            },
             onToken: (text) => {
+              set({ toolStatus: null }); // clear status once tokens start flowing again
               tokenBuffer += text;
               if (!rafPending) {
                 rafPending = true;
@@ -142,6 +148,7 @@ export const useChatStore = create<ChatStore>()(
               }
             },
             onDone: async () => {
+              set({ toolStatus: null });
               // Flush any tokens that didn't make it through rAF yet
               flushTokens();
               const convId = resolvedConvId || get().activeConversationId;
@@ -160,6 +167,7 @@ export const useChatStore = create<ChatStore>()(
               }
             },
             onError: (error) => {
+              set({ toolStatus: null });
               console.error('Stream error:', error);
               // Remove optimistic messages
               const convId = resolvedConvId || initialConversationId;

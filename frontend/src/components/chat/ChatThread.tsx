@@ -5,9 +5,10 @@ import type { ChatMessage } from '../../services/chatService';
 interface ChatThreadProps {
   messages: ChatMessage[];
   loading?: boolean;
+  toolStatus?: string | null;
 }
 
-export function ChatThread({ messages, loading }: ChatThreadProps) {
+export function ChatThread({ messages, loading, toolStatus }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [loadingMessage, setLoadingMessage] = useState('AI is thinking');
   const [loadingDuration, setLoadingDuration] = useState(0);
@@ -81,6 +82,18 @@ export function ChatThread({ messages, loading }: ChatThreadProps) {
         {safeMessages.map((message) => (
           <MessageBubble key={message.id} message={message} />
         ))}
+        {toolStatus && (
+          <div className="flex justify-start mb-2 animate-fadeIn">
+            <div className="bg-gray-100 text-foreground rounded-2xl px-4 py-2.5 shadow-sm flex items-center gap-2">
+              <span className="text-sm text-gray-500">{toolStatus}</span>
+              <div className="flex gap-1">
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </div>
+        )}
         {loading && (
           <div className="flex justify-start mb-6 animate-fadeIn">
             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 text-foreground rounded-3xl rounded-bl-md px-6 py-4 shadow-md border border-blue-100">

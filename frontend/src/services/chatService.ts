@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 interface StreamCallbacks {
   onStart: (conversationId: string) => void;
   onToken: (text: string) => void;
+  onProgress: (message: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
 }
@@ -155,13 +156,15 @@ export const chatService = {
             case 'token':
               callbacks.onToken(event.text);
               break;
+            case 'progress':
+              callbacks.onProgress(event.message || 'Working on it...');
+              break;
             case 'done':
               callbacks.onDone();
               break;
             case 'error':
               callbacks.onError(event.error);
               break;
-            // 'progress' events are informational only (handled by onToken to show status)
           }
         } catch {
           // Skip malformed events
