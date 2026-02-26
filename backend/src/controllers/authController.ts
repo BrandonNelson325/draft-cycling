@@ -23,14 +23,12 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create athlete record
+    // The DB trigger (handle_new_user) already created the athlete row when
+    // the auth user was inserted. Just update full_name if provided.
     const { data: athlete, error: athleteError } = await supabaseAdmin
       .from('athletes')
-      .insert({
-        id: authData.user.id,
-        email,
-        full_name: full_name || null,
-      })
+      .update({ full_name: full_name || null })
+      .eq('id', authData.user.id)
       .select()
       .single();
 
