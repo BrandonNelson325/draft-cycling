@@ -23,11 +23,11 @@ export function DashboardPage() {
 
       {/* Bottom Row */}
       <div className="grid gap-4 md:grid-cols-2">
-        {/* Recent Activities */}
-        <RecentActivities />
-
         {/* FTP Estimate */}
         <FTPEstimateCard />
+
+        {/* Recent Activities */}
+        <RecentActivities />
       </div>
     </div>
   );
