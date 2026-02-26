@@ -987,7 +987,7 @@ Format it clearly so I can follow it during my ride.`;
           role: 'user',
           content: [
             ...lastToolResults,
-            { type: 'text', text: 'Confirm in one sentence what was done.' },
+            { type: 'text', text: 'Briefly confirm what was completed. For a training plan, include: how many workouts were scheduled, the date range, and what the first week looks like. Keep it to 2-3 sentences max.' },
           ],
         });
       } else {
@@ -995,7 +995,7 @@ Format it clearly so I can follow it during my ride.`;
         finalMessages.push({ role: 'assistant', content: finalResponse.content });
         finalMessages.push({
           role: 'user',
-          content: [{ type: 'text', text: 'Confirm in one sentence what was done.' }],
+          content: [{ type: 'text', text: 'Briefly confirm what was completed. For a training plan, include: how many workouts were scheduled, the date range, and what the first week looks like. Keep it to 2-3 sentences max.' }],
         });
       }
 
