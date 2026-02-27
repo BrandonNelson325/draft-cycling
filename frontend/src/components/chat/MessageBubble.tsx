@@ -3,6 +3,7 @@ import type { ChatMessage } from '../../services/chatService';
 
 interface MessageBubbleProps {
   message: ChatMessage;
+  isWorking?: boolean;
 }
 
 // Clean up AI responses by removing verbose tool call details
@@ -38,7 +39,7 @@ function cleanAIResponse(content: string): string {
   return cleaned.trim();
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export function MessageBubble({ message, isWorking }: MessageBubbleProps) {
   if (!message) return null;
 
   const isUser = message.role === 'user';
@@ -103,6 +104,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             </div>
           )}
         </div>
+        {isWorking && (
+          <div className="flex items-center gap-1.5 mt-2.5">
+            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+            <span className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+          </div>
+        )}
         <div className={`text-xs mt-2 ${isUser ? 'opacity-80' : 'opacity-60'}`}>
           {new Date(message.created_at).toLocaleTimeString('en-US', {
             hour: 'numeric',
