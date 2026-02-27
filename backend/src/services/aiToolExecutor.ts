@@ -65,6 +65,14 @@ export const aiToolExecutor = {
           case 'schedule_plan_from_templates':
             result = await this.schedulePlanFromTemplates(athleteId, toolCall.input);
             break;
+          case 'get_training_plan_templates':
+            result = await this.getTrainingPlanTemplates(toolCall.input);
+            logger.debug('✅ get_training_plan_templates SUCCESS');
+            break;
+          case 'schedule_training_plan_template':
+            result = await this.scheduleTrainingPlanTemplate(athleteId, toolCall.input);
+            logger.debug('✅ schedule_training_plan_template SUCCESS:', result.success);
+            break;
           case 'update_athlete_preferences':
             result = await this.updateAthletePreferences(athleteId, toolCall.input);
             break;
@@ -601,6 +609,198 @@ export const aiToolExecutor = {
         date,
         tss: workout.tss,
       })),
+    };
+  },
+
+  /**
+   * Get curated training plan templates
+   */
+  async getTrainingPlanTemplates(input: any): Promise<any> {
+    let query = supabaseAdmin
+      .from('training_plan_templates')
+      .select('id, name, slug, description, target_event, difficulty_level, duration_weeks, days_per_week, hours_per_week_min, hours_per_week_max, tags, sort_order')
+      .order('sort_order', { ascending: true });
+
+    if (input.difficulty_level) {
+      query = query.eq('difficulty_level', input.difficulty_level);
+    }
+    if (input.target_event) {
+      query = query.ilike('target_event', `%${input.target_event}%`);
+    }
+    if (input.max_weeks) {
+      query = query.lte('duration_weeks', input.max_weeks);
+    }
+
+    const { data: templates, error } = await query;
+    if (error) {
+      throw new Error(`Failed to fetch plan templates: ${error.message}`);
+    }
+
+    return {
+      templates: (templates || []).map((t) => ({
+        id: t.id,
+        name: t.name,
+        description: t.description,
+        target_event: t.target_event,
+        difficulty_level: t.difficulty_level,
+        duration_weeks: t.duration_weeks,
+        days_per_week: t.days_per_week,
+        hours_per_week: `${t.hours_per_week_min}-${t.hours_per_week_max}`,
+        tags: t.tags,
+      })),
+      note: 'Use schedule_training_plan_template with a plan ID and start_date to schedule one of these plans.',
+    };
+  },
+
+  /**
+   * Find the best matching workout template for a plan workout slot.
+   * Scores by: workout_type match (required), difficulty (+10), duration proximity (+5/+10), tag match (+3)
+   */
+  findBestTemplate(
+    workoutTemplates: any[],
+    workoutType: string,
+    difficulty: string,
+    durationTarget: number
+  ): any | null {
+    // Filter to matching workout_type (required)
+    const typeMatches = workoutTemplates.filter((t) => t.workout_type === workoutType);
+    if (typeMatches.length === 0) return null;
+
+    let bestTemplate: any = null;
+    let bestScore = -1;
+
+    for (const t of typeMatches) {
+      let score = 0;
+
+      // Difficulty match (+10)
+      if (t.difficulty === difficulty) {
+        score += 10;
+      }
+
+      // Duration proximity (+10 for exact, +5 for within 15 min)
+      const durationDiff = Math.abs((t.duration_minutes || 60) - durationTarget);
+      if (durationDiff === 0) {
+        score += 10;
+      } else if (durationDiff <= 15) {
+        score += 5;
+      }
+
+      // Tag matches (+3 each)
+      if (t.tags && Array.isArray(t.tags)) {
+        if (t.tags.includes(workoutType)) score += 3;
+        if (t.tags.includes(difficulty)) score += 3;
+      }
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestTemplate = t;
+      }
+    }
+
+    return bestTemplate;
+  },
+
+  /**
+   * Schedule a curated training plan template to the athlete's calendar.
+   * Resolves workout references to real template IDs and delegates to schedulePlanFromTemplates logic.
+   */
+  async scheduleTrainingPlanTemplate(athleteId: string, input: any): Promise<any> {
+    const { plan_template_id, start_date, event_date, goal_event } = input;
+
+    // 1. Fetch the plan template
+    const { data: planTemplate, error: planError } = await supabaseAdmin
+      .from('training_plan_templates')
+      .select('*')
+      .eq('id', plan_template_id)
+      .single();
+
+    if (planError || !planTemplate) {
+      throw new Error(`Training plan template not found: ${plan_template_id}`);
+    }
+
+    // 2. Get athlete's rest days from preferences
+    const preferences = await athletePreferencesService.getPreferences(athleteId);
+    const restDayNames = preferences.rest_days || [];
+    const dayNameToNum: Record<string, number> = {
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3,
+      thursday: 4, friday: 5, saturday: 6,
+    };
+    const restDayNums = restDayNames.map((d) => dayNameToNum[d.toLowerCase()]).filter((n) => n !== undefined);
+
+    // 3. Fetch all workout templates for matching
+    const { data: workoutTemplates, error: wtError } = await supabaseAdmin
+      .from('workout_templates')
+      .select('*');
+
+    if (wtError) {
+      throw new Error(`Failed to fetch workout templates: ${wtError.message}`);
+    }
+
+    // 4. Build the workouts array by resolving plan references to workout template IDs
+    const phases: any[] = planTemplate.phases;
+    const [sy, sm, sd] = start_date.split('-').map(Number);
+    const planStart = new Date(sy, sm - 1, sd);
+    const resolvedWorkouts: { template_id: string; date: string; phase: string }[] = [];
+
+    for (const week of phases) {
+      const weekOffset = (week.week_number - 1) * 7;
+
+      for (const workout of week.workouts) {
+        // Calculate target date
+        const targetDate = new Date(planStart);
+        targetDate.setDate(targetDate.getDate() + weekOffset + workout.day_offset);
+
+        // Skip rest days — shift forward to next available day
+        let attempts = 0;
+        while (restDayNums.includes(targetDate.getDay()) && attempts < 7) {
+          targetDate.setDate(targetDate.getDate() + 1);
+          attempts++;
+        }
+
+        // Find the best matching workout template
+        const bestMatch = this.findBestTemplate(
+          workoutTemplates || [],
+          workout.workout_type,
+          workout.difficulty,
+          workout.duration_target
+        );
+
+        if (!bestMatch) {
+          logger.warn(`No matching template for ${workout.workout_type}/${workout.difficulty}/${workout.duration_target}min — skipping`);
+          continue;
+        }
+
+        const dateStr = targetDate.toISOString().split('T')[0];
+        resolvedWorkouts.push({
+          template_id: bestMatch.id,
+          date: dateStr,
+          phase: week.phase,
+        });
+      }
+    }
+
+    if (resolvedWorkouts.length === 0) {
+      throw new Error('No workouts could be resolved from the plan template');
+    }
+
+    // 5. Compute the plan end date and event date
+    const lastDate = resolvedWorkouts.map((w) => w.date).sort().pop()!;
+    const effectiveEventDate = event_date || lastDate;
+    const effectiveGoalEvent = goal_event || planTemplate.name;
+
+    // 6. Delegate to existing schedulePlanFromTemplates
+    const result = await this.schedulePlanFromTemplates(athleteId, {
+      workouts: resolvedWorkouts,
+      goal_event: effectiveGoalEvent,
+      event_date: effectiveEventDate,
+    });
+
+    return {
+      ...result,
+      plan_template_name: planTemplate.name,
+      duration_weeks: planTemplate.duration_weeks,
+      start_date,
+      end_date: effectiveEventDate,
     };
   },
 

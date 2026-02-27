@@ -53,6 +53,14 @@ export function TrainingPlanPage() {
     });
   };
 
+  const handleBrowsePlans = () => {
+    navigate('/chat', {
+      state: {
+        initialMessage: 'Show me your pre-built training plans',
+      },
+    });
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -83,11 +91,16 @@ export function TrainingPlanPage() {
         <div className="text-center py-12">
           <h1 className="text-3xl font-bold mb-4">Training Plan</h1>
           <p className="text-muted-foreground mb-8">
-            You don't have an active training plan yet.
+            Choose a pre-built plan or have the AI coach build one custom for you.
           </p>
-          <Button onClick={handleCreateNewPlan}>
-            Create Training Plan with AI
-          </Button>
+          <div className="flex gap-3 justify-center">
+            <Button onClick={handleBrowsePlans}>
+              Browse Plans
+            </Button>
+            <Button onClick={handleCreateNewPlan} variant="outline">
+              Custom Plan with AI
+            </Button>
+          </div>
         </div>
       </div>
     );

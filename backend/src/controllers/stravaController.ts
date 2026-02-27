@@ -14,11 +14,27 @@ export const getAuthUrl = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    // Generate a random state for CSRF protection
-    const state = crypto.randomBytes(16).toString('hex');
+    const isMobile = req.query.mobile === 'true';
 
-    // Store state in session or database (for now, client will send it back)
-    const authUrl = stravaClient.getAuthorizationUrl(state);
+    // Generate a random state for CSRF protection
+    // Embed mobile flag in state so callback knows which redirect to use
+    const state = crypto.randomBytes(16).toString('hex') + (isMobile ? ':mobile' : '');
+
+    let authUrl: string;
+    if (isMobile && process.env.STRAVA_MOBILE_REDIRECT_URI) {
+      // Build auth URL using mobile redirect URI
+      const params = new URLSearchParams({
+        client_id: process.env.STRAVA_CLIENT_ID || '',
+        redirect_uri: process.env.STRAVA_MOBILE_REDIRECT_URI,
+        response_type: 'code',
+        approval_prompt: 'auto',
+        scope: 'read,activity:read_all,profile:read_all',
+        state,
+      });
+      authUrl = `https://www.strava.com/oauth/authorize?${params.toString()}`;
+    } else {
+      authUrl = stravaClient.getAuthorizationUrl(state);
+    }
 
     res.json({ auth_url: authUrl, state });
   } catch (error) {
@@ -51,13 +67,18 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     // TODO: For now, this is a placeholder. We need to implement proper state management
     // to associate the callback with a specific user session
 
-    res.redirect(
-      `${process.env.FRONTEND_URL}/strava/callback?` +
-        `access_token=${tokenData.access_token}&` +
-        `refresh_token=${tokenData.refresh_token}&` +
-        `expires_at=${tokenData.expires_at}&` +
-        `athlete_id=${tokenData.athlete.id}`
-    );
+    const isMobile = typeof state === 'string' && state.includes(':mobile');
+    const redirectParams =
+      `access_token=${tokenData.access_token}&` +
+      `refresh_token=${tokenData.refresh_token}&` +
+      `expires_at=${tokenData.expires_at}&` +
+      `athlete_id=${tokenData.athlete.id}`;
+
+    if (isMobile && process.env.STRAVA_MOBILE_REDIRECT_URI) {
+      res.redirect(`${process.env.STRAVA_MOBILE_REDIRECT_URI}?${redirectParams}`);
+    } else {
+      res.redirect(`${process.env.FRONTEND_URL}/strava/callback?${redirectParams}`);
+    }
   } catch (error) {
     logger.error('Strava callback error:', error);
     res.redirect(`${process.env.FRONTEND_URL}?strava_error=callback_failed`);

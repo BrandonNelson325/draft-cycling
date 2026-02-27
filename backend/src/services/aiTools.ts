@@ -304,6 +304,58 @@ export const AI_TOOLS: Tool[] = [
   },
 
   {
+    name: 'get_training_plan_templates',
+    description:
+      'Browse curated multi-week training plan templates. These are professionally designed plans (e.g. Century Prep, Crit Racing, Sweet Spot Base) that can be scheduled directly to the athlete\'s calendar. Use this when an athlete wants a structured training plan.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        difficulty_level: {
+          type: 'string',
+          enum: ['beginner', 'intermediate', 'advanced'],
+          description: 'Filter by difficulty level',
+        },
+        target_event: {
+          type: 'string',
+          description: 'Filter by target event type (e.g. "Century", "Criterium", "Gran Fondo")',
+        },
+        max_weeks: {
+          type: 'integer',
+          description: 'Only show plans up to this many weeks long',
+        },
+      },
+    },
+  },
+
+  {
+    name: 'schedule_training_plan_template',
+    description:
+      'Schedule a curated multi-week training plan template to the athlete\'s calendar. This resolves the plan\'s workout references to real workout templates, respects rest days, and creates all workouts + calendar entries in parallel. Always include goal_event and event_date so the plan appears on the Training Plan page.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        plan_template_id: {
+          type: 'string',
+          description: 'UUID of the training plan template from get_training_plan_templates',
+        },
+        start_date: {
+          type: 'string',
+          description: 'Start date for the plan in YYYY-MM-DD format',
+        },
+        event_date: {
+          type: 'string',
+          description: 'Event/target date in YYYY-MM-DD format (optional, defaults to plan end)',
+        },
+        goal_event: {
+          type: 'string',
+          description: 'Name of the goal event (e.g. "Spring Century", "Local Crit")',
+        },
+      },
+      required: ['plan_template_id', 'start_date'],
+    },
+  },
+
+  {
     name: 'update_athlete_preferences',
     description:
       'Save athlete preferences and training details so you remember them for future conversations. Use this AUTOMATICALLY when you learn new information about the athlete through conversation (goals, preferences, constraints, etc.). This makes you smarter over time!',
