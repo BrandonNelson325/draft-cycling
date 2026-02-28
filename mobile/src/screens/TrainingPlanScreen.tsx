@@ -122,6 +122,8 @@ export default function TrainingPlanScreen({ navigation }: any) {
           subtitle="Choose a pre-built plan or have the AI coach build one custom for you."
           actionLabel="Browse Plans"
           onAction={() => navigation?.navigate?.('Chat', { initialMessage: 'Show me your pre-built training plans' })}
+          secondaryActionLabel="Custom Plan with AI"
+          secondaryOnAction={() => navigation?.navigate?.('Chat', { initialMessage: 'I want to create a new training plan' })}
         />
       </SafeAreaView>
     );

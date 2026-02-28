@@ -667,7 +667,7 @@ export const aiToolExecutor = {
     if (typeMatches.length === 0) return null;
 
     let bestTemplate: any = null;
-    let bestScore = -1;
+    let bestScore = -Infinity;
 
     for (const t of typeMatches) {
       let score = 0;
@@ -677,13 +677,11 @@ export const aiToolExecutor = {
         score += 10;
       }
 
-      // Duration proximity (+10 for exact, +5 for within 15 min)
+      // Duration proximity: continuous score (closer = higher, max +10 for exact)
+      // Score = 10 - (difference / 6), floored at 0
+      // e.g. exact=+10, 15min off=+7.5, 30min off=+5, 60min off=0
       const durationDiff = Math.abs((t.duration_minutes || 60) - durationTarget);
-      if (durationDiff === 0) {
-        score += 10;
-      } else if (durationDiff <= 15) {
-        score += 5;
-      }
+      score += Math.max(0, 10 - durationDiff / 6);
 
       // Tag matches (+3 each)
       if (t.tags && Array.isArray(t.tags)) {
@@ -770,7 +768,11 @@ export const aiToolExecutor = {
           continue;
         }
 
-        const dateStr = targetDate.toISOString().split('T')[0];
+        // Format as local date (avoid toISOString which converts to UTC and can shift dates)
+        const yy = targetDate.getFullYear();
+        const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
+        const dd = String(targetDate.getDate()).padStart(2, '0');
+        const dateStr = `${yy}-${mm}-${dd}`;
         resolvedWorkouts.push({
           template_id: bestMatch.id,
           date: dateStr,
