@@ -1,6 +1,7 @@
 {
   "cli": {
-    "version": ">= 7.0.0"
+    "version": ">= 7.0.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
@@ -13,12 +14,13 @@
     "preview": {
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-backend.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://api.draftcycling.com"
       }
     },
     "production": {
+      "distribution": "store",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://your-backend.railway.app"
+        "EXPO_PUBLIC_API_URL": "https://api.draftcycling.com"
       }
     }
   },

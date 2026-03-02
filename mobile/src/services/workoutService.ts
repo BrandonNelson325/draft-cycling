@@ -1,5 +1,5 @@
 import apiClient from '../api/client';
-import * as FileSystem from 'expo-file-system/legacy';
+import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { useAuthStore } from '../stores/useAuthStore';
 

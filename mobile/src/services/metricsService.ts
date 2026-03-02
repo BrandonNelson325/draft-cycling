@@ -12,7 +12,9 @@ export interface MetricsData {
   power_prs: {
     power_5sec: number;
     power_1min: number;
+    power_3min: number;
     power_5min: number;
+    power_10min: number;
     power_20min: number;
   };
 }

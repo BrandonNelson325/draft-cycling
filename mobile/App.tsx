@@ -11,6 +11,7 @@ import DailyMorningModal from './src/components/modals/DailyMorningModal';
 import PostRideModal from './src/components/modals/PostRideModal';
 import { useDailyMorning } from './src/hooks/useDailyMorning';
 import { useNewActivities } from './src/hooks/useNewActivities';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { useAuthStore } from './src/stores/useAuthStore';
 
 const linking = {
@@ -26,6 +27,7 @@ function AppModals() {
   const { user } = useAuthStore();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
+  usePushNotifications();
 
   const currentActivity = newActivities.activities[newActivities.currentIndex];
   const showPostRide = !dailyMorning.shouldShow && !!currentActivity;

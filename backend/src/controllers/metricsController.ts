@@ -57,7 +57,9 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
         power_prs: {
           power_5sec: 0,
           power_1min: 0,
+          power_3min: 0,
           power_5min: 0,
+          power_10min: 0,
           power_20min: 0,
         },
       });
@@ -82,7 +84,9 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     let powerPRs = {
       power_5sec: 0,
       power_1min: 0,
+      power_3min: 0,
       power_5min: 0,
+      power_10min: 0,
       power_20min: 0,
     };
 
@@ -90,7 +94,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
       // Get best powers across all curves in period
       const { data: allCurves } = await supabaseAdmin
         .from('power_curves')
-        .select('power_5sec, power_1min, power_5min, power_20min')
+        .select('power_5sec, power_1min, power_3min, power_5min, power_10min, power_20min')
         .eq('athlete_id', req.user.id)
         .gte('created_at', startDate.toISOString());
 
@@ -98,7 +102,9 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
         powerPRs = {
           power_5sec: Math.max(...allCurves.map(c => c.power_5sec || 0)),
           power_1min: Math.max(...allCurves.map(c => c.power_1min || 0)),
+          power_3min: Math.max(...allCurves.map(c => c.power_3min || 0)),
           power_5min: Math.max(...allCurves.map(c => c.power_5min || 0)),
+          power_10min: Math.max(...allCurves.map(c => c.power_10min || 0)),
           power_20min: Math.max(...allCurves.map(c => c.power_20min || 0)),
         };
       }

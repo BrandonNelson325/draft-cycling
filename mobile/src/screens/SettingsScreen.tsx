@@ -30,6 +30,13 @@ export default function SettingsScreen({ navigation }: any) {
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(user?.display_mode || 'advanced');
   const [saving, setSaving] = useState(false);
 
+  // Notifications state
+  const [pushEnabled, setPushEnabled] = useState(user?.push_notifications_enabled ?? false);
+  const [checkinTime, setCheckinTime] = useState(
+    user?.morning_checkin_time ? user.morning_checkin_time.slice(0, 5) : '07:00'
+  );
+  const [savingNotifications, setSavingNotifications] = useState(false);
+
   // Strava
   const [stravaLoading, setStravaLoading] = useState(false);
   const hasStrava = !!user?.strava_athlete_id;
@@ -49,6 +56,42 @@ export default function SettingsScreen({ navigation }: any) {
       Alert.alert('Error', 'Failed to save profile.');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleTogglePushEnabled = async (value: boolean) => {
+    setPushEnabled(value);
+    try {
+      await authService.updateProfile({ push_notifications_enabled: value });
+    } catch {
+      Alert.alert('Error', 'Failed to update notification settings.');
+      setPushEnabled(!value); // revert
+    }
+  };
+
+  const handleSaveCheckinTime = async () => {
+    // Validate HH:MM format
+    const match = checkinTime.match(/^(\d{1,2}):(\d{2})$/);
+    if (!match) {
+      Alert.alert('Invalid time', 'Please enter a time in HH:MM format (e.g. 07:00).');
+      return;
+    }
+    const hh = parseInt(match[1], 10);
+    const mm = parseInt(match[2], 10);
+    if (hh > 23 || mm > 59) {
+      Alert.alert('Invalid time', 'Please enter a valid time (00:00 – 23:59).');
+      return;
+    }
+    const formatted = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    setSavingNotifications(true);
+    try {
+      await authService.updateProfile({ morning_checkin_time: formatted });
+      setCheckinTime(formatted);
+      Alert.alert('Saved', 'Morning check-in time updated.');
+    } catch {
+      Alert.alert('Error', 'Failed to save check-in time.');
+    } finally {
+      setSavingNotifications(false);
     }
   };
 
@@ -247,6 +290,47 @@ export default function SettingsScreen({ navigation }: any) {
           )}
         </View>
 
+        {/* Notifications Section */}
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.section}>
+          <View style={styles.notifRow}>
+            <View>
+              <Text style={styles.notifLabel}>Push Notifications</Text>
+              <Text style={styles.notifHint}>Ride sync alerts &amp; morning check-in</Text>
+            </View>
+            <Switch
+              value={pushEnabled}
+              onValueChange={handleTogglePushEnabled}
+              trackColor={{ false: '#334155', true: '#3b82f6' }}
+              thumbColor="#fff"
+            />
+          </View>
+
+          <Label>Morning Check-in Time (UTC, HH:MM)</Label>
+          <View style={styles.timeRow}>
+            <TextInput
+              style={[styles.input, styles.timeInput]}
+              value={checkinTime}
+              onChangeText={setCheckinTime}
+              placeholder="07:00"
+              placeholderTextColor="#475569"
+              keyboardType="numbers-and-punctuation"
+              maxLength={5}
+            />
+            <TouchableOpacity
+              style={[styles.timeBtn, savingNotifications && styles.btnDisabled]}
+              onPress={handleSaveCheckinTime}
+              disabled={savingNotifications}
+            >
+              {savingNotifications ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.btnText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+
         {/* Account Section */}
         <Text style={styles.sectionTitle}>Account</Text>
         <View style={styles.section}>
@@ -387,4 +471,21 @@ const styles = StyleSheet.create({
   metricsLinkText: { color: '#60a5fa', fontSize: 14, fontWeight: '500' },
   logoutBtn: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
   logoutText: { color: '#ef4444', fontWeight: '600', fontSize: 14 },
+  notifRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 4,
+  },
+  notifLabel: { fontSize: 14, color: '#f1f5f9', fontWeight: '500' },
+  notifHint: { fontSize: 12, color: '#64748b', marginTop: 2 },
+  timeRow: { flexDirection: 'row', gap: 8 },
+  timeInput: { flex: 1 },
+  timeBtn: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });

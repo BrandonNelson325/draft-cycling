@@ -15,14 +15,17 @@ export function PowerCurveChart() {
 
         // Format for chart - show multiple durations
         // Estimate intermediate values for smoother curve
+        const p5s = prs.power_5sec || 0;
         const chartData = [
-          { duration: '5s', seconds: 5, power: prs.power_5sec || 0 },
-          { duration: '15s', seconds: 15, power: Math.round((prs.power_5sec * 0.95) || prs.power_5sec || 0) },
-          { duration: '30s', seconds: 30, power: Math.round((prs.power_5sec * 0.90) || prs.power_1min || 0) },
-          { duration: '1m', seconds: 60, power: prs.power_1min || 0 },
-          { duration: '5m', seconds: 300, power: prs.power_5min || 0 },
+          { duration: '5s',  seconds: 5,    power: p5s },
+          { duration: '15s', seconds: 15,   power: Math.round(p5s * 0.95) },
+          { duration: '30s', seconds: 30,   power: Math.round(p5s * 0.90) },
+          { duration: '1m',  seconds: 60,   power: prs.power_1min  || 0 },
+          { duration: '3m',  seconds: 180,  power: prs.power_3min  || 0 },
+          { duration: '5m',  seconds: 300,  power: prs.power_5min  || 0 },
+          { duration: '10m', seconds: 600,  power: prs.power_10min || 0 },
           { duration: '20m', seconds: 1200, power: prs.power_20min || 0 },
-        ];
+        ].filter(d => d.power > 0);
 
         setData(chartData);
       } catch (err) {

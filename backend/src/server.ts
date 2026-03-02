@@ -21,7 +21,9 @@ import dailyAnalysisRoutes from './routes/dailyAnalysisRoutes';
 import trainingPlanRoutes from './routes/trainingPlanRoutes';
 import dailyCheckInRoutes from './routes/dailyCheckInRoutes';
 import activityFeedbackRoutes from './routes/activityFeedbackRoutes';
+import pushRoutes from './routes/push';
 import { stravaCronService } from './services/stravaCronService';
+import { startMorningCheckInCron } from './services/morningCheckInCronService';
 
 const app = express();
 
@@ -88,6 +90,7 @@ app.use('/api/daily-analysis', dailyAnalysisRoutes);
 app.use('/api/training-plans', trainingPlanRoutes);
 app.use('/api/daily-check-in', dailyCheckInRoutes);
 app.use('/api/activities', activityFeedbackRoutes);
+app.use('/api/push', pushRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);
@@ -100,6 +103,9 @@ app.listen(config.port, () => {
 
   // Start Strava auto-sync cron job
   stravaCronService.start();
+
+  // Start morning check-in cron (runs every minute, fires push at configured time)
+  startMorningCheckInCron();
 });
 
 export default app;

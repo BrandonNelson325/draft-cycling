@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import { supabaseAdmin } from '../utils/supabase';
 import { stravaService } from './stravaService';
 import { ftpEstimationService } from './ftpEstimationService';
+import { sendRideCompletedNotification } from './pushNotificationService';
 import { logger } from '../utils/logger';
 
 export class StravaCronService {
@@ -102,6 +103,15 @@ export class StravaCronService {
             logger.debug(`     🎯 FTP auto-updated for ${athleteName}`);
           } catch (ftpError) {
             logger.error(`     ⚠️  FTP update failed for ${athleteName}:`, ftpError);
+          }
+        }
+
+        // Send push notification (once per sync batch, respects quiet hours)
+        if (result.newIds && result.newIds.length > 0) {
+          try {
+            await sendRideCompletedNotification(athleteId);
+          } catch (pushErr) {
+            logger.error(`     ⚠️  Push notification failed for ${athleteName}:`, pushErr);
           }
         }
       } else {

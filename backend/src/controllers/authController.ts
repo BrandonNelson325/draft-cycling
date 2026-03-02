@@ -190,7 +190,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { full_name, ftp, weight_kg, unit_system, display_mode } = req.body;
+    const { full_name, ftp, weight_kg, unit_system, display_mode, push_notifications_enabled, morning_checkin_time } = req.body;
 
     const updateData: any = { updated_at: new Date().toISOString() };
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -198,6 +198,8 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     if (weight_kg !== undefined) updateData.weight_kg = weight_kg;
     if (unit_system !== undefined) updateData.unit_system = unit_system;
     if (display_mode !== undefined) updateData.display_mode = display_mode;
+    if (push_notifications_enabled !== undefined) updateData.push_notifications_enabled = push_notifications_enabled;
+    if (morning_checkin_time !== undefined) updateData.morning_checkin_time = morning_checkin_time;
 
     const { data: athlete, error } = await supabaseAdmin
       .from('athletes')

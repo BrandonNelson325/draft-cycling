@@ -14,7 +14,11 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cyclingcoach.app"
+      "bundleIdentifier": "com.cyclingcoach.app",
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.cyclingcoach.app",
@@ -30,7 +34,10 @@
               "scheme": "cyclingcoach"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -38,9 +45,6 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store",
-      "expo-sharing",
-      "expo-web-browser",
       [
         "expo-build-properties",
         {
@@ -51,12 +55,20 @@
             "newArchEnabled": true
           }
         }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#3b82f6"
+        }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "a545db60-7ba8-4ea2-9fb9-491975c41784"
       }
-    }
+    },
+    "owner": "brandonnelson325"
   }
 }

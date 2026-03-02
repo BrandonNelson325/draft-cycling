@@ -1,21 +1,42 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
+import { Canvas, Path, Circle } from '@shopify/react-native-skia';
 import Card from '../ui/Card';
 import { metricsService } from '../../services/metricsService';
 
 const { width } = Dimensions.get('window');
-const CHART_WIDTH = width - 64;
-const CHART_HEIGHT = 100;
+const CHART_W = width - 64;
+const CHART_H = 140;
+const PAD = { top: 20, right: 8, bottom: 8, left: 8 };
+const IW = CHART_W - PAD.left - PAD.right;
+const IH = CHART_H - PAD.top - PAD.bottom;
 
-const DURATIONS = ['5s', '1m', '5m', '20m'];
+/** Cardinal spline → cubic bezier SVG path */
+function buildPath(pts: { x: number; y: number }[]): string {
+  if (pts.length < 2) return '';
+  const t = 0.35;
+  let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
+  for (let i = 1; i < pts.length; i++) {
+    const p0 = pts[i - 1];
+    const p1 = pts[i];
+    const prev2 = i >= 2 ? pts[i - 2] : p0;
+    const next = i < pts.length - 1 ? pts[i + 1] : p1;
+    const cp1x = p0.x + (p1.x - prev2.x) * t;
+    const cp1y = p0.y + (p1.y - prev2.y) * t;
+    const cp2x = p1.x - (next.x - p0.x) * t;
+    const cp2y = p1.y - (next.y - p0.y) * t;
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)} ${cp2x.toFixed(1)} ${cp2y.toFixed(1)} ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
+  }
+  return d;
+}
 
 export default function PowerCurveChart() {
-  const [prs, setPrs] = useState<{ power_5sec: number; power_1min: number; power_5min: number; power_20min: number } | null>(null);
+  const [prs, setPrs] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     metricsService.getMetrics('all').then(d => {
-      setPrs(d.power_prs);
+      setPrs(d.power_prs as unknown as Record<string, number>);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
@@ -29,32 +50,87 @@ export default function PowerCurveChart() {
     );
   }
 
-  const values = prs ? [prs.power_5sec, prs.power_1min, prs.power_5min, prs.power_20min] : [];
-  const maxVal = Math.max(...values, 1);
-  const barW = Math.floor((CHART_WIDTH - 3 * 12) / 4);
+  // Sanitize all values — guard against undefined/null from older backend responses.
+  // 15s and 30s are estimated from 5sec (same approach as the web chart).
+  const p5s = (prs?.power_5sec) || 0;
+  const candidates: { dur: string; val: number }[] = [
+    { dur: '5s',  val: p5s },
+    { dur: '15s', val: Math.round(p5s * 0.95) },
+    { dur: '30s', val: Math.round(p5s * 0.90) },
+    { dur: '1m',  val: (prs?.power_1min)  || 0 },
+    { dur: '3m',  val: (prs?.power_3min)  || 0 },
+    { dur: '5m',  val: (prs?.power_5min)  || 0 },
+    { dur: '10m', val: (prs?.power_10min) || 0 },
+    { dur: '20m', val: (prs?.power_20min) || 0 },
+  ];
+
+  // Only plot durations where we actually have a value — avoids ugly zero dips
+  // and the NaN-in-SVG-path bug when new fields aren't in the backend yet.
+  const points = candidates.filter(p => p.val > 0);
+
+  if (points.length === 0) {
+    return (
+      <Card>
+        <Text style={styles.title}>Power Curve</Text>
+        <Text style={styles.empty}>No power data yet</Text>
+      </Card>
+    );
+  }
+
+  const maxVal = Math.max(...points.map(p => p.val), 1);
+  const n = points.length;
+
+  const toX = (i: number) => PAD.left + (n > 1 ? (i / (n - 1)) * IW : IW / 2);
+  const toY = (v: number) => PAD.top + (1 - v / maxVal) * IH;
+
+  const pts = points.map((p, i) => ({ x: toX(i), y: toY(p.val) }));
+  const linePath = buildPath(pts);
+  const gridYs = [0.25, 0.5, 0.75].map(p => PAD.top + (1 - p) * IH);
 
   return (
     <Card>
-      <Text style={styles.title}>Power Records</Text>
-      <View style={[styles.chart, { height: CHART_HEIGHT }]}>
-        {DURATIONS.map((dur, i) => {
-          const val = values[i] || 0;
-          const pct = val / maxVal;
-          return (
-            <View key={dur} style={[styles.barGroup, { width: barW }]}>
-              <Text style={styles.wattLabel}>{val > 0 ? `${Math.round(val)}w` : '—'}</Text>
-              <View style={styles.barWrapper}>
-                <View
-                  style={[
-                    styles.bar,
-                    { height: Math.max(2, pct * CHART_HEIGHT * 0.75) },
-                  ]}
-                />
-              </View>
-              <Text style={styles.durLabel}>{dur}</Text>
-            </View>
-          );
-        })}
+      <Text style={styles.title}>Power Curve</Text>
+      <View style={{ width: CHART_W, height: CHART_H + 36 }}>
+        <Canvas style={{ width: CHART_W, height: CHART_H }}>
+          {/* Grid lines */}
+          {gridYs.map((gy, i) => (
+            <Path
+              key={i}
+              path={`M ${PAD.left} ${gy.toFixed(1)} L ${(CHART_W - PAD.right).toFixed(1)} ${gy.toFixed(1)}`}
+              color="#1e3a5f"
+              style="stroke"
+              strokeWidth={1}
+            />
+          ))}
+          {/* Power line */}
+          {linePath ? (
+            <Path path={linePath} color="#22c55e" style="stroke" strokeWidth={2.5} />
+          ) : null}
+          {/* Dots */}
+          {pts.map((p, i) => (
+            <Circle key={i} cx={p.x} cy={p.y} r={4} color="#22c55e" />
+          ))}
+        </Canvas>
+
+        {/* Watt label above each dot */}
+        {points.map((p, i) => (
+          <Text
+            key={`w${i}`}
+            style={[styles.wattLabel, { left: toX(i) - 18, top: Math.max(0, pts[i].y - 14) }]}
+          >
+            {p.val}w
+          </Text>
+        ))}
+
+        {/* Duration labels below canvas */}
+        {points.map((p, i) => (
+          <Text
+            key={`d${i}`}
+            style={[styles.durLabel, { left: toX(i) - 12, top: CHART_H + 2 }]}
+          >
+            {p.dur}
+          </Text>
+        ))}
       </View>
     </Card>
   );
@@ -67,31 +143,24 @@ const styles = StyleSheet.create({
     color: '#f1f5f9',
     marginBottom: 12,
   },
-  chart: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-  },
-  barGroup: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  barWrapper: {
-    width: '100%',
-    justifyContent: 'flex-end',
-  },
-  bar: {
-    width: '100%',
-    backgroundColor: '#8b5cf6',
-    borderRadius: 4,
-  },
   wattLabel: {
-    fontSize: 11,
-    color: '#94a3b8',
-    fontWeight: '500',
+    position: 'absolute',
+    width: 36,
+    textAlign: 'center',
+    fontSize: 8,
+    color: '#86efac',
+    fontWeight: '600',
   },
   durLabel: {
-    fontSize: 11,
+    position: 'absolute',
+    width: 24,
+    textAlign: 'center',
+    fontSize: 9,
     color: '#64748b',
+  },
+  empty: {
+    color: '#64748b',
+    fontSize: 14,
+    paddingVertical: 12,
   },
 });

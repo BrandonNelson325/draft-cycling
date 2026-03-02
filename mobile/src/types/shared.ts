@@ -8,6 +8,9 @@ export interface Athlete {
   weight_kg?: number;
   unit_system?: 'metric' | 'imperial';
   display_mode?: 'simple' | 'advanced';
+  push_token?: string;
+  push_notifications_enabled?: boolean;
+  morning_checkin_time?: string;  // "HH:MM:SS"
   strava_athlete_id?: number;
   strava_access_token?: string;
   strava_refresh_token?: string;

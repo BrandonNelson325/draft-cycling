@@ -10,6 +10,10 @@ export const authService = {
       full_name,
     });
 
+    if (!data?.session) {
+      throw new Error((data as any)?.error || 'Registration failed');
+    }
+
     useAuthStore.getState().setUser(data.user);
     useAuthStore.getState().setTokens(
       data.session.access_token,
@@ -24,6 +28,10 @@ export const authService = {
       email,
       password,
     });
+
+    if (!data?.session) {
+      throw new Error((data as any)?.error || 'Login failed');
+    }
 
     useAuthStore.getState().setUser(data.user);
     useAuthStore.getState().setTokens(
@@ -55,6 +63,8 @@ export const authService = {
     weight_kg?: number;
     unit_system?: 'metric' | 'imperial';
     display_mode?: 'simple' | 'advanced';
+    push_notifications_enabled?: boolean;
+    morning_checkin_time?: string;
   }) {
     const { data } = await apiClient.put<Athlete>('/api/auth/me', updates);
     useAuthStore.getState().setUser(data);

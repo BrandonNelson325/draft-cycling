@@ -30,7 +30,11 @@ export default function LoginScreen({ navigation }: AuthStackScreenProps<'Login'
       await authService.login(email.trim().toLowerCase(), password);
       // Navigation handled by RootNavigator watching auth state
     } catch (err: any) {
-      Alert.alert('Login Failed', err.message || 'Please check your credentials.');
+const message =
+        err.response?.data?.error ||
+        err.message ||
+        'Please check your credentials.';
+      Alert.alert('Login Failed', message);
     } finally {
       setLoading(false);
     }

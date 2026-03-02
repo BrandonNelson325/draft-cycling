@@ -152,7 +152,8 @@ export const stravaService = {
       }
     }
 
-    return { synced: stored.length, total: rides.length, analyzed: analyzed.length };
+    const newIds = stored.map((a: any) => a.strava_activity_id as number);
+    return { synced: stored.length, total: rides.length, analyzed: analyzed.length, newIds };
   },
 
   async getActivityWithStreams(athleteId: string, stravaActivityId: number) {
