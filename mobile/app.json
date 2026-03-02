@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Cycling Coach",
+    "name": "Draft Cycling",
     "slug": "cycling-coach",
     "version": "1.0.0",
     "scheme": "cyclingcoach",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.draftcycling.app",
-      "buildNumber": "1",
+      "buildNumber": "2",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
