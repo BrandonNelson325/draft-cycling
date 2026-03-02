@@ -14,14 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.cyclingcoach.app",
+      "bundleIdentifier": "com.draftcycling.app",
       "buildNumber": "1",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.cyclingcoach.app",
+      "package": "com.draftcycling.app",
       "adaptiveIcon": {
         "backgroundColor": "#0f172a"
       },
