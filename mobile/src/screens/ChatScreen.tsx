@@ -11,6 +11,7 @@ import {
   Text,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useChatStore } from '../stores/useChatStore';
@@ -23,6 +24,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   const flatListRef = useRef<FlatList>(null);
   const sheetRef = useRef<BottomSheet>(null);
   const initialMessageSent = useRef(false);
+  const tabBarHeight = useBottomTabBarHeight();
 
   const {
     conversations,
@@ -83,7 +85,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['bottom']}>
+    <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
         {activeConversationId ? (
@@ -111,7 +113,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}
       >
         {/* Messages */}
         {!activeConversationId ? (

@@ -55,6 +55,7 @@ export default function MainTabNavigator() {
             <Ionicons name="chatbubbles-outline" size={size} color={color} />
           ),
           title: 'AI Coach',
+          headerShown: false,
         }}
       />
       <Tab.Screen
