@@ -50,7 +50,8 @@ const message =
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Cycling Coach</Text>
+          <Text style={styles.title}>Draft Cycling</Text>
+          <Text style={styles.tagline}>The coach that never sleeps</Text>
           <Text style={styles.subtitle}>Sign in to your account</Text>
         </View>
 
@@ -126,6 +127,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#f1f5f9',
     marginBottom: 8,
+  },
+  tagline: {
+    fontSize: 15,
+    color: '#3b82f6',
+    fontWeight: '500',
+    marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
