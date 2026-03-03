@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { metricsService } from '../../services/metricsService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { Button } from '../ui/button';
 
 export function PowerCurveChart() {
   const [data, setData] = useState<any[]>([]);
@@ -67,23 +66,27 @@ export function PowerCurveChart() {
             <CardTitle className="text-lg">Power Curve</CardTitle>
             <CardDescription className="text-xs">Peak power across durations</CardDescription>
           </div>
-          <div className="flex gap-1">
-            <Button
-              variant={period === '8weeks' ? 'default' : 'outline'}
-              size="sm"
-              className="rounded-lg text-xs"
+          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+            <button
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                period === '8weeks'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
               onClick={() => setPeriod('8weeks')}
             >
               8 Weeks
-            </Button>
-            <Button
-              variant={period === 'all' ? 'default' : 'outline'}
-              size="sm"
-              className="rounded-lg text-xs"
+            </button>
+            <button
+              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                period === 'all'
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
               onClick={() => setPeriod('all')}
             >
               All Time
-            </Button>
+            </button>
           </div>
         </div>
       </CardHeader>
