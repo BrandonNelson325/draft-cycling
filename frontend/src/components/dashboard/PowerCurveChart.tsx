@@ -2,15 +2,18 @@ import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { metricsService } from '../../services/metricsService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Button } from '../ui/button';
 
 export function PowerCurveChart() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<'8weeks' | 'all'>('all');
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoading(true);
       try {
-        const metrics = await metricsService.getMetrics('all'); // Get all-time PRs
+        const metrics = await metricsService.getMetrics(period);
         const prs = metrics.power_prs;
 
         // Format for chart - show multiple durations
@@ -36,7 +39,7 @@ export function PowerCurveChart() {
     };
 
     fetchData();
-  }, []);
+  }, [period]);
 
   if (loading) {
     return (
@@ -59,8 +62,30 @@ export function PowerCurveChart() {
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-lg">Power Curve</CardTitle>
-        <CardDescription className="text-xs">Peak power across durations</CardDescription>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg">Power Curve</CardTitle>
+            <CardDescription className="text-xs">Peak power across durations</CardDescription>
+          </div>
+          <div className="flex gap-1">
+            <Button
+              variant={period === '8weeks' ? 'default' : 'outline'}
+              size="sm"
+              className="rounded-lg text-xs"
+              onClick={() => setPeriod('8weeks')}
+            >
+              8 Weeks
+            </Button>
+            <Button
+              variant={period === 'all' ? 'default' : 'outline'}
+              size="sm"
+              className="rounded-lg text-xs"
+              onClick={() => setPeriod('all')}
+            >
+              All Time
+            </Button>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="pb-4">
         <ResponsiveContainer width="100%" height={180}>

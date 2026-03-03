@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, Dimensions, TouchableOpacity } from 'react-native';
 import { Canvas, Path, Circle } from '@shopify/react-native-skia';
 import Card from '../ui/Card';
 import { metricsService } from '../../services/metricsService';
@@ -33,13 +33,15 @@ function buildPath(pts: { x: number; y: number }[]): string {
 export default function PowerCurveChart() {
   const [prs, setPrs] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [period, setPeriod] = useState<'8weeks' | 'all'>('all');
 
   useEffect(() => {
-    metricsService.getMetrics('all').then(d => {
+    setLoading(true);
+    metricsService.getMetrics(period).then(d => {
       setPrs(d.power_prs as unknown as Record<string, number>);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  }, [period]);
 
   if (loading) {
     return (
@@ -89,7 +91,23 @@ export default function PowerCurveChart() {
 
   return (
     <Card>
-      <Text style={styles.title}>Power Curve</Text>
+      <View style={styles.header}>
+        <Text style={styles.title}>Power Curve</Text>
+        <View style={styles.toggle}>
+          <TouchableOpacity
+            style={[styles.toggleBtn, period === '8weeks' && styles.toggleBtnActive]}
+            onPress={() => setPeriod('8weeks')}
+          >
+            <Text style={[styles.toggleText, period === '8weeks' && styles.toggleTextActive]}>8 Weeks</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toggleBtn, period === 'all' && styles.toggleBtnActive]}
+            onPress={() => setPeriod('all')}
+          >
+            <Text style={[styles.toggleText, period === 'all' && styles.toggleTextActive]}>All Time</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
       <View style={{ width: CHART_W, height: CHART_H + 36 }}>
         <Canvas style={{ width: CHART_W, height: CHART_H }}>
           {/* Grid lines */}
@@ -137,11 +155,37 @@ export default function PowerCurveChart() {
 }
 
 const styles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
   title: {
     fontSize: 16,
     fontWeight: '600',
     color: '#f1f5f9',
-    marginBottom: 12,
+  },
+  toggle: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  toggleBtn: {
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 6,
+    backgroundColor: '#0f172a',
+  },
+  toggleBtnActive: {
+    backgroundColor: '#1e3a5f',
+  },
+  toggleText: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  toggleTextActive: {
+    color: '#60a5fa',
   },
   wattLabel: {
     position: 'absolute',
