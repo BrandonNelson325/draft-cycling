@@ -16,17 +16,24 @@ import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
+import { getConversionUtils, convertToMetric } from '../utils/units';
 
 WebBrowser.maybeCompleteAuthSession();
 
 export default function SettingsScreen({ navigation }: any) {
   const { user, logout } = useAuthStore();
+  const units = getConversionUtils(user);
 
   // Profile form state
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [ftp, setFtp] = useState(String(user?.ftp || ''));
-  const [weightKg, setWeightKg] = useState(String(user?.weight_kg || ''));
   const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>(user?.unit_system || 'metric');
+  // Display weight in the user's preferred unit; store/send as metric
+  const [weightDisplay, setWeightDisplay] = useState(() => {
+    if (!user?.weight_kg) return '';
+    const val = unitSystem === 'imperial' ? user.weight_kg * 2.20462 : user.weight_kg;
+    return val.toFixed(1);
+  });
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(user?.display_mode || 'advanced');
   const [saving, setSaving] = useState(false);
 
@@ -44,10 +51,13 @@ export default function SettingsScreen({ navigation }: any) {
   const handleSaveProfile = async () => {
     setSaving(true);
     try {
+      const weightMetric = weightDisplay
+        ? convertToMetric(Number(weightDisplay), unitSystem, 'weight')
+        : undefined;
       await authService.updateProfile({
         full_name: fullName.trim() || undefined,
         ftp: ftp ? Number(ftp) : undefined,
-        weight_kg: weightKg ? Number(weightKg) : undefined,
+        weight_kg: weightMetric ? Math.round(weightMetric * 10) / 10 : undefined,
         unit_system: unitSystem,
         display_mode: displayMode,
       });
@@ -193,12 +203,12 @@ export default function SettingsScreen({ navigation }: any) {
             keyboardType="numeric"
           />
 
-          <Label>Weight (kg)</Label>
+          <Label>Weight ({unitSystem === 'imperial' ? 'lbs' : 'kg'})</Label>
           <TextInput
             style={styles.input}
-            value={weightKg}
-            onChangeText={setWeightKg}
-            placeholder="70"
+            value={weightDisplay}
+            onChangeText={setWeightDisplay}
+            placeholder={unitSystem === 'imperial' ? '154' : '70'}
             placeholderTextColor="#475569"
             keyboardType="decimal-pad"
           />
@@ -209,7 +219,20 @@ export default function SettingsScreen({ navigation }: any) {
               <TouchableOpacity
                 key={u}
                 style={[styles.seg, unitSystem === u && styles.segActive]}
-                onPress={() => setUnitSystem(u)}
+                onPress={() => {
+                  if (u === unitSystem) return;
+                  // Re-convert the displayed weight when switching units
+                  if (weightDisplay) {
+                    const currentVal = Number(weightDisplay);
+                    if (!isNaN(currentVal)) {
+                      const converted = u === 'imperial'
+                        ? currentVal * 2.20462  // kg → lbs
+                        : currentVal / 2.20462; // lbs → kg
+                      setWeightDisplay(converted.toFixed(1));
+                    }
+                  }
+                  setUnitSystem(u);
+                }}
               >
                 <Text style={[styles.segText, unitSystem === u && styles.segTextActive]}>
                   {u.charAt(0).toUpperCase() + u.slice(1)}

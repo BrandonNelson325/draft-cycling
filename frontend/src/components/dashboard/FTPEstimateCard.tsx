@@ -141,6 +141,14 @@ export function FTPEstimateCard() {
                   : 'Not set'}
               </span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">W/kg:</span>
+              <span className="font-semibold">
+                {user?.ftp && user?.weight_kg
+                  ? `${(user.ftp / user.weight_kg).toFixed(2)} W/kg`
+                  : 'N/A'}
+              </span>
+            </div>
             <div className="border-t border-border my-2"></div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Confidence:</span>

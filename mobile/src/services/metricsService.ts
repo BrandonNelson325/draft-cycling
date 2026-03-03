@@ -20,7 +20,7 @@ export interface MetricsData {
 }
 
 export const metricsService = {
-  async getMetrics(period: 'week' | 'month' | 'year' | 'all' = 'week'): Promise<MetricsData> {
+  async getMetrics(period: 'week' | 'month' | '8weeks' | 'year' | 'all' = 'week'): Promise<MetricsData> {
     const { data } = await apiClient.get<MetricsData>(`/api/metrics?period=${period}`);
     return data;
   },

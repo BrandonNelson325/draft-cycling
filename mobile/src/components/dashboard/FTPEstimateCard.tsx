@@ -3,8 +3,12 @@ import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } fr
 import Card from '../ui/Card';
 import { ftpService } from '../../services/ftpService';
 import { authService } from '../../services/authService';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { getConversionUtils } from '../../utils/units';
 
 export default function FTPEstimateCard() {
+  const user = useAuthStore((s) => s.user);
+  const units = getConversionUtils(user);
   const [estimate, setEstimate] = useState<{ estimated_ftp: number; confidence: number; based_on_rides: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
@@ -40,6 +44,10 @@ export default function FTPEstimateCard() {
 
   if (!estimate) return null;
 
+  const currentFtp = user?.ftp;
+  const weightKg = user?.weight_kg;
+  const wPerKg = currentFtp && weightKg ? (currentFtp / weightKg).toFixed(2) : null;
+
   return (
     <Card>
       <Text style={styles.title}>FTP Estimate</Text>
@@ -61,6 +69,25 @@ export default function FTPEstimateCard() {
             <Text style={styles.buttonText}>Accept</Text>
           )}
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.statsRow}>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>Current FTP</Text>
+          <Text style={styles.statValue}>{currentFtp ? `${currentFtp}W` : '—'}</Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>Weight</Text>
+          <Text style={styles.statValue}>
+            {weightKg ? `${units.formatWeight(weightKg)} ${units.weightUnitShort}` : '—'}
+          </Text>
+        </View>
+        <View style={styles.stat}>
+          <Text style={styles.statLabel}>W/kg</Text>
+          <Text style={styles.statValue}>{wPerKg ? `${wPerKg}` : '—'}</Text>
+        </View>
       </View>
     </Card>
   );
@@ -99,5 +126,28 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '600',
     fontSize: 14,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#334155',
+    marginVertical: 12,
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  stat: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    marginBottom: 2,
+  },
+  statValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f1f5f9',
   },
 });
