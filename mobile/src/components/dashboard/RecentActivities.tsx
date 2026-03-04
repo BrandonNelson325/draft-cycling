@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import Card from '../ui/Card';
 import { stravaService } from '../../services/stravaService';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getConversionUtils } from '../../utils/units';
 import { parseLocalDate } from '../../utils/date';
 
-export default function RecentActivities() {
+interface RecentActivitiesProps {
+  onActivityPress?: (activity: any) => void;
+}
+
+export default function RecentActivities({ onActivityPress }: RecentActivitiesProps) {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuthStore();
@@ -42,8 +46,8 @@ export default function RecentActivities() {
               })
             : '';
 
-          return (
-            <View key={activity.id || i} style={[styles.row, i > 0 && styles.rowBorder]}>
+          const content = (
+            <>
               <View style={styles.dot} />
               <View style={styles.info}>
                 <Text style={styles.name} numberOfLines={1}>
@@ -58,6 +62,20 @@ export default function RecentActivities() {
               {activity.average_watts ? (
                 <Text style={styles.watts}>{Math.round(activity.average_watts)}w</Text>
               ) : null}
+            </>
+          );
+
+          return onActivityPress ? (
+            <TouchableOpacity
+              key={activity.id || i}
+              style={[styles.row, i > 0 && styles.rowBorder]}
+              onPress={() => onActivityPress(activity)}
+            >
+              {content}
+            </TouchableOpacity>
+          ) : (
+            <View key={activity.id || i} style={[styles.row, i > 0 && styles.rowBorder]}>
+              {content}
             </View>
           );
         })

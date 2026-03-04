@@ -11,14 +11,18 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
-import { calendarService, type CalendarData, type CalendarEntry } from '../services/calendarService';
+import { calendarService, type CalendarData, type CalendarEntry, type StravaActivity } from '../services/calendarService';
 import { workoutService, type Workout } from '../services/workoutService';
 import { parseLocalDate, toDateString } from '../utils/date';
+import { useAuthStore } from '../stores/useAuthStore';
+import { getConversionUtils } from '../utils/units';
 import WorkoutDetailSheet from '../components/workout/WorkoutDetailSheet';
+import ActivityDetailSheet from '../components/activity/ActivityDetailSheet';
 
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const SNAP_POINTS_DAY = ['70%', '90%'];
 const SNAP_POINTS_PICKER = ['80%'];
+const SNAP_POINTS_DETAIL = ['60%', '85%'];
 
 export default function CalendarScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -28,10 +32,15 @@ export default function CalendarScreen() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
   const [loading, setLoading] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+  const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
+
+  const { user } = useAuthStore();
+  const units = getConversionUtils(user);
 
   const daySheetRef = useRef<BottomSheet>(null);
   const pickerSheetRef = useRef<BottomSheet>(null);
   const workoutSheetRef = useRef<BottomSheet>(null);
+  const activitySheetRef = useRef<BottomSheet>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -219,7 +228,16 @@ export default function CalendarScreen() {
               )}
 
               {selectedWorkouts.map(entry => (
-                <View key={entry.id} style={styles.entryCard}>
+                <TouchableOpacity
+                  key={entry.id}
+                  style={styles.entryCard}
+                  onPress={() => {
+                    if (entry.workouts) {
+                      setSelectedWorkout(entry.workouts);
+                      workoutSheetRef.current?.snapToIndex(0);
+                    }
+                  }}
+                >
                   <View style={styles.entryLeft}>
                     <Text style={styles.entryName}>{entry.workouts?.name || 'Workout'}</Text>
                     <Text style={styles.entryMeta}>
@@ -232,35 +250,48 @@ export default function CalendarScreen() {
                     {!entry.completed && (
                       <TouchableOpacity
                         style={styles.actionBtn}
-                        onPress={() => completeEntry(entry.id)}
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          completeEntry(entry.id);
+                        }}
                       >
                         <Text style={styles.actionBtnText}>Complete</Text>
                       </TouchableOpacity>
                     )}
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionBtnDanger]}
-                      onPress={() => deleteEntry(entry.id)}
+                      onPress={(e) => {
+                        e.stopPropagation();
+                        deleteEntry(entry.id);
+                      }}
                     >
                       <Ionicons name="trash-outline" size={14} color="#ef4444" />
                     </TouchableOpacity>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
 
               {selectedActivities.map(activity => (
-                <View key={activity.id} style={[styles.entryCard, styles.activityCard]}>
+                <TouchableOpacity
+                  key={activity.id}
+                  style={[styles.entryCard, styles.activityCard]}
+                  onPress={() => {
+                    setSelectedActivity(activity);
+                    activitySheetRef.current?.snapToIndex(0);
+                  }}
+                >
                   <View style={[styles.activityDot]} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.entryName}>{activity.name || 'Ride'}</Text>
                     <Text style={styles.entryMeta}>
                       {[
-                        activity.distance_meters ? `${(activity.distance_meters / 1000).toFixed(1)}km` : null,
+                        activity.distance_meters ? `${units.formatDistance(activity.distance_meters)} ${units.distanceUnitShort}` : null,
                         activity.moving_time_seconds ? `${Math.round(activity.moving_time_seconds / 60)}min` : null,
                         activity.average_watts ? `${Math.round(activity.average_watts)}w avg` : null,
                       ].filter(Boolean).join(' · ')}
                     </Text>
                   </View>
-                </View>
+                </TouchableOpacity>
               ))}
 
               <TouchableOpacity style={styles.addWorkoutBtn} onPress={openPicker}>
@@ -319,6 +350,35 @@ export default function CalendarScreen() {
             ItemSeparatorComponent={() => <View style={styles.separator} />}
           />
         </View>
+      </BottomSheet>
+      {/* Workout Detail Sheet */}
+      <BottomSheet
+        ref={workoutSheetRef}
+        index={-1}
+        snapPoints={SNAP_POINTS_DETAIL}
+        enablePanDownToClose
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+        )}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <WorkoutDetailSheet workout={selectedWorkout} onClose={() => workoutSheetRef.current?.close()} />
+      </BottomSheet>
+
+      {/* Activity Detail Sheet */}
+      <BottomSheet
+        ref={activitySheetRef}
+        index={-1}
+        snapPoints={SNAP_POINTS_DETAIL}
+        enablePanDownToClose
+        backdropComponent={(props) => (
+          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+        )}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <ActivityDetailSheet activity={selectedActivity} />
       </BottomSheet>
     </SafeAreaView>
   );
