@@ -6,6 +6,7 @@ import { ftpEstimationService } from './ftpEstimationService';
 import { aiToolExecutor } from './aiToolExecutor';
 import { AI_TOOLS } from './aiTools';
 import { athletePreferencesService, type AthletePreferences } from './athletePreferencesService';
+import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
 import { logger } from '../utils/logger';
 
 interface AthleteContext {
@@ -19,6 +20,7 @@ interface AthleteContext {
   healthData: any;
   dailyCheckIn: any;
   rpeHistory: any[];
+  fatigueProfile: FatigueProfile | null;
 }
 
 export const aiCoachService = {
@@ -72,6 +74,7 @@ export const aiCoachService = {
       { data: healthData },
       { data: dailyCheckIn },
       { data: rpeHistory },
+      fatigueProfile,
     ] = await Promise.all([
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
@@ -101,6 +104,7 @@ export const aiCoachService = {
         .not('perceived_effort', 'is', null)
         .gte('start_date', thirtyDaysAgo.toISOString())
         .order('start_date', { ascending: false }),
+      fatigueProfileService.getFatigueProfile(athleteId),
     ]);
 
     return {
@@ -114,6 +118,7 @@ export const aiCoachService = {
       healthData,
       dailyCheckIn,
       rpeHistory: rpeHistory || [],
+      fatigueProfile,
     };
   },
 
@@ -121,7 +126,7 @@ export const aiCoachService = {
    * Build system prompt with athlete context
    */
   buildSystemPrompt(context: AthleteContext, clientDate?: string): string {
-    const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn, rpeHistory } = context;
+    const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn, rpeHistory, fatigueProfile } = context;
 
     // Use client-provided date to avoid UTC timezone mismatch (server runs in UTC)
     const isoDate = clientDate || new Date().toISOString().split('T')[0];
@@ -245,6 +250,12 @@ ${preferences.rest_days && preferences.rest_days.length > 0
         }
       }
       prompt += '\n\n';
+    }
+
+    // Add training load trends (ramp rate, volume profile, hard/easy pattern)
+    const fatigueSection = fatigueProfileService.formatForPrompt(fatigueProfile);
+    if (fatigueSection) {
+      prompt += fatigueSection;
     }
 
     // Add sleep & readiness data (context only — not mixed into CTL/ATL math)
@@ -384,7 +395,7 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 12. Explain the "why" behind recommendations
 13. Use FATIGUE CALIBRATION data to personalize — if the athlete handles negative TSB with low RPE, don't over-warn about overtraining
 14. If RPE trends high relative to TSS, suggest more recovery than standard thresholds would indicate
-
+${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 **PROACTIVE COACHING:**
 - When they ask "what should I do tomorrow?", FIRST analyze their recent rides to understand context
 - Reference their recent power outputs, duration patterns, and training consistency
@@ -533,20 +544,58 @@ You have access to these tools:
 
 ### Workout Creation Guidelines
 
-When creating workouts:
-- Power targets should be % of FTP (e.g., 85 for 85% FTP)
-- Warmup: 10-20 minutes at 50-70% FTP, use type "warmup"
-- Work intervals: intensity depends on type:
-  - Endurance: 70-80% FTP (type "work")
-  - Tempo: 80-85% FTP (type "work")
-  - Threshold: 90-105% FTP (type "work")
-  - VO2max: 110-120% FTP (type "work")
-- Rest intervals: 50-60% FTP (type "rest")
-- Cooldown: 5-10 minutes at 50-60% FTP (type "cooldown")
-- Total TSS should match workout type:
-  - Endurance: 60-100 TSS
-  - Threshold: 80-120 TSS
-  - VO2max: 70-100 TSS
+Power targets are always % of FTP (e.g., 88 = 88% FTP).
+
+**Zone Power Ranges:**
+- Recovery (Z1): 45-55% FTP
+- Endurance (Z2): 56-75% FTP
+- Tempo (Z3): 76-87% FTP
+- Threshold (Z4): 88-105% FTP
+- Sweet Spot: 84-97% FTP (straddles Z3/Z4)
+- VO2max (Z5): 106-120% FTP
+- Anaerobic (Z6): 121-150% FTP
+- Sprint (Z7): 150%+ FTP
+
+**Work:Rest Ratios by Zone:**
+| Zone | Work Duration | Rest Duration | Ratio |
+| Tempo (Z3) | 10-20min | 3-5min | 3:1 to 4:1 |
+| Sweet Spot | 8-20min | 3-5min | 3:1 to 4:1 |
+| Threshold (Z4) | 5-20min | 50-100% of work time | 1:1 to 2:1 |
+| VO2max (Z5) | 2-5min | equal to work time | 1:1 |
+| Anaerobic (Z6) | 30s-2min | 2-3x work time | 1:2 to 1:3 |
+| Sprint (Z7) | 10-30s | 3-5min full recovery | 1:6+ |
+
+**Fitness-Scaled Volume (use athlete's CTL from context):**
+- CTL < 30 (beginner): Max 2-3 work intervals, use shorter durations, longer rest. Total hard time ≤ 15min.
+- CTL 30-60 (moderate): Standard 3-5 intervals. Total hard time (threshold+) ≤ CTL × 0.5 min. Tempo/SS total ≤ CTL × 1.0 min.
+- CTL > 60 (fit): Can do 4-6+ intervals, longer durations, slightly shorter rest. Total hard time ≤ CTL × 0.5 min.
+- If CTL is unknown/null, assume moderate (CTL ~40).
+
+**TSB-Aware Intensity (use athlete's TSB from context):**
+- TSB > 10 (fresh): Full intensity, can push volume slightly above normal.
+- TSB 0 to 10 (normal): Standard prescription as above.
+- TSB -10 to 0 (somewhat fatigued): Reduce interval count by ~25%, keep target power the same.
+- TSB < -10 (fatigued): Prescribe ONLY endurance or recovery rides. No threshold or above. Tell the athlete why.
+
+**Workout Structure Rules:**
+- ALWAYS include warmup (10-15min ramp from 50% to 75% FTP, type "warmup") and cooldown (5-10min ramp from 60% to 45% FTP, type "cooldown").
+- Endurance rides: warmup → single steady Z2 block → cooldown. No intervals needed.
+- Recovery rides: 30-60min total, never exceed 65% FTP. Keep it simple.
+
+**Progressive Overload (check recent rides in context):**
+- If the athlete recently completed a similar workout, progress by ONE variable: longer intervals OR more reps OR slightly higher intensity — never multiple at once.
+- Example: 3×10min threshold last week → next step is 3×12min OR 4×10min, not 4×12min at higher power.
+- Max ~10% weekly increase in total interval volume.
+
+**Common Workout Recipes:**
+- Recovery: warmup 10min → 20-40min @ 50-60% → cooldown 5min. TSS 25-40.
+- Endurance: warmup 15min → 45-90min @ 65-75% → cooldown 10min. TSS 50-100.
+- Tempo: warmup 15min → 2-3 × 15min @ 80-85%, 5min rest @ 55% → cooldown 10min. TSS 70-100.
+- Sweet Spot: warmup 15min → 3-4 × 10min @ 88-93%, 5min rest @ 55% → cooldown 10min. TSS 70-100.
+- Threshold: warmup 15min → 3-5 × 8min @ 95-100%, 5-8min rest @ 55% → cooldown 10min. TSS 80-110.
+- VO2max: warmup 15min (include 2 × 1min openers at 110%) → 4-6 × 3min @ 110-118%, 3min rest @ 50% → cooldown 10min. TSS 70-95.
+- Sprint/Anaerobic: warmup 15min → 6-10 × 30s @ 150%+, 4min rest @ 50% → cooldown 10min. TSS 50-70.
+These are starting points — adjust volume/intensity based on CTL, TSB, and recent history above.
 
 ### Training Plan Building
 

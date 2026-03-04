@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import { dailyAnalysisService, TodaySuggestion } from '../../services/dailyAnalysisService';
@@ -27,19 +28,33 @@ export default function TodaySuggestionCard() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [data, setData] = useState<TodaySuggestion | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    dailyAnalysisService
-      .getTodaySuggestion()
-      .then((result) => {
-        setData(result);
+    const todayKey = `suggestion_dismissed_${new Date().toISOString().split('T')[0]}`;
+    AsyncStorage.getItem(todayKey).then((val) => {
+      if (val === 'true') {
+        setDismissed(true);
         setLoaded(true);
-      })
-      .catch(() => setLoaded(true));
+        return;
+      }
+      dailyAnalysisService
+        .getTodaySuggestion()
+        .then((result) => {
+          setData(result);
+          setLoaded(true);
+        })
+        .catch(() => setLoaded(true));
+    });
   }, []);
 
-  // Don't render anything while loading, on error, or if already ridden
-  if (!loaded || !data || data.hasRiddenToday || !data.suggestion) return null;
+  const handleDismiss = async () => {
+    const todayKey = `suggestion_dismissed_${new Date().toISOString().split('T')[0]}`;
+    await AsyncStorage.setItem(todayKey, 'true');
+    setDismissed(true);
+  };
+
+  if (!loaded || dismissed || !data?.suggestion) return null;
 
   const { suggestion } = data;
   const statusInfo = STATUS_COLORS[suggestion.status] || STATUS_COLORS['well-recovered'];
@@ -61,7 +76,12 @@ export default function TodaySuggestionCard() {
           color={statusInfo.bg}
           textColor={statusInfo.text}
         />
-        <Text style={styles.tsb}>TSB {suggestion.currentTSB.toFixed(0)}</Text>
+        <View style={styles.headerRight}>
+          <Text style={styles.tsb}>TSB {suggestion.currentTSB.toFixed(0)}</Text>
+          <TouchableOpacity onPress={handleDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close" size={18} color="#64748b" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Text style={styles.title}>Today's Suggestion</Text>
@@ -109,6 +129,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   tsb: {
     fontSize: 12,

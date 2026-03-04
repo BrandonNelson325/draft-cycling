@@ -1,6 +1,7 @@
 import { anthropic, MODEL } from '../utils/anthropic';
 import { supabaseAdmin } from '../utils/supabase';
 import { trainingLoadService } from './trainingLoadService';
+import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
 import { logger } from '../utils/logger';
 
 interface DailyAnalysisResult {
@@ -199,18 +200,12 @@ ${
 }
 
 YOUR TASK:
-Provide a brief, friendly daily analysis with:
-1. A welcoming greeting
-2. Assessment of their recovery (based on TSB and yesterday's training)
-3. Recommendation for today
-4. Whether today's workout is appropriate or needs adjustment
-
-Be conversational and motivating. Keep it under 150 words.
+Give a direct, no-fluff daily assessment. No greetings or filler.
 
 Format as JSON:
 {
-  "summary": "Brief overview in 2-3 sentences",
-  "recommendation": "Specific recommendation for today",
+  "summary": "1 sentence: current state + why (e.g. 'Well recovered after a rest day, fitness trending up.')",
+  "recommendation": "1 sentence: what to do today (e.g. 'Hit your intervals hard — you can handle it.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
   },
@@ -343,20 +338,6 @@ Format as JSON:
     const todayStr = this.todayInTimezone(tz);
     const cacheKey = `${athleteId}:${todayStr}`;
 
-    // Check if ridden today
-    const { data: todayActivities } = await supabaseAdmin
-      .from('strava_activities')
-      .select('id')
-      .eq('athlete_id', athleteId)
-      .gte('start_date_local', todayStr + 'T00:00:00')
-      .lte('start_date_local', todayStr + 'T23:59:59')
-      .limit(1);
-
-    if ((todayActivities?.length ?? 0) > 0) {
-      suggestionCache.delete(cacheKey);
-      return { hasRiddenToday: true, suggestion: null };
-    }
-
     // Check cache
     const cached = suggestionCache.get(cacheKey);
     if (cached) {
@@ -371,7 +352,7 @@ Format as JSON:
     const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [trainingStatus, yesterdayResult, todayEntry, recentResult] = await Promise.all([
+    const [trainingStatus, yesterdayResult, todayEntry, recentResult, fatigueProfile] = await Promise.all([
       trainingLoadService.getTrainingStatus(athleteId),
       supabaseAdmin
         .from('strava_activities')
@@ -393,6 +374,7 @@ Format as JSON:
         .eq('athlete_id', athleteId)
         .gte('start_date', sevenDaysAgo.toISOString())
         .order('start_date', { ascending: false }),
+      fatigueProfileService.getFatigueProfile(athleteId),
     ]);
 
     const yesterdayActivities = yesterdayResult.data || [];
@@ -405,7 +387,8 @@ Format as JSON:
       trainingStatus,
       todayEntry.data,
       recentActivities,
-      hasPlannedWorkout
+      hasPlannedWorkout,
+      fatigueProfile
     );
 
     // Get AI suggestion
@@ -451,7 +434,8 @@ Format as JSON:
     trainingStatus: any,
     todayEntry: any,
     recentActivities: any[],
-    hasPlannedWorkout: boolean
+    hasPlannedWorkout: boolean,
+    fatigueProfile: FatigueProfile | null = null
   ): string {
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
@@ -481,7 +465,9 @@ CURRENT FITNESS STATUS:
 LAST 7 DAYS:
 - Total rides: ${recentActivities.length}
 - Total TSS: ${recentTotalTSS}
-- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}`;
+- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}
+
+${fatigueProfileService.formatForPrompt(fatigueProfile)}`;
 
     if (hasPlannedWorkout && todayEntry?.workouts) {
       return `${base}
@@ -493,12 +479,12 @@ TODAY'S SCHEDULED WORKOUT:
 - TSS: ${todayEntry.workouts.tss}
 
 YOUR TASK:
-Assess whether the athlete should proceed with this planned workout, make it easier, take a rest day, or push harder. Be concise and motivating.
+Give a direct, no-fluff assessment. No greetings or filler.
 
 Format as JSON:
 {
-  "summary": "2-3 sentence overview of their current state",
-  "recommendation": "Specific advice about today's planned workout",
+  "summary": "1 sentence: current state (e.g. 'Carrying some fatigue from yesterday's 90 TSS effort.')",
+  "recommendation": "1 sentence: what to do with today's workout (e.g. 'Proceed as planned — you're ready for it.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
     }
@@ -508,18 +494,18 @@ Format as JSON:
 No workout is scheduled for today.
 
 YOUR TASK:
-Suggest a specific workout for today based on their fatigue state and recent training. Include workout name, type, approximate duration, and a brief description. Be concise and motivating.
+Suggest a specific workout. Be direct, no filler.
 
 Format as JSON:
 {
-  "summary": "2-3 sentence overview of their current state",
-  "recommendation": "Why this workout fits their current state",
+  "summary": "1 sentence: current state (e.g. 'Fresh after 2 rest days with good fitness.')",
+  "recommendation": "1 sentence: why this workout (e.g. 'Good day for tempo work to build on your base.')",
   "suggestedAction": "suggested-workout",
   "suggestedWorkout": {
     "name": "Workout Name",
     "type": "recovery|endurance|tempo|threshold|vo2max",
     "duration": 60,
-    "description": "Brief description of the workout"
+    "description": "1 sentence description"
   }
 }`;
   },
