@@ -24,6 +24,19 @@ export interface DailyAnalysis {
   suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more';
 }
 
+export interface TodaySuggestion {
+  hasRiddenToday: boolean;
+  suggestion: {
+    summary: string;
+    recommendation: string;
+    suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more' | 'suggested-workout';
+    todaysWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
+    status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
+    currentTSB: number;
+  } | null;
+}
+
 export const dailyAnalysisService = {
   async getTodaysAnalysis(): Promise<DailyAnalysis> {
     const { data } = await apiClient.get<DailyAnalysis>('/api/daily-analysis/today');
@@ -47,5 +60,10 @@ export const dailyAnalysisService = {
     } catch {
       // ignore
     }
+  },
+
+  async getTodaySuggestion(): Promise<TodaySuggestion> {
+    const { data } = await apiClient.get<TodaySuggestion>('/api/daily-analysis/suggestion');
+    return data;
   },
 };

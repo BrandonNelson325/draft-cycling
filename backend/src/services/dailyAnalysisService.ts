@@ -1,6 +1,7 @@
 import { anthropic, MODEL } from '../utils/anthropic';
 import { supabaseAdmin } from '../utils/supabase';
 import { trainingLoadService } from './trainingLoadService';
+import { logger } from '../utils/logger';
 
 interface DailyAnalysisResult {
   date: string;
@@ -25,6 +26,22 @@ interface DailyAnalysisResult {
   } | null;
   suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more';
 }
+
+export interface TodaySuggestion {
+  hasRiddenToday: boolean;
+  suggestion: {
+    summary: string;
+    recommendation: string;
+    suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more' | 'suggested-workout';
+    todaysWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
+    status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
+    currentTSB: number;
+  } | null;
+}
+
+// In-memory cache: key = "athleteId:YYYY-MM-DD"
+const suggestionCache = new Map<string, TodaySuggestion>();
 
 export const dailyAnalysisService = {
   /**
@@ -278,5 +295,276 @@ Format as JSON:
         last_daily_analysis_viewed: new Date().toISOString(),
       })
       .eq('id', athleteId);
+  },
+
+  /**
+   * Get today's date string in the athlete's timezone
+   */
+  todayInTimezone(tz: string): string {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+  },
+
+  /**
+   * Check if athlete has ridden today (timezone-aware)
+   */
+  async hasRiddenToday(athleteId: string): Promise<boolean> {
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('timezone')
+      .eq('id', athleteId)
+      .single();
+
+    const tz = athlete?.timezone || 'America/Los_Angeles';
+    const todayStr = this.todayInTimezone(tz);
+
+    const { data: todayActivities } = await supabaseAdmin
+      .from('strava_activities')
+      .select('id')
+      .eq('athlete_id', athleteId)
+      .gte('start_date_local', todayStr + 'T00:00:00')
+      .lte('start_date_local', todayStr + 'T23:59:59')
+      .limit(1);
+
+    return (todayActivities?.length ?? 0) > 0;
+  },
+
+  /**
+   * Get today's suggestion with in-memory cache
+   */
+  async getTodaySuggestion(athleteId: string): Promise<TodaySuggestion> {
+    // Get athlete timezone
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('timezone')
+      .eq('id', athleteId)
+      .single();
+
+    const tz = athlete?.timezone || 'America/Los_Angeles';
+    const todayStr = this.todayInTimezone(tz);
+    const cacheKey = `${athleteId}:${todayStr}`;
+
+    // Check if ridden today
+    const { data: todayActivities } = await supabaseAdmin
+      .from('strava_activities')
+      .select('id')
+      .eq('athlete_id', athleteId)
+      .gte('start_date_local', todayStr + 'T00:00:00')
+      .lte('start_date_local', todayStr + 'T23:59:59')
+      .limit(1);
+
+    if ((todayActivities?.length ?? 0) > 0) {
+      suggestionCache.delete(cacheKey);
+      return { hasRiddenToday: true, suggestion: null };
+    }
+
+    // Check cache
+    const cached = suggestionCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Fetch context data in parallel
+    const yesterdayDate = new Date(todayStr + 'T12:00:00');
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
+
+    const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const [trainingStatus, yesterdayResult, todayEntry, recentResult] = await Promise.all([
+      trainingLoadService.getTrainingStatus(athleteId),
+      supabaseAdmin
+        .from('strava_activities')
+        .select('*')
+        .eq('athlete_id', athleteId)
+        .gte('start_date_local', yesterdayStr + 'T00:00:00')
+        .lte('start_date_local', yesterdayStr + 'T23:59:59')
+        .order('start_date_local', { ascending: false }),
+      supabaseAdmin
+        .from('calendar_entries')
+        .select('*, workouts(*)')
+        .eq('athlete_id', athleteId)
+        .eq('scheduled_date', todayStr)
+        .eq('completed', false)
+        .single(),
+      supabaseAdmin
+        .from('strava_activities')
+        .select('*')
+        .eq('athlete_id', athleteId)
+        .gte('start_date', sevenDaysAgo.toISOString())
+        .order('start_date', { ascending: false }),
+    ]);
+
+    const yesterdayActivities = yesterdayResult.data || [];
+    const recentActivities = recentResult.data || [];
+    const hasPlannedWorkout = !!todayEntry.data?.workouts;
+
+    // Build AI context
+    const context = this.buildSuggestionContext(
+      yesterdayActivities,
+      trainingStatus,
+      todayEntry.data,
+      recentActivities,
+      hasPlannedWorkout
+    );
+
+    // Get AI suggestion
+    const aiResult = await this.getSuggestionAIAnalysis(context, hasPlannedWorkout);
+
+    // Determine status
+    const tsb = trainingStatus?.tsb || 0;
+    let status: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['status'];
+    if (tsb > 5) status = 'fresh';
+    else if (tsb > -10) status = 'well-recovered';
+    else if (tsb > -20) status = 'slightly-tired';
+    else status = 'fatigued';
+
+    const result: TodaySuggestion = {
+      hasRiddenToday: false,
+      suggestion: {
+        summary: aiResult.summary,
+        recommendation: aiResult.recommendation,
+        suggestedAction: aiResult.suggestedAction,
+        todaysWorkout: hasPlannedWorkout
+          ? {
+              name: todayEntry.data.workouts.name,
+              type: todayEntry.data.workouts.workout_type,
+              duration: todayEntry.data.workouts.duration_minutes,
+              tss: todayEntry.data.workouts.tss,
+            }
+          : null,
+        suggestedWorkout: aiResult.suggestedWorkout || null,
+        status,
+        currentTSB: tsb,
+      },
+    };
+
+    suggestionCache.set(cacheKey, result);
+    return result;
+  },
+
+  /**
+   * Build context for today's suggestion AI prompt
+   */
+  buildSuggestionContext(
+    yesterdayActivities: any[],
+    trainingStatus: any,
+    todayEntry: any,
+    recentActivities: any[],
+    hasPlannedWorkout: boolean
+  ): string {
+    const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+    const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+
+    const base = `You are a cycling coach assessing an athlete's readiness for today.
+
+YESTERDAY'S TRAINING:
+${
+  yesterdayActivities.length > 0
+    ? yesterdayActivities
+        .map(
+          (a) =>
+            `- ${a.name}: ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS, ${
+              a.average_watts || 0
+            }W avg`
+        )
+        .join('\n')
+    : '- No rides yesterday (rest day)'
+}
+Total TSS: ${yesterdayTSS}
+
+CURRENT FITNESS STATUS:
+- TSB (Form): ${trainingStatus?.tsb?.toFixed(1) ?? '0.0'}
+- CTL (Fitness): ${trainingStatus?.ctl?.toFixed(1) ?? '0.0'}
+- ATL (Fatigue): ${trainingStatus?.atl?.toFixed(1) ?? '0.0'}
+
+LAST 7 DAYS:
+- Total rides: ${recentActivities.length}
+- Total TSS: ${recentTotalTSS}
+- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}`;
+
+    if (hasPlannedWorkout && todayEntry?.workouts) {
+      return `${base}
+
+TODAY'S SCHEDULED WORKOUT:
+- ${todayEntry.workouts.name}
+- Type: ${todayEntry.workouts.workout_type}
+- Duration: ${todayEntry.workouts.duration_minutes} minutes
+- TSS: ${todayEntry.workouts.tss}
+
+YOUR TASK:
+Assess whether the athlete should proceed with this planned workout, make it easier, take a rest day, or push harder. Be concise and motivating.
+
+Format as JSON:
+{
+  "summary": "2-3 sentence overview of their current state",
+  "recommendation": "Specific advice about today's planned workout",
+  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
+}`;
+    }
+
+    return `${base}
+
+No workout is scheduled for today.
+
+YOUR TASK:
+Suggest a specific workout for today based on their fatigue state and recent training. Include workout name, type, approximate duration, and a brief description. Be concise and motivating.
+
+Format as JSON:
+{
+  "summary": "2-3 sentence overview of their current state",
+  "recommendation": "Why this workout fits their current state",
+  "suggestedAction": "suggested-workout",
+  "suggestedWorkout": {
+    "name": "Workout Name",
+    "type": "recovery|endurance|tempo|threshold|vo2max",
+    "duration": 60,
+    "description": "Brief description of the workout"
+  }
+}`;
+  },
+
+  /**
+   * Get AI analysis for today's suggestion
+   */
+  async getSuggestionAIAnalysis(
+    context: string,
+    hasPlannedWorkout: boolean
+  ): Promise<{
+    summary: string;
+    recommendation: string;
+    suggestedAction: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['suggestedAction'];
+    suggestedWorkout?: { name: string; type: string; duration: number; description: string };
+  }> {
+    try {
+      const response = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: context }],
+      });
+
+      const content = response.content[0];
+      if (content.type === 'text') {
+        try {
+          const jsonMatch = content.text.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            return JSON.parse(jsonMatch[0]);
+          }
+        } catch (e) {
+          logger.warn('Could not parse suggestion AI JSON response, using fallback');
+        }
+
+        return {
+          summary: content.text,
+          recommendation: 'Listen to your body and train accordingly.',
+          suggestedAction: hasPlannedWorkout ? 'proceed-as-planned' : 'suggested-workout',
+        };
+      }
+
+      throw new Error('Unexpected AI response format');
+    } catch (error: any) {
+      logger.error('Error getting suggestion AI analysis:', error);
+      throw new Error('Failed to generate today\'s suggestion');
+    }
   },
 };

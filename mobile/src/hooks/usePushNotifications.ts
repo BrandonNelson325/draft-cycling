@@ -61,12 +61,24 @@ export function usePushNotifications(onRideNotificationTap?: () => void) {
       }
     });
 
-    // Listen for notifications received while the app is foregrounded
-    notificationListener.current = Notifications.addNotificationReceivedListener((_notification) => {
-      // Notification received in foreground — handler above shows the alert automatically
+    // Handle cold-start: check if app was launched by tapping a notification
+    Notifications.getLastNotificationResponseAsync().then((response) => {
+      if (!response) return;
+      const screen = response.notification.request.content.data?.screen;
+      if (screen === 'Activities' && onRideNotificationTap) {
+        onRideNotificationTap();
+      }
     });
 
-    // Listen for the user tapping a notification
+    // Listen for notifications received while the app is foregrounded
+    notificationListener.current = Notifications.addNotificationReceivedListener((notification) => {
+      const screen = notification.request.content.data?.screen;
+      if (screen === 'Activities' && onRideNotificationTap) {
+        onRideNotificationTap();
+      }
+    });
+
+    // Listen for the user tapping a notification (while app is running/backgrounded)
     responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
       const screen = response.notification.request.content.data?.screen;
       if (screen === 'Activities' && onRideNotificationTap) {

@@ -44,6 +44,24 @@ export const shouldShowDailyAnalysis = async (req: AuthRequest, res: Response): 
 };
 
 /**
+ * Get today's suggestion (cached, AI-powered)
+ */
+export const getTodaySuggestion = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const suggestion = await dailyAnalysisService.getTodaySuggestion(req.user.id);
+    res.json(suggestion);
+  } catch (error: any) {
+    console.error('Error getting today\'s suggestion:', error);
+    res.status(500).json({ error: 'Failed to get today\'s suggestion' });
+  }
+};
+
+/**
  * Mark daily analysis as viewed
  */
 export const markDailyAnalysisViewed = async (req: AuthRequest, res: Response): Promise<void> => {

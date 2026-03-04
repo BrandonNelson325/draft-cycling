@@ -84,9 +84,19 @@ export const stravaService = {
       });
     }
 
+    // Check which strava_activity_ids already exist so we only flag genuinely new ones
+    const stravaIds = rides.map((r) => r.id);
+    const { data: existingRows } = await supabaseAdmin
+      .from('strava_activities')
+      .select('strava_activity_id')
+      .eq('athlete_id', athleteId)
+      .in('strava_activity_id', stravaIds);
+    const existingSet = new Set((existingRows || []).map((r: any) => r.strava_activity_id));
+
     // Store activities in database and analyze power curves
     const stored = [];
     const analyzed = [];
+    const newIds: number[] = [];
 
     for (const activity of rides) {
       logger.debug(`\n--- Processing activity: ${activity.name} (${activity.id}) ---`);
@@ -131,7 +141,10 @@ export const stravaService = {
         logger.error(`Failed to store activity ${activity.id}:`, error);
       } else if (data) {
         stored.push(data);
-        logger.debug(`✅ Stored activity: ${activity.name} (${activity.id})`);
+        if (!existingSet.has(activity.id)) {
+          newIds.push(activity.id);
+        }
+        logger.debug(`✅ Stored activity: ${activity.name} (${activity.id})${!existingSet.has(activity.id) ? ' [NEW]' : ' [updated]'}`);
 
         // Analyze power curve if activity has power data
         if (activity.device_watts || activity.average_watts) {
@@ -152,7 +165,6 @@ export const stravaService = {
       }
     }
 
-    const newIds = stored.map((a: any) => a.strava_activity_id as number);
     return { synced: stored.length, total: rides.length, analyzed: analyzed.length, newIds };
   },
 
