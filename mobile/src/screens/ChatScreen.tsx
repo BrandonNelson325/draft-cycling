@@ -96,7 +96,12 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             <Ionicons name="arrow-back" size={22} color="#f1f5f9" />
           </TouchableOpacity>
         ) : (
-          <View style={{ width: 22 }} />
+          <TouchableOpacity
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            onPress={() => navigation.navigate('Dashboard')}
+          >
+            <Ionicons name="arrow-back" size={22} color="#f1f5f9" />
+          </TouchableOpacity>
         )}
         <Text style={styles.headerTitle}>AI Coach</Text>
         <TouchableOpacity
@@ -113,7 +118,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}
+        keyboardVerticalOffset={0}
       >
         {/* Messages */}
         {!activeConversationId ? (

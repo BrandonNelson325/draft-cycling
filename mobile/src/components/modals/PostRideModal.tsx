@@ -13,6 +13,7 @@ import {
 import { activityFeedbackService } from '../../services/activityFeedbackService';
 import type { UnacknowledgedActivity, ActivityFeedback } from '../../services/activityFeedbackService';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { getConversionUtils } from '../../utils/units';
 
 interface PostRideModalProps {
   activity: UnacknowledgedActivity | null;
@@ -33,11 +34,12 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip }: PostR
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const { user } = useAuthStore();
+  const units = getConversionUtils(user);
   const isAdvanced = user?.display_mode !== 'simple';
 
   if (!activity) return null;
 
-  const distanceKm = activity.distance_meters ? (activity.distance_meters / 1000).toFixed(1) : null;
+  const distanceDisplay = activity.distance_meters ? units.formatDistance(activity.distance_meters) : null;
   const durationMin = activity.moving_time_seconds ? Math.round(activity.moving_time_seconds / 60) : null;
   const avgPower = activity.average_watts ? Math.round(activity.average_watts) : null;
 
@@ -77,7 +79,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip }: PostR
           <View style={styles.activityCard}>
             <Text style={styles.activityName} numberOfLines={2}>{activity.name || 'Ride'}</Text>
             <View style={styles.statsRow}>
-              {distanceKm && <StatBadge label="Distance" value={`${distanceKm}km`} />}
+              {distanceDisplay && <StatBadge label="Distance" value={`${distanceDisplay}${units.distanceUnitShort}`} />}
               {durationMin && <StatBadge label="Duration" value={`${durationMin}min`} />}
               {avgPower && <StatBadge label="Avg Power" value={`${avgPower}W`} />}
               {activity.tss && <StatBadge label="TSS" value={String(Math.round(activity.tss))} />}

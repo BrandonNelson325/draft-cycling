@@ -5,6 +5,7 @@ import { calendarService } from './calendarService';
 import { storageService } from './storageService';
 import { trainingPlanService } from './trainingPlanService';
 import { athletePreferencesService } from './athletePreferencesService';
+import { powerAnalysisService } from './powerAnalysisService';
 import { zwoGenerator } from './fileGenerators/zwoGenerator';
 import { fitGenerator } from './fileGenerators/fitGenerator';
 import { supabaseAdmin } from '../utils/supabase';
@@ -72,6 +73,12 @@ export const aiToolExecutor = {
           case 'schedule_training_plan_template':
             result = await this.scheduleTrainingPlanTemplate(athleteId, toolCall.input);
             logger.debug('✅ schedule_training_plan_template SUCCESS:', result.success);
+            break;
+          case 'get_recent_activities':
+            result = await this.getRecentActivities(athleteId, toolCall.input);
+            break;
+          case 'get_activity_details':
+            result = await this.getActivityDetails(athleteId, toolCall.input);
             break;
           case 'update_athlete_preferences':
             result = await this.updateAthletePreferences(athleteId, toolCall.input);
@@ -803,6 +810,113 @@ export const aiToolExecutor = {
       duration_weeks: planTemplate.duration_weeks,
       start_date,
       end_date: effectiveEventDate,
+    };
+  },
+
+  /**
+   * Get recent activities with key metrics extracted from raw_data
+   */
+  async getRecentActivities(athleteId: string, input: any): Promise<any> {
+    const daysBack = Math.min(input.days_back || 14, 90);
+    const limit = Math.min(input.limit || 20, 50);
+
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - daysBack);
+
+    const { data: activities, error } = await supabaseAdmin
+      .from('strava_activities')
+      .select('id, strava_activity_id, name, start_date, start_date_local, distance_meters, moving_time_seconds, average_watts, tss, perceived_effort, post_activity_notes, raw_data')
+      .eq('athlete_id', athleteId)
+      .gte('start_date', cutoff.toISOString())
+      .order('start_date', { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new Error(`Failed to fetch activities: ${error.message}`);
+    }
+
+    return {
+      activities: (activities || []).map((a) => {
+        const raw = a.raw_data || {};
+        return {
+          id: a.id,
+          name: a.name,
+          date: a.start_date_local?.split('T')[0] || a.start_date?.split('T')[0],
+          distance_km: a.distance_meters ? +(a.distance_meters / 1000).toFixed(1) : null,
+          duration_min: a.moving_time_seconds ? Math.round(a.moving_time_seconds / 60) : null,
+          avg_watts: a.average_watts,
+          normalized_power: raw.weighted_average_watts || null,
+          max_watts: raw.max_watts || null,
+          avg_hr: raw.average_heartrate || null,
+          max_hr: raw.max_heartrate || null,
+          elevation_m: raw.total_elevation_gain || null,
+          tss: a.tss,
+          indoor: raw.trainer || false,
+          perceived_effort: a.perceived_effort,
+          notes: a.post_activity_notes,
+        };
+      }),
+    };
+  },
+
+  /**
+   * Get full details for a single activity including power curve
+   */
+  async getActivityDetails(athleteId: string, input: any): Promise<any> {
+    const { data: activity, error } = await supabaseAdmin
+      .from('strava_activities')
+      .select('*')
+      .eq('id', input.activity_id)
+      .eq('athlete_id', athleteId)
+      .single();
+
+    if (error || !activity) {
+      throw new Error('Activity not found');
+    }
+
+    const raw = activity.raw_data || {};
+
+    // Try to get power curve best efforts
+    let powerCurve: any = null;
+    if (activity.strava_activity_id) {
+      try {
+        const curve = await powerAnalysisService.getActivityPowerCurve(athleteId, activity.strava_activity_id);
+        if (curve) {
+          powerCurve = {
+            '5s': curve.power_5s,
+            '30s': curve.power_30s,
+            '1min': curve.power_1min,
+            '3min': curve.power_3min,
+            '5min': curve.power_5min,
+            '10min': curve.power_10min,
+            '20min': curve.power_20min,
+            '60min': curve.power_60min,
+          };
+        }
+      } catch {
+        // Power curve may not exist for all activities
+      }
+    }
+
+    return {
+      id: activity.id,
+      name: activity.name,
+      date: activity.start_date_local?.split('T')[0] || activity.start_date?.split('T')[0],
+      distance_km: activity.distance_meters ? +(activity.distance_meters / 1000).toFixed(1) : null,
+      duration_min: activity.moving_time_seconds ? Math.round(activity.moving_time_seconds / 60) : null,
+      elapsed_min: raw.elapsed_time ? Math.round(raw.elapsed_time / 60) : null,
+      avg_watts: activity.average_watts,
+      normalized_power: raw.weighted_average_watts || null,
+      max_watts: raw.max_watts || null,
+      avg_hr: raw.average_heartrate || null,
+      max_hr: raw.max_heartrate || null,
+      elevation_m: raw.total_elevation_gain || null,
+      kilojoules: raw.kilojoules || null,
+      tss: activity.tss,
+      indoor: raw.trainer || false,
+      perceived_effort: activity.perceived_effort,
+      notes: activity.post_activity_notes,
+      power_curve: powerCurve,
     };
   },
 

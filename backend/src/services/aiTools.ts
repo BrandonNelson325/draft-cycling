@@ -356,6 +356,41 @@ export const AI_TOOLS: Tool[] = [
   },
 
   {
+    name: 'get_recent_activities',
+    description:
+      'Get the athlete\'s recent ride/activity history with detailed metrics (NP, HR, elevation, etc.). Use this to look further back than the system prompt summary or to get more rides. Always prefer this over asking the athlete to describe their rides.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        days_back: {
+          type: 'integer',
+          description: 'How many days back to look (default 14, max 90)',
+        },
+        limit: {
+          type: 'integer',
+          description: 'Max number of activities to return (default 20, max 50)',
+        },
+      },
+    },
+  },
+
+  {
+    name: 'get_activity_details',
+    description:
+      'Get full details for a specific ride/activity including power curve best efforts. Use the activity id from get_recent_activities or the RECENT RIDES section. Good for drill-down analysis of a particular ride.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        activity_id: {
+          type: 'string',
+          description: 'The database UUID of the activity (from get_recent_activities or system prompt)',
+        },
+      },
+      required: ['activity_id'],
+    },
+  },
+
+  {
     name: 'update_athlete_preferences',
     description:
       'Save athlete preferences and training details so you remember them for future conversations. Use this AUTOMATICALLY when you learn new information about the athlete through conversation (goals, preferences, constraints, etc.). This makes you smarter over time!',

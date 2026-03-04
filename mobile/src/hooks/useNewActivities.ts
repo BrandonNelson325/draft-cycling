@@ -67,5 +67,9 @@ export function useNewActivities() {
     setCurrentIndex((prev) => prev + 1);
   };
 
-  return { activities, currentIndex, acknowledge, skip };
+  const refetch = async () => {
+    await fetchUnacknowledged();
+  };
+
+  return { activities, currentIndex, acknowledge, skip, refetch };
 }

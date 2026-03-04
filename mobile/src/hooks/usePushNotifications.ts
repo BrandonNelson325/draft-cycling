@@ -42,7 +42,7 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
  * Call once from App.tsx after the user is authenticated.
  * Requests permission, obtains an Expo push token, and registers it with the backend.
  */
-export function usePushNotifications() {
+export function usePushNotifications(onRideNotificationTap?: () => void) {
   const { user } = useAuthStore();
   const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
   const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
@@ -67,8 +67,11 @@ export function usePushNotifications() {
     });
 
     // Listen for the user tapping a notification
-    responseListener.current = Notifications.addNotificationResponseReceivedListener((_response) => {
-      // Navigation based on notification data can be added here in the future
+    responseListener.current = Notifications.addNotificationResponseReceivedListener((response) => {
+      const screen = response.notification.request.content.data?.screen;
+      if (screen === 'Activities' && onRideNotificationTap) {
+        onRideNotificationTap();
+      }
     });
 
     return () => {

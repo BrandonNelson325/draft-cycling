@@ -27,7 +27,7 @@ function AppModals() {
   const { user } = useAuthStore();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
-  usePushNotifications();
+  usePushNotifications(newActivities.refetch);
 
   const currentActivity = newActivities.activities[newActivities.currentIndex];
   const showPostRide = !dailyMorning.shouldShow && !!currentActivity;

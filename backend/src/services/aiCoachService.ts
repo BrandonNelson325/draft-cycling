@@ -18,6 +18,7 @@ interface AthleteContext {
   preferences: AthletePreferences;
   healthData: any;
   dailyCheckIn: any;
+  rpeHistory: any[];
 }
 
 export const aiCoachService = {
@@ -57,6 +58,9 @@ export const aiCoachService = {
     const today = new Date().toISOString().split('T')[0];
 
     // Fetch all context in parallel — reduces sequential DB round-trips from ~800ms to ~200ms
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
     const [
       { data: athlete },
       { data: recentRides },
@@ -67,11 +71,12 @@ export const aiCoachService = {
       preferences,
       { data: healthData },
       { data: dailyCheckIn },
+      { data: rpeHistory },
     ] = await Promise.all([
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
         .from('strava_activities')
-        .select('id, name, start_date, start_date_local, distance_meters, moving_time_seconds, average_watts, tss')
+        .select('id, name, start_date, start_date_local, distance_meters, moving_time_seconds, average_watts, tss, raw_data, perceived_effort, post_activity_notes')
         .eq('athlete_id', athleteId)
         .gte('start_date', twoWeeksAgo.toISOString())
         .order('start_date', { ascending: false })
@@ -89,6 +94,13 @@ export const aiCoachService = {
       athletePreferencesService.getPreferences(athleteId),
       supabaseAdmin.from('health_data').select('*').eq('athlete_id', athleteId).eq('date', today).single(),
       supabaseAdmin.from('daily_metrics').select('*').eq('athlete_id', athleteId).eq('date', today).single(),
+      supabaseAdmin
+        .from('strava_activities')
+        .select('perceived_effort, tss, start_date')
+        .eq('athlete_id', athleteId)
+        .not('perceived_effort', 'is', null)
+        .gte('start_date', thirtyDaysAgo.toISOString())
+        .order('start_date', { ascending: false }),
     ]);
 
     return {
@@ -101,6 +113,7 @@ export const aiCoachService = {
       preferences,
       healthData,
       dailyCheckIn,
+      rpeHistory: rpeHistory || [],
     };
   },
 
@@ -108,7 +121,7 @@ export const aiCoachService = {
    * Build system prompt with athlete context
    */
   buildSystemPrompt(context: AthleteContext, clientDate?: string): string {
-    const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn } = context;
+    const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn, rpeHistory } = context;
 
     // Use client-provided date to avoid UTC timezone mismatch (server runs in UTC)
     const isoDate = clientDate || new Date().toISOString().split('T')[0];
@@ -140,7 +153,7 @@ TOMORROW: ${tomorrowStr} (ISO: ${tomorrowIso})
 ATHLETE PROFILE:
 - Name: ${athlete.full_name || 'Athlete'}
 - Current FTP: ${athlete.ftp || 'Not set'}W
-- Weight: ${athlete.weight_kg || 'Not set'}kg
+- Weight: ${athlete.weight_kg ? (athlete.unit_system === 'imperial' ? `${(athlete.weight_kg * 2.20462).toFixed(1)}lbs` : `${athlete.weight_kg}kg`) : 'Not set'}
 ${athlete.ftp && athlete.weight_kg ? `- Power-to-Weight: ${(athlete.ftp / athlete.weight_kg).toFixed(2)}W/kg` : ''}
 
 TRAINING GOALS:
@@ -189,6 +202,49 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 - Recommendation: ${status.recommendation}
 
 `;
+    }
+
+    // Add fatigue calibration from RPE vs TSS history
+    if (rpeHistory && rpeHistory.length >= 3) {
+      // Calculate rides per week over last 4 weeks
+      const fourWeeksAgo = new Date();
+      fourWeeksAgo.setDate(fourWeeksAgo.getDate() - 28);
+      const recentRpeRides = rpeHistory.filter((r: any) => new Date(r.start_date) >= fourWeeksAgo);
+      const ridesPerWeek = (recentRpeRides.length / 4).toFixed(1);
+
+      // Bucket RPE by TSS ranges
+      const buckets: Record<string, { rpeSum: number; count: number }> = {
+        '0-50': { rpeSum: 0, count: 0 },
+        '50-80': { rpeSum: 0, count: 0 },
+        '80-120': { rpeSum: 0, count: 0 },
+        '120+': { rpeSum: 0, count: 0 },
+      };
+      for (const ride of rpeHistory) {
+        const tss = ride.tss || 0;
+        const bucket = tss < 50 ? '0-50' : tss < 80 ? '50-80' : tss < 120 ? '80-120' : '120+';
+        buckets[bucket].rpeSum += ride.perceived_effort;
+        buckets[bucket].count += 1;
+      }
+
+      prompt += `FATIGUE CALIBRATION (Last 30 days, ${rpeHistory.length} rides with RPE):
+- Rides/week (last 4 weeks): ${ridesPerWeek}
+- RPE vs TSS:`;
+      for (const [range, data] of Object.entries(buckets)) {
+        if (data.count > 0) {
+          prompt += `\n  TSS ${range}: avg RPE ${(data.rpeSum / data.count).toFixed(1)}/5 (${data.count} rides)`;
+        }
+      }
+
+      // Check if athlete handles negative TSB well
+      if (trainingStatus?.load?.tsb < 0) {
+        const avgRpe = rpeHistory.reduce((sum: number, r: any) => sum + r.perceived_effort, 0) / rpeHistory.length;
+        if (avgRpe <= 2.5) {
+          prompt += `\n- Pattern: Athlete rides through negative TSB with LOW average RPE (${avgRpe.toFixed(1)}/5) — handles fatigue well`;
+        } else if (avgRpe >= 4.0) {
+          prompt += `\n- Pattern: Athlete reports HIGH RPE (${avgRpe.toFixed(1)}/5) — may need more recovery than standard thresholds`;
+        }
+      }
+      prompt += '\n\n';
     }
 
     // Add sleep & readiness data (context only — not mixed into CTL/ATL math)
@@ -240,14 +296,38 @@ ${preferences.rest_days && preferences.rest_days.length > 0
           diffDays === 1 ? 'YESTERDAY' :
           `${diffDays} days ago`;
 
+        const raw = ride.raw_data || {};
         const duration = Math.round(ride.moving_time_seconds / 60);
-        const distance = (ride.distance_meters / 1000).toFixed(1);
-        prompt += `${i + 1}. ${relativeLabel} (${rideDate}): "${ride.name}" - ${distance}km, ${duration}min`;
+        const isImperial = athlete.unit_system === 'imperial';
+        const distance = isImperial
+          ? (ride.distance_meters * 0.000621371).toFixed(1)
+          : (ride.distance_meters / 1000).toFixed(1);
+        const distUnit = isImperial ? 'mi' : 'km';
+        const indoor = raw.trainer ? ' [Indoor]' : '';
+        prompt += `${i + 1}. [id:${ride.id}] ${relativeLabel} (${rideDate}): "${ride.name}"${indoor} - ${distance}${distUnit}, ${duration}min`;
         if (ride.average_watts) {
           prompt += `, ${ride.average_watts}W avg`;
         }
+        if (raw.weighted_average_watts) {
+          prompt += `, NP:${raw.weighted_average_watts}W`;
+        }
+        if (raw.average_heartrate) {
+          prompt += `, HR:${Math.round(raw.average_heartrate)}bpm`;
+        }
+        if (raw.total_elevation_gain) {
+          const elev = isImperial
+            ? `${Math.round(raw.total_elevation_gain * 3.28084)}ft`
+            : `${Math.round(raw.total_elevation_gain)}m`;
+          prompt += `, ${elev} elev`;
+        }
         if (ride.tss) {
-          prompt += `, TSS: ${ride.tss}`;
+          prompt += `, TSS:${ride.tss}`;
+        }
+        if (ride.perceived_effort) {
+          prompt += `, RPE:${ride.perceived_effort}`;
+        }
+        if (ride.post_activity_notes) {
+          prompt += ` — "${ride.post_activity_notes}"`;
         }
         prompt += '\n';
       });
@@ -281,6 +361,12 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 
     prompt += `COACHING GUIDELINES:
 
+**RIDE DATA ACCESS:**
+- You HAVE access to recent ride data in the RECENT RIDES section above (includes NP, HR, elevation, RPE, notes).
+- Each ride has an [id:...] you can pass to \`get_activity_details\` for power curve best efforts.
+- Use \`get_recent_activities\` to look further back (up to 90 days) or get more rides than the summary above.
+- NEVER tell the athlete you cannot see their rides — you can.
+
 **ALWAYS ANALYZE RECENT RIDES:**
 1. **Look at their recent training** (see "RECENT RIDES" section above) - this is critical context!
 2. **Identify patterns:** Are they doing mostly endurance? Lack of intensity? Too much hard work?
@@ -296,6 +382,8 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 10. Provide specific, actionable advice with power targets when relevant
 11. Be encouraging but realistic about fitness and fatigue
 12. Explain the "why" behind recommendations
+13. Use FATIGUE CALIBRATION data to personalize — if the athlete handles negative TSB with low RPE, don't over-warn about overtraining
+14. If RPE trends high relative to TSS, suggest more recovery than standard thresholds would indicate
 
 **PROACTIVE COACHING:**
 - When they ask "what should I do tomorrow?", FIRST analyze their recent rides to understand context

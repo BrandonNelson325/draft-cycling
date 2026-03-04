@@ -95,7 +95,8 @@ export default function SettingsScreen({ navigation }: any) {
     const formatted = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
     setSavingNotifications(true);
     try {
-      await authService.updateProfile({ morning_checkin_time: formatted });
+      const deviceTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      await authService.updateProfile({ morning_checkin_time: formatted, timezone: deviceTz });
       setCheckinTime(formatted);
       Alert.alert('Saved', 'Morning check-in time updated.');
     } catch {
@@ -329,7 +330,7 @@ export default function SettingsScreen({ navigation }: any) {
             />
           </View>
 
-          <Label>Morning Check-in Time (UTC, HH:MM)</Label>
+          <Label>Morning Check-in Time (HH:MM)</Label>
           <View style={styles.timeRow}>
             <TextInput
               style={[styles.input, styles.timeInput]}

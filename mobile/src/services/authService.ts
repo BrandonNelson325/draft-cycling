@@ -65,6 +65,7 @@ export const authService = {
     display_mode?: 'simple' | 'advanced';
     push_notifications_enabled?: boolean;
     morning_checkin_time?: string;
+    timezone?: string;
   }) {
     const { data } = await apiClient.put<Athlete>('/api/auth/me', updates);
     useAuthStore.getState().setUser(data);
