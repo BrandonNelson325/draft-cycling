@@ -46,38 +46,44 @@ export default function FTPEstimateCard() {
 
   const currentFtp = user?.ftp;
   const weightKg = user?.weight_kg;
+  const ftpMatches = currentFtp === estimate.estimated_ftp;
+  const displayFtp = ftpMatches ? currentFtp : estimate.estimated_ftp;
   const wPerKg = currentFtp && weightKg ? (currentFtp / weightKg).toFixed(2) : null;
 
   return (
     <Card>
-      <Text style={styles.title}>FTP Estimate</Text>
+      <Text style={styles.title}>{ftpMatches ? 'Current FTP' : 'FTP Estimate'}</Text>
       <View style={styles.row}>
         <View>
-          <Text style={styles.ftpValue}>{estimate.estimated_ftp}W</Text>
+          <Text style={styles.ftpValue}>{displayFtp}W</Text>
           <Text style={styles.meta}>
             Based on {estimate.based_on_rides} rides · {Math.round(estimate.confidence * 100)}% confidence
           </Text>
         </View>
-        <TouchableOpacity
-          style={[styles.button, accepting && styles.buttonDisabled]}
-          onPress={handleAccept}
-          disabled={accepting}
-        >
-          {accepting ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Accept</Text>
-          )}
-        </TouchableOpacity>
+        {!ftpMatches && (
+          <TouchableOpacity
+            style={[styles.button, accepting && styles.buttonDisabled]}
+            onPress={handleAccept}
+            disabled={accepting}
+          >
+            {accepting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Accept</Text>
+            )}
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.statsRow}>
-        <View style={styles.stat}>
-          <Text style={styles.statLabel}>Current FTP</Text>
-          <Text style={styles.statValue}>{currentFtp ? `${currentFtp}W` : '—'}</Text>
-        </View>
+        {!ftpMatches && (
+          <View style={styles.stat}>
+            <Text style={styles.statLabel}>Current FTP</Text>
+            <Text style={styles.statValue}>{currentFtp ? `${currentFtp}W` : '—'}</Text>
+          </View>
+        )}
         <View style={styles.stat}>
           <Text style={styles.statLabel}>Weight</Text>
           <Text style={styles.statValue}>

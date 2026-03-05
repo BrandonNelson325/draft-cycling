@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
-import { MessageCircle } from 'lucide-react';
+import { Loader2, MessageCircle } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { ChatThread } from '../components/chat/ChatThread';
 import { ChatInput } from '../components/chat/ChatInput';
@@ -17,6 +17,8 @@ function ChatPageContent() {
   // Pre-filled message from morning modal (shown in input, not auto-sent)
   const initialMessage = (location.state as { initialMessage?: string } | null)?.initialMessage ?? '';
 
+  const startingConversation = useRef(false);
+
   const {
     conversations,
     activeConversationId,
@@ -24,6 +26,7 @@ function ChatPageContent() {
     loading,
     toolStatus,
     loadConversations,
+    startConversation,
     selectConversation,
     sendMessage,
     clearActiveConversation,
@@ -42,6 +45,17 @@ function ChatPageContent() {
       selectConversation(conversationId);
     }
   }, [conversationId, selectConversation]);
+
+  // Auto-start conversation with AI greeting when no active conversation
+  // Skip if there's an initialMessage — user will send that manually
+  useEffect(() => {
+    if (!conversationId && !activeConversationId && !initialMessage && !startingConversation.current) {
+      startingConversation.current = true;
+      startConversation().finally(() => {
+        startingConversation.current = false;
+      });
+    }
+  }, [conversationId, activeConversationId, startConversation]);
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
@@ -71,16 +85,11 @@ function ChatPageContent() {
     }
   };
 
-  // Empty state shown when no conversation is selected
+  // Loading state shown while greeting generates
   const emptyState = (
     <div className="flex-1 flex flex-col items-center justify-center text-center p-8 text-muted-foreground">
-      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
-        <MessageCircle className="w-8 h-8 text-primary" />
-      </div>
-      <h3 className="text-lg font-semibold text-foreground mb-1">Ask your AI coach</h3>
-      <p className="text-sm max-w-xs">
-        Ask about your training, get workout suggestions, or build a training plan.
-      </p>
+      <Loader2 className="w-8 h-8 text-primary animate-spin mb-4" />
+      <p className="text-sm">Starting conversation...</p>
     </div>
   );
 

@@ -9,6 +9,7 @@ import {
   Platform,
   Alert,
   Text,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -26,12 +27,15 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   const initialMessageSent = useRef(false);
   const tabBarHeight = useBottomTabBarHeight();
 
+  const startingConversation = useRef(false);
+
   const {
     conversations,
     activeConversationId,
     messages,
     loading,
     loadConversations,
+    startConversation,
     selectConversation,
     sendMessage,
     clearActiveConversation,
@@ -43,6 +47,17 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   useEffect(() => {
     loadConversations();
   }, []);
+
+  // Auto-start conversation with AI greeting when no active conversation
+  // Skip if there's an initialMessage — that will create its own conversation
+  useEffect(() => {
+    if (!activeConversationId && !startingConversation.current && !route.params?.initialMessage) {
+      startingConversation.current = true;
+      startConversation().finally(() => {
+        startingConversation.current = false;
+      });
+    }
+  }, [activeConversationId]);
 
   // Handle initialMessage param from navigation
   useEffect(() => {
@@ -123,10 +138,8 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
         {/* Messages */}
         {!activeConversationId ? (
           <View style={styles.startContainer}>
-            <Text style={styles.startTitle}>AI Cycling Coach</Text>
-            <Text style={styles.startSubtitle}>
-              Ask about training, workouts, nutrition, race strategy, and more.
-            </Text>
+            <ActivityIndicator size="large" color="#3b82f6" />
+            <Text style={styles.startSubtitle}>Starting conversation...</Text>
           </View>
         ) : (
           <FlatList

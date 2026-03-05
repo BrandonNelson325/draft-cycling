@@ -8,6 +8,7 @@ interface ChatStore {
   loading: boolean;
 
   loadConversations: () => Promise<void>;
+  startConversation: () => Promise<void>;
   selectConversation: (id: string) => Promise<void>;
   sendMessage: (message: string) => Promise<void>;
   clearActiveConversation: () => void;
@@ -27,6 +28,26 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       set({ conversations });
     } catch (error) {
       console.error('Failed to load conversations:', error);
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  startConversation: async () => {
+    set({ loading: true });
+    try {
+      const response = await chatService.startConversation();
+      const { conversation_id, message } = response;
+      set({
+        activeConversationId: conversation_id,
+        messages: {
+          ...get().messages,
+          [conversation_id]: [message],
+        },
+      });
+      await get().loadConversations();
+    } catch (error) {
+      console.error('Failed to start conversation:', error);
     } finally {
       set({ loading: false });
     }

@@ -119,71 +119,83 @@ export function FTPEstimateCard() {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="text-center">
-            <div className="text-4xl font-bold text-primary mb-2">
-              {estimate.estimated_ftp || 0}W
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Estimated Functional Threshold Power
-            </p>
-          </div>
+          {(() => {
+            const ftpMatches = user?.ftp === estimate.estimated_ftp;
+            const displayFtp = ftpMatches ? user.ftp : estimate.estimated_ftp;
+            return (
+              <>
+                <div className="text-center">
+                  <div className="text-4xl font-bold text-primary mb-2">
+                    {displayFtp || 0}W
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {ftpMatches ? 'Current FTP' : 'Estimated Functional Threshold Power'}
+                  </p>
+                </div>
 
-          <div className="space-y-2 text-sm">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Current FTP:</span>
-              <span className="font-semibold">{user?.ftp ? `${user.ftp}W` : 'Not set'}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Weight:</span>
-              <span className="font-semibold">
-                {user?.weight_kg
-                  ? `${units.formatWeight(user.weight_kg)} ${units.weightUnitShort}`
-                  : 'Not set'}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">W/kg:</span>
-              <span className="font-semibold">
-                {user?.ftp && user?.weight_kg
-                  ? `${(user.ftp / user.weight_kg).toFixed(2)} W/kg`
-                  : 'N/A'}
-              </span>
-            </div>
-            <div className="border-t border-border my-2"></div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Confidence:</span>
-              <span>
-                {estimate.confidence != null
-                  ? (estimate.confidence * 100).toFixed(0)
-                  : '0'}%
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Based on rides:</span>
-              <span>{estimate.based_on_rides || 0}</span>
-            </div>
-          </div>
+                <div className="space-y-2 text-sm">
+                  {!ftpMatches && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Current FTP:</span>
+                      <span className="font-semibold">{user?.ftp ? `${user.ftp}W` : 'Not set'}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Weight:</span>
+                    <span className="font-semibold">
+                      {user?.weight_kg
+                        ? `${units.formatWeight(user.weight_kg)} ${units.weightUnitShort}`
+                        : 'Not set'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">W/kg:</span>
+                    <span className="font-semibold">
+                      {user?.ftp && user?.weight_kg
+                        ? `${(user.ftp / user.weight_kg).toFixed(2)} W/kg`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <div className="border-t border-border my-2"></div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Confidence:</span>
+                    <span>
+                      {estimate.confidence != null
+                        ? (estimate.confidence * 100).toFixed(0)
+                        : '0'}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Based on rides:</span>
+                    <span>{estimate.based_on_rides || 0}</span>
+                  </div>
+                </div>
 
-          {message && (
-            <div
-              className={`p-2 rounded-md text-sm ${
-                message.includes('success')
-                  ? 'bg-green-500/10 text-green-500 border border-green-500/20'
-                  : 'bg-red-500/10 text-red-500 border border-red-500/20'
-              }`}
-            >
-              {message}
-            </div>
-          )}
+                {message && (
+                  <div
+                    className={`p-2 rounded-md text-sm ${
+                      message.includes('success')
+                        ? 'bg-green-500/10 text-green-500 border border-green-500/20'
+                        : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                    }`}
+                  >
+                    {message}
+                  </div>
+                )}
 
-          <Button
-            onClick={handleAcceptEstimate}
-            disabled={updating}
-            className="w-full"
-            variant="outline"
-          >
-            {updating ? 'Updating...' : 'Accept & Update FTP'}
-          </Button>
+                {!ftpMatches && (
+                  <Button
+                    onClick={handleAcceptEstimate}
+                    disabled={updating}
+                    className="w-full"
+                    variant="outline"
+                  >
+                    {updating ? 'Updating...' : 'Accept & Update FTP'}
+                  </Button>
+                )}
+              </>
+            );
+          })()}
         </div>
       </CardContent>
     </Card>
