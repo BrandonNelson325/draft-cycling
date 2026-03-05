@@ -13,6 +13,9 @@ export const workoutService = {
    * Create a new workout
    */
   async createWorkout(athleteId: string, data: CreateWorkoutDTO): Promise<Workout> {
+    // Unroll any repeat fields into explicit work/rest pairs
+    data.intervals = this.unrollRepeats(data.intervals);
+
     // Validate intervals
     const validation = await this.validateIntervals(data.intervals);
     if (!validation.valid) {
@@ -249,15 +252,54 @@ export const workoutService = {
         errors.push(`Interval ${index + 1}: Cadence should be between 40 and 150 RPM`);
       }
 
-      // Validate repeat
-      if (interval.repeat && (interval.repeat < 1 || interval.repeat > 50)) {
-        errors.push(`Interval ${index + 1}: Repeat should be between 1 and 50`);
-      }
     });
 
     return {
       valid: errors.length === 0,
       errors,
     };
+  },
+
+  /**
+   * Unroll any intervals with repeat > 1 into explicit work/rest pairs.
+   * If a work interval with repeat:N is followed by a rest interval,
+   * produces: work, rest, work, rest, ..., work (N work intervals, N-1 rests).
+   */
+  unrollRepeats(intervals: WorkoutInterval[]): WorkoutInterval[] {
+    const result: WorkoutInterval[] = [];
+    let i = 0;
+
+    while (i < intervals.length) {
+      const curr = intervals[i];
+      const repeatCount = curr.repeat || 1;
+
+      if (repeatCount > 1 && curr.type === 'work') {
+        const { repeat: _, ...workWithoutRepeat } = curr;
+
+        if (i + 1 < intervals.length && intervals[i + 1].type === 'rest') {
+          const restInterval = intervals[i + 1];
+          const { repeat: _r, ...restWithoutRepeat } = restInterval;
+
+          for (let j = 0; j < repeatCount; j++) {
+            result.push(workWithoutRepeat);
+            if (j < repeatCount - 1) {
+              result.push(restWithoutRepeat);
+            }
+          }
+          i += 2; // skip past the rest interval
+        } else {
+          for (let j = 0; j < repeatCount; j++) {
+            result.push(workWithoutRepeat);
+          }
+          i += 1;
+        }
+      } else {
+        const { repeat: _, ...withoutRepeat } = curr;
+        result.push(repeatCount === 1 ? withoutRepeat : curr);
+        i += 1;
+      }
+    }
+
+    return result;
   },
 };

@@ -4,8 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 
 interface FreshnessGaugeProps {
   tsb: number;
-  ctl: number;
-  atl: number;
+  ctl?: number;
+  atl?: number;
+  showDetails?: boolean;
 }
 
 function getStatus(tsb: number) {
@@ -16,7 +17,7 @@ function getStatus(tsb: number) {
   return { label: 'Detraining', color: '#94a3b8', bg: '#1e293b' };
 }
 
-export default function FreshnessGauge({ tsb, ctl, atl }: FreshnessGaugeProps) {
+export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = true }: FreshnessGaugeProps) {
   const status = getStatus(tsb);
   // Map TSB from [-40, 40] to [0%, 100%]
   const pct = Math.max(0, Math.min(100, ((tsb + 40) / 80) * 100));
@@ -46,22 +47,24 @@ export default function FreshnessGauge({ tsb, ctl, atl }: FreshnessGaugeProps) {
         </Text>
       </View>
 
-      <View style={styles.metrics}>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>CTL (Fitness)</Text>
-          <Text style={styles.metricValue}>{Math.round(ctl)}</Text>
+      {showDetails && (
+        <View style={styles.metrics}>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>CTL (Fitness)</Text>
+            <Text style={styles.metricValue}>{Math.round(ctl)}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>ATL (Fatigue)</Text>
+            <Text style={styles.metricValue}>{Math.round(atl)}</Text>
+          </View>
+          <View style={styles.metricItem}>
+            <Text style={styles.metricLabel}>TSB (Form)</Text>
+            <Text style={[styles.metricValue, { color: status.color }]}>
+              {tsb > 0 ? '+' : ''}{Math.round(tsb)}
+            </Text>
+          </View>
         </View>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>ATL (Fatigue)</Text>
-          <Text style={styles.metricValue}>{Math.round(atl)}</Text>
-        </View>
-        <View style={styles.metricItem}>
-          <Text style={styles.metricLabel}>TSB (Form)</Text>
-          <Text style={[styles.metricValue, { color: status.color }]}>
-            {tsb > 0 ? '+' : ''}{Math.round(tsb)}
-          </Text>
-        </View>
-      </View>
+      )}
     </View>
   );
 }

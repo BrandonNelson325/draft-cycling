@@ -4,9 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import type { StravaActivity } from '../services/calendarService';
 
-import TodaySuggestionCard from '../components/dashboard/TodaySuggestionCard';
+import CoachCard from '../components/dashboard/CoachCard';
 import MetricsCard from '../components/dashboard/MetricsCard';
-import TrainingStatusCard from '../components/dashboard/TrainingStatusCard';
 import WeeklyVolumeChart from '../components/dashboard/WeeklyVolumeChart';
 import PowerCurveChart from '../components/dashboard/PowerCurveChart';
 import FTPEstimateCard from '../components/dashboard/FTPEstimateCard';
@@ -31,9 +30,8 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <TodaySuggestionCard />
+        <CoachCard />
         <MetricsCard />
-        <TrainingStatusCard />
         <WeeklyVolumeChart />
         <PowerCurveChart />
         <FTPEstimateCard />

@@ -672,6 +672,7 @@ For training plans: if the athlete explicitly requests a plan, ask goal, event d
 2. **create_workout** - ONLY if no suitable workout exists in library
    - Don't create duplicates
    - Create new variations or specific workouts
+   - NEVER use the "repeat" field on intervals. Always write out each work/rest pair explicitly (e.g., work, rest, work, rest, work — not work with repeat:3 + rest)
 3. **schedule_workout** - Schedule the workout (existing or new)
    - Use workout_id from library OR from newly created workout
    - Don't ask permission if they mentioned a date

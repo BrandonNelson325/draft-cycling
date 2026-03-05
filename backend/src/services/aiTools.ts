@@ -56,10 +56,6 @@ export const AI_TOOLS: Tool[] = [
                 type: 'integer',
                 description: 'Target cadence (optional)',
               },
-              repeat: {
-                type: 'integer',
-                description: 'Number of times to repeat this interval (default 1)',
-              },
             },
             required: ['duration', 'type'],
           },
