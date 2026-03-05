@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { dailyAnalysisService, TodaySuggestion } from '../../services/dailyAnalysisService';
+import { dailyAnalysisService } from '../../services/dailyAnalysisService';
+import type { TodaySuggestion } from '../../services/dailyAnalysisService';
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
   fresh: { bg: 'bg-emerald-900/50', text: 'text-emerald-400', label: 'Fresh' },
