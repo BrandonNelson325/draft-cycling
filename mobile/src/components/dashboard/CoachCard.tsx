@@ -57,6 +57,8 @@ export default function CoachCard() {
 
   return (
     <Card>
+      <Text style={styles.title}>Training Status</Text>
+
       {/* Freshness Gauge — compact, no CTL/ATL details */}
       <FreshnessGauge tsb={tsb} showDetails={false} />
 
@@ -101,7 +103,7 @@ export default function CoachCard() {
             </View>
           )}
 
-          {/* Tomorrow's workout preview (post-ride) */}
+          {/* Tomorrow's scheduled workout (post-ride) */}
           {hasRidden && s.tomorrowsWorkout && (
             <View style={[styles.workoutBox, styles.tomorrowBox]}>
               <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
@@ -109,6 +111,18 @@ export default function CoachCard() {
               <Text style={styles.workoutMeta}>
                 {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · {s.tomorrowsWorkout.tss} TSS
               </Text>
+            </View>
+          )}
+
+          {/* Suggested tomorrow workout (post-ride, no scheduled workout) */}
+          {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
+            <View style={[styles.workoutBox, styles.suggestedBox]}>
+              <Text style={[styles.workoutLabel, styles.suggestedLabel]}>Suggested for Tomorrow</Text>
+              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
+              <Text style={styles.workoutMeta}>
+                {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+              </Text>
+              <Text style={styles.workoutDesc}>{s.suggestedWorkout.description}</Text>
             </View>
           )}
 
@@ -157,6 +171,12 @@ export default function CoachCard() {
 }
 
 const styles = StyleSheet.create({
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#f1f5f9',
+    marginBottom: 4,
+  },
   aiSection: {
     marginTop: 16,
     gap: 10,

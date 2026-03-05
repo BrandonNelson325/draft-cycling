@@ -607,18 +607,34 @@ ${hasTomorrow
   ? `- ${tomorrowEntry.workouts.name}
 - Type: ${tomorrowEntry.workouts.workout_type}
 - Duration: ${tomorrowEntry.workouts.duration_minutes} minutes
-- TSS: ${tomorrowEntry.workouts.tss}`
-  : '- No workout scheduled'}
+- TSS: ${tomorrowEntry.workouts.tss}
 
 YOUR TASK:
-Summarize today's training effort, how it fits the overall plan, preview tomorrow's workout, and assess recovery outlook. Be direct, no filler.
+Summarize today's training effort, preview tomorrow's workout, and assess recovery outlook. Be direct, no filler.
 
 Format as JSON:
 {
   "summary": "1 sentence: today's ride recap (e.g. 'Solid 75 TSS endurance ride, right on target for a recovery day.')",
   "recommendation": "1 sentence: recovery outlook + tomorrow preview (e.g. 'Get good rest tonight — tomorrow's threshold intervals will need fresh legs.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
-}`;
+}`
+  : `- No workout scheduled
+
+YOUR TASK:
+Summarize today's training effort and suggest a specific workout for tomorrow based on today's load, current fitness, and what would fit the training pattern. Be direct, no filler.
+
+Format as JSON:
+{
+  "summary": "1 sentence: today's ride recap (e.g. 'Solid 75 TSS endurance ride, right on target.')",
+  "recommendation": "1 sentence: why this tomorrow workout (e.g. 'After today's big effort, an easy spin tomorrow will aid recovery.')",
+  "suggestedAction": "proceed-as-planned",
+  "suggestedWorkout": {
+    "name": "Workout Name",
+    "type": "recovery|endurance|tempo|threshold|vo2max",
+    "duration": 60,
+    "description": "1 sentence description"
+  }
+}`}
   },
 
   /**

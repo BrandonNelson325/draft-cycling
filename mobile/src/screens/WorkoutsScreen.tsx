@@ -46,12 +46,17 @@ export default function WorkoutsScreen() {
     load();
   }, []);
 
+  const [error, setError] = useState<string | null>(null);
+
   const load = async () => {
     setLoading(true);
+    setError(null);
     try {
       const data = await workoutService.getWorkouts();
       setWorkouts(data);
-    } catch {
+    } catch (err: any) {
+      console.error('WorkoutsScreen load error:', err?.response?.status, err?.response?.data, err?.message);
+      setError(err?.response?.data?.error || err?.message || 'Failed to load workouts');
       setWorkouts([]);
     } finally {
       setLoading(false);
@@ -121,8 +126,8 @@ export default function WorkoutsScreen() {
           ListEmptyComponent={
             <EmptyState
               icon="barbell-outline"
-              title="No workouts found"
-              subtitle="Create workouts by chatting with the AI coach."
+              title={error ? 'Error loading workouts' : 'No workouts found'}
+              subtitle={error || 'Create workouts by chatting with the AI coach.'}
             />
           }
         />

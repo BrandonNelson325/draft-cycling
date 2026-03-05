@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import { supabaseAdmin } from '../utils/supabase';
+import { supabaseAdmin, supabase } from '../utils/supabase';
 import { AuthRequest } from '../middleware/auth';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
@@ -26,18 +26,39 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     // Upsert athlete row — handles both cases: trigger already created it, or it doesn't exist yet.
-    const { data: athlete, error: athleteError } = await supabaseAdmin
-      .from('athletes')
-      .upsert(
-        {
-          id: authData.user.id,
-          email,
-          full_name: full_name || null,
-        },
-        { onConflict: 'id' }
-      )
-      .select()
-      .single();
+    // First try by id (normal case). If that fails due to email uniqueness, clean up any
+    // orphaned athlete row from a previous failed registration attempt, then retry.
+    let athlete;
+    let athleteError;
+
+    const upsertAthleteRow = async () => {
+      return supabaseAdmin
+        .from('athletes')
+        .upsert(
+          {
+            id: authData.user.id,
+            email,
+            full_name: full_name || null,
+          },
+          { onConflict: 'id' }
+        )
+        .select()
+        .single();
+    };
+
+    const firstAttempt = await upsertAthleteRow();
+    athlete = firstAttempt.data;
+    athleteError = firstAttempt.error;
+
+    // If failed due to duplicate email (orphaned row from previous failed registration),
+    // delete the orphaned row and retry
+    if (athleteError && athleteError.message?.includes('athletes_email_key')) {
+      console.warn('Orphaned athlete row detected for email, cleaning up:', email);
+      await supabaseAdmin.from('athletes').delete().eq('email', email).neq('id', authData.user.id);
+      const retry = await upsertAthleteRow();
+      athlete = retry.data;
+      athleteError = retry.error;
+    }
 
     if (athleteError) {
       console.error('Error creating athlete profile:', athleteError.message, athleteError.details, athleteError.hint);
@@ -51,7 +72,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     let signInError;
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      const result = await supabaseAdmin.auth.signInWithPassword({ email, password });
+      const result = await supabase.auth.signInWithPassword({ email, password });
       signInData = result.data;
       signInError = result.error;
       if (!signInError) break;
@@ -125,8 +146,8 @@ export const login = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Sign in with Supabase
-    const { data, error } = await supabaseAdmin.auth.signInWithPassword({
+    // Sign in with Supabase (use anon client to avoid polluting admin client's auth state)
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });

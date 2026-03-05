@@ -58,6 +58,8 @@ export function CoachCard() {
   return (
     <Card>
       <CardContent className="p-5 space-y-4">
+        <h3 className="text-lg font-semibold">Training Status</h3>
+
         {/* Freshness Gauge — the visual hook */}
         <FreshnessGauge tsb={tsb} />
 
@@ -104,7 +106,7 @@ export function CoachCard() {
               </div>
             )}
 
-            {/* Tomorrow's workout preview (post-ride) */}
+            {/* Tomorrow's scheduled workout (post-ride) */}
             {hasRidden && s.tomorrowsWorkout && (
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Tomorrow</p>
@@ -112,6 +114,18 @@ export function CoachCard() {
                 <p className="text-xs text-gray-500">
                   {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · {s.tomorrowsWorkout.tss} TSS
                 </p>
+              </div>
+            )}
+
+            {/* Suggested tomorrow workout (post-ride, no scheduled workout) */}
+            {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
+              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">Suggested for Tomorrow</p>
+                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
+                <p className="text-xs text-gray-500">
+                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">{s.suggestedWorkout.description}</p>
               </div>
             )}
 
