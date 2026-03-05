@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/useAuthStore';
 import { LoginForm } from './components/auth/LoginForm';
@@ -14,6 +14,7 @@ import { StravaCallback } from './pages/StravaCallback';
 import { TrainingPlanPage } from './pages/TrainingPlanPage';
 import { DailyMorningModal } from './components/modals/DailyMorningModal';
 import { PostRideModal } from './components/modals/PostRideModal';
+import { WelcomeModal } from './components/modals/WelcomeModal';
 import { useDailyMorning } from './hooks/useDailyMorning';
 import { useNewActivities } from './hooks/useNewActivities';
 
@@ -22,6 +23,20 @@ function ProtectedRoutes() {
   const { shouldShow, analysis, readiness, dismiss } = useDailyMorning();
   const { activities, currentIndex, acknowledge, skip } = useNewActivities();
   const currentActivity = activities[currentIndex] ?? null;
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (user && !localStorage.getItem(`welcome_shown_${user.id}`)) {
+      setShowWelcome(true);
+    }
+  }, [user]);
+
+  const dismissWelcome = () => {
+    if (user) {
+      localStorage.setItem(`welcome_shown_${user.id}`, 'true');
+    }
+    setShowWelcome(false);
+  };
 
   // Check if user has beta access or subscription
   const hasAccess = !!(
@@ -55,8 +70,13 @@ function ProtectedRoutes() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
+      {/* Welcome modal — first-time users only */}
+      {showWelcome && (
+        <WelcomeModal onClose={dismissWelcome} showWelcome={true} />
+      )}
+
       {/* Morning modal — only shows when user hasn't checked in today */}
-      {shouldShow && readiness && (
+      {!showWelcome && shouldShow && readiness && (
         <DailyMorningModal
           analysis={analysis}
           readiness={readiness}
