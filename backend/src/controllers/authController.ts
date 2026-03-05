@@ -23,12 +23,18 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // The DB trigger (handle_new_user) already created the athlete row when
-    // the auth user was inserted. Just update full_name if provided.
+    // Upsert athlete row — handles both cases: trigger already created it, or it doesn't exist yet.
+    // This eliminates the race condition between the DB trigger and this call.
     const { data: athlete, error: athleteError } = await supabaseAdmin
       .from('athletes')
-      .update({ full_name: full_name || null })
-      .eq('id', authData.user.id)
+      .upsert(
+        {
+          id: authData.user.id,
+          email,
+          full_name: full_name || null,
+        },
+        { onConflict: 'id' }
+      )
       .select()
       .single();
 
