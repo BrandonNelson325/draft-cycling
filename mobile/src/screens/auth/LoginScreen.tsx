@@ -10,6 +10,7 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Image,
 } from 'react-native';
 import { authService } from '../../services/authService';
 import type { AuthStackScreenProps } from '../../navigation/types';
@@ -50,8 +51,11 @@ const message =
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Draft Cycling</Text>
-          <Text style={styles.tagline}>The coach that never sleeps</Text>
+          <Image
+            source={require('../../../assets/logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
           <Text style={styles.subtitle}>Sign in to your account</Text>
         </View>
 
@@ -120,19 +124,13 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
+    alignItems: 'center',
     marginBottom: 40,
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#f1f5f9',
-    marginBottom: 8,
-  },
-  tagline: {
-    fontSize: 15,
-    color: '#3b82f6',
-    fontWeight: '500',
-    marginBottom: 12,
+  logo: {
+    width: 280,
+    height: 140,
+    marginBottom: 16,
   },
   subtitle: {
     fontSize: 16,
