@@ -88,7 +88,7 @@ function AuthScreen() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div className="flex justify-center mb-6">
-            <img src="/logo.png" alt="Draft" className="h-32" />
+            <img src="/logo.png" alt="Draft" className="h-48 w-auto" />
           </div>
         </div>
 

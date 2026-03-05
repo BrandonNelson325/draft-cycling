@@ -11,20 +11,21 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create user with Supabase Auth
+    // Create user with Supabase Auth and generate session in one call
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm in development
+      email_confirm: true,
     });
 
     if (authError || !authData.user) {
-      res.status(400).json({ error: authError?.message || 'Registration failed' });
+      const msg = authError?.message || 'Registration failed';
+      console.error('Auth createUser error:', msg);
+      res.status(400).json({ error: msg });
       return;
     }
 
     // Upsert athlete row — handles both cases: trigger already created it, or it doesn't exist yet.
-    // This eliminates the race condition between the DB trigger and this call.
     const { data: athlete, error: athleteError } = await supabaseAdmin
       .from('athletes')
       .upsert(
@@ -39,29 +40,43 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       .single();
 
     if (athleteError) {
-      console.error('Error creating athlete:', athleteError);
-      // Rollback: delete the auth user
+      console.error('Error creating athlete profile:', athleteError.message, athleteError.details, athleteError.hint);
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       res.status(500).json({ error: 'Failed to create user profile' });
       return;
     }
 
-    // Generate session
-    const { data: session, error: sessionError } = await supabaseAdmin.auth.signInWithPassword({
-      email,
-      password,
-    });
+    // Generate session — retry once if rate-limited
+    let signInData;
+    let signInError;
 
-    if (sessionError || !session.session) {
-      res.status(500).json({ error: 'Registration successful but login failed' });
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await supabaseAdmin.auth.signInWithPassword({ email, password });
+      signInData = result.data;
+      signInError = result.error;
+      if (!signInError) break;
+      if (attempt === 0) {
+        console.warn('signInWithPassword attempt 1 failed, retrying in 1s:', signInError.message);
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    if (signInError || !signInData?.session) {
+      console.error('Session generation error after registration:', signInError?.message);
+      // Registration succeeded — don't delete the user, just tell them to log in
+      res.status(201).json({
+        user: athlete,
+        session: null,
+        message: 'Account created successfully. Please log in.',
+      });
       return;
     }
 
     res.status(201).json({
       user: athlete,
       session: {
-        access_token: session.session.access_token,
-        refresh_token: session.session.refresh_token,
+        access_token: signInData.session.access_token,
+        refresh_token: signInData.session.refresh_token,
       },
     });
   } catch (error) {

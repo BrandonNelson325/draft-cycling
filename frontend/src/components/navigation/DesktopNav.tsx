@@ -36,7 +36,7 @@ export function DesktopNav({ className = '' }: DesktopNavProps) {
       <div className="container mx-auto h-full px-6 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
-          <img src="/logo.png" alt="Draft" className="h-8" />
+          <img src="/logo.png" alt="Draft" className="h-12 w-auto" />
         </Link>
 
         {/* Nav Items */}
