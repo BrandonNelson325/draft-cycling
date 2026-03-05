@@ -21,7 +21,7 @@ export const trainingPlanService = {
     // Get athlete's current FTP and training goal
     const { data: athlete } = await supabaseAdmin
       .from('athletes')
-      .select('ftp, training_goal')
+      .select('ftp, training_goal, timezone')
       .eq('id', athleteId)
       .single();
 
@@ -78,7 +78,11 @@ export const trainingPlanService = {
       athlete_id: athleteId,
       goal_event: config.goal_event,
       event_date: config.event_date.toISOString().split('T')[0],
-      start_date: new Date().toISOString().split('T')[0],
+      start_date: (() => {
+        try {
+          return new Intl.DateTimeFormat('en-CA', { timeZone: athlete.timezone || 'America/Los_Angeles' }).format(new Date());
+        } catch { return new Date().toISOString().split('T')[0]; }
+      })(),
       weeks,
       total_tss: weeks.reduce((sum, week) => sum + week.tss, 0),
       created_at: new Date().toISOString(),

@@ -55,12 +55,20 @@ export const aiCoachService = {
    * Build comprehensive context for AI coaching
    */
   async buildAthleteContext(athleteId: string): Promise<AthleteContext> {
-    const twoWeeksAgo = new Date();
+    // Fetch athlete timezone first for timezone-aware "today"
+    const { data: tzRow } = await supabaseAdmin
+      .from('athletes')
+      .select('timezone')
+      .eq('id', athleteId)
+      .single();
+    const tz = tzRow?.timezone || 'America/Los_Angeles';
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+
+    const twoWeeksAgo = new Date(today + 'T12:00:00');
     twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-    const today = new Date().toISOString().split('T')[0];
 
     // Fetch all context in parallel — reduces sequential DB round-trips from ~800ms to ~200ms
-    const thirtyDaysAgo = new Date();
+    const thirtyDaysAgo = new Date(today + 'T12:00:00');
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const [
@@ -128,8 +136,9 @@ export const aiCoachService = {
   buildSystemPrompt(context: AthleteContext, clientDate?: string): string {
     const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn, rpeHistory, fatigueProfile } = context;
 
-    // Use client-provided date to avoid UTC timezone mismatch (server runs in UTC)
-    const isoDate = clientDate || new Date().toISOString().split('T')[0];
+    // Use client-provided date, else athlete timezone, else UTC
+    const athleteTz = athlete.timezone || 'America/Los_Angeles';
+    const isoDate = clientDate || new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date());
     const today = new Date(isoDate + 'T12:00:00'); // noon avoids DST edge cases
     const dateStr = today.toLocaleDateString('en-US', {
       weekday: 'long',

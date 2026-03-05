@@ -1,6 +1,23 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { calendarService } from './calendarService';
 
+function todayInTimezone(tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
+  } catch {
+    return new Date().toISOString().split('T')[0];
+  }
+}
+
+async function getAthleteTz(athleteId: string): Promise<string> {
+  const { data } = await supabaseAdmin
+    .from('athletes')
+    .select('timezone')
+    .eq('id', athleteId)
+    .single();
+  return data?.timezone || 'America/Los_Angeles';
+}
+
 export interface DailyReadiness {
   date: string;
   hasCheckedInToday: boolean;
@@ -22,7 +39,8 @@ export const dailyReadinessService = {
    * Get comprehensive daily readiness for an athlete
    */
   async getDailyReadiness(athleteId: string, localDate?: string): Promise<DailyReadiness> {
-    const today = localDate || new Date().toISOString().split('T')[0];
+    const tz = await getAthleteTz(athleteId);
+    const today = localDate || todayInTimezone(tz);
 
     // Check if already checked in today
     const { data: todayMetrics } = await supabaseAdmin
@@ -59,7 +77,8 @@ export const dailyReadinessService = {
    * Get today's planned workout from calendar
    */
   async getTodaysWorkout(athleteId: string): Promise<any | null> {
-    const today = new Date().toISOString().split('T')[0];
+    const tz = await getAthleteTz(athleteId);
+    const today = todayInTimezone(tz);
 
     const { data: calendarEntry } = await supabaseAdmin
       .from('calendar')
@@ -86,7 +105,9 @@ export const dailyReadinessService = {
    * Get recent training activity (last 7 days)
    */
   async getRecentActivity(athleteId: string) {
-    const sevenDaysAgo = new Date();
+    const tz = await getAthleteTz(athleteId);
+    const todayStr = todayInTimezone(tz);
+    const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
 
@@ -102,7 +123,7 @@ export const dailyReadinessService = {
     const totalTSS = rides.reduce((sum, ride) => sum + (ride.tss || 0), 0);
 
     // Get yesterday's workout
-    const yesterday = new Date();
+    const yesterday = new Date(todayStr + 'T12:00:00');
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
 

@@ -62,9 +62,15 @@ export const dailyAnalysisService = {
    * Generate daily analysis for athlete
    */
   async generateDailyAnalysis(athleteId: string): Promise<DailyAnalysisResult> {
-    // Get yesterday's date as a YYYY-MM-DD string (timezone-safe date comparison)
-    const todayStr = new Date().toISOString().split('T')[0];
-    const yesterdayDate = new Date(todayStr + 'T00:00:00');
+    // Use athlete's timezone for "today" and "yesterday"
+    const { data: athleteRow } = await supabaseAdmin
+      .from('athletes')
+      .select('timezone')
+      .eq('id', athleteId)
+      .single();
+    const tz = athleteRow?.timezone || 'America/Los_Angeles';
+    const todayStr = this.todayInTimezone(tz);
+    const yesterdayDate = new Date(todayStr + 'T12:00:00');
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
@@ -80,18 +86,17 @@ export const dailyAnalysisService = {
     // Get current training status
     const trainingStatus = await trainingLoadService.getTrainingStatus(athleteId);
 
-    // Get today's scheduled workout
-    const today = new Date().toISOString().split('T')[0];
+    // Get today's scheduled workout (use athlete's local date)
     const { data: todayEntry } = await supabaseAdmin
       .from('calendar_entries')
       .select('*, workouts(*)')
       .eq('athlete_id', athleteId)
-      .eq('scheduled_date', today)
+      .eq('scheduled_date', todayStr)
       .eq('completed', false)
       .single();
 
     // Get last 7 days for pattern analysis
-    const sevenDaysAgo = new Date();
+    const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const { data: recentActivities } = await supabaseAdmin
@@ -131,7 +136,7 @@ export const dailyAnalysisService = {
     else status = 'fatigued';
 
     return {
-      date: new Date().toISOString().split('T')[0],
+      date: todayStr,
       summary: aiAnalysis.summary,
       yesterdayRides,
       yesterdayTotalTSS,
@@ -277,20 +282,18 @@ Format as JSON:
   async hasViewedToday(athleteId: string): Promise<boolean> {
     const { data: athlete } = await supabaseAdmin
       .from('athletes')
-      .select('last_daily_analysis_viewed')
+      .select('last_daily_analysis_viewed, timezone')
       .eq('id', athleteId)
       .single();
 
     if (!athlete?.last_daily_analysis_viewed) return false;
 
-    const lastViewed = new Date(athlete.last_daily_analysis_viewed);
-    const today = new Date();
+    const tz = athlete.timezone || 'America/Los_Angeles';
+    const todayStr = this.todayInTimezone(tz);
+    const viewedStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz })
+      .format(new Date(athlete.last_daily_analysis_viewed));
 
-    return (
-      lastViewed.getFullYear() === today.getFullYear() &&
-      lastViewed.getMonth() === today.getMonth() &&
-      lastViewed.getDate() === today.getDate()
-    );
+    return viewedStr === todayStr;
   },
 
   /**

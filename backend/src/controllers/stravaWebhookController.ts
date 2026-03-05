@@ -141,6 +141,7 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
         strava_activity_id: stravaActivityId,
         name: activity.name,
         start_date: activity.start_date,
+        start_date_local: activity.start_date_local || activity.start_date,
         distance_meters: Math.round(activity.distance),
         moving_time_seconds: activity.moving_time,
         average_watts: activity.average_watts || null,
@@ -207,6 +208,7 @@ async function handleActivityUpdated(athleteId: string, stravaActivityId: number
       .from('strava_activities')
       .update({
         name: activity.name,
+        start_date_local: activity.start_date_local || activity.start_date,
         distance_meters: Math.round(activity.distance),
         moving_time_seconds: activity.moving_time,
         average_watts: activity.average_watts || null,
