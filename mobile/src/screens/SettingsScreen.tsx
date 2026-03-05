@@ -17,6 +17,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
 import { getConversionUtils, convertToMetric } from '../utils/units';
+import WelcomeModal from '../components/modals/WelcomeModal';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -43,6 +44,9 @@ export default function SettingsScreen({ navigation }: any) {
     user?.morning_checkin_time ? user.morning_checkin_time.slice(0, 5) : '07:00'
   );
   const [savingNotifications, setSavingNotifications] = useState(false);
+
+  // App Guide
+  const [showGuide, setShowGuide] = useState(false);
 
   // Strava
   const [stravaLoading, setStravaLoading] = useState(false);
@@ -379,6 +383,11 @@ export default function SettingsScreen({ navigation }: any) {
             <Ionicons name="chevron-forward" size={16} color="#60a5fa" />
           </TouchableOpacity>
 
+          <TouchableOpacity style={styles.guideBtn} onPress={() => setShowGuide(true)}>
+            <Ionicons name="book-outline" size={16} color="#60a5fa" />
+            <Text style={styles.guideBtnText}>App Guide</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity style={[styles.btn, styles.logoutBtn]} onPress={handleLogout}>
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
@@ -386,6 +395,12 @@ export default function SettingsScreen({ navigation }: any) {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      <WelcomeModal
+        visible={showGuide}
+        onClose={() => setShowGuide(false)}
+        showWelcome={false}
+      />
     </SafeAreaView>
   );
 }
@@ -493,6 +508,17 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   metricsLinkText: { color: '#60a5fa', fontSize: 14, fontWeight: '500' },
+  guideBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+    borderRadius: 8,
+    padding: 13,
+  },
+  guideBtnText: { color: '#60a5fa', fontWeight: '600', fontSize: 14 },
   logoutBtn: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
   logoutText: { color: '#ef4444', fontWeight: '600', fontSize: 14 },
   notifRow: {

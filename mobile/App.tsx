@@ -1,14 +1,16 @@
 import 'react-native-gesture-handler';
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import RootNavigator from './src/navigation/RootNavigator';
 import DailyMorningModal from './src/components/modals/DailyMorningModal';
 import PostRideModal from './src/components/modals/PostRideModal';
+import WelcomeModal from './src/components/modals/WelcomeModal';
 import { useDailyMorning } from './src/hooks/useDailyMorning';
 import { useNewActivities } from './src/hooks/useNewActivities';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
@@ -28,16 +30,37 @@ function AppModals() {
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
   usePushNotifications(newActivities.refetch);
+  const [showWelcome, setShowWelcome] = useState(false);
+
+  useEffect(() => {
+    if (user) {
+      AsyncStorage.getItem(`welcome_shown_${user.id}`).then((val) => {
+        if (!val) setShowWelcome(true);
+      });
+    }
+  }, [user]);
+
+  const dismissWelcome = async () => {
+    if (user) {
+      await AsyncStorage.setItem(`welcome_shown_${user.id}`, 'true');
+    }
+    setShowWelcome(false);
+  };
 
   const currentActivity = newActivities.activities[newActivities.currentIndex];
-  const showPostRide = !dailyMorning.shouldShow && !!currentActivity;
+  const showPostRide = !dailyMorning.shouldShow && !showWelcome && !!currentActivity;
 
   if (!user) return null;
 
   return (
     <>
+      <WelcomeModal
+        visible={showWelcome}
+        onClose={dismissWelcome}
+        showWelcome={true}
+      />
       <DailyMorningModal
-        visible={dailyMorning.shouldShow}
+        visible={!showWelcome && dailyMorning.shouldShow}
         analysis={dailyMorning.analysis}
         readiness={dailyMorning.readiness}
         onDismiss={dailyMorning.dismiss}
