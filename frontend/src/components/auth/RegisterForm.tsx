@@ -1,8 +1,16 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { authService } from '../../services/authService';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+
+const ALL_TIMEZONES: string[] = (() => {
+  try {
+    return Intl.supportedValuesOf('timeZone');
+  } catch {
+    return ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'];
+  }
+})();
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -13,8 +21,18 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [timezone, setTimezone] = useState(
+    () => Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
+  );
+  const [tzSearch, setTzSearch] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return ALL_TIMEZONES;
+    const q = tzSearch.toLowerCase();
+    return ALL_TIMEZONES.filter(tz => tz.toLowerCase().includes(q));
+  }, [tzSearch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +51,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     setLoading(true);
 
     try {
-      await authService.register(email, password, fullName);
+      await authService.register(email, password, fullName, timezone);
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {
@@ -108,6 +126,31 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
             />
+          </div>
+
+          <div className="space-y-2">
+            <label htmlFor="timezone" className="text-sm font-medium">
+              Timezone
+            </label>
+            <div className="relative">
+              <Input
+                type="text"
+                placeholder="Search timezones..."
+                value={tzSearch}
+                onChange={(e) => setTzSearch(e.target.value)}
+                className="mb-1"
+              />
+              <select
+                id="timezone"
+                value={timezone}
+                onChange={(e) => setTimezone(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {filteredTimezones.map(tz => (
+                  <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <Button type="submit" className="w-full" disabled={loading}>

@@ -43,8 +43,19 @@ export interface TodaySuggestion {
   } | null;
 }
 
-// In-memory cache: key = "athleteId:YYYY-MM-DD"
+// In-memory cache: key = "athleteId:YYYY-MM-DD:pre|post"
 const suggestionCache = new Map<string, TodaySuggestion>();
+
+/**
+ * Clear cached suggestions for an athlete (call after new activity synced)
+ */
+export function clearSuggestionCache(athleteId: string): void {
+  for (const key of suggestionCache.keys()) {
+    if (key.startsWith(athleteId + ':')) {
+      suggestionCache.delete(key);
+    }
+  }
+}
 
 export const dailyAnalysisService = {
   /**

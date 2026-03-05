@@ -8,6 +8,7 @@ export interface Athlete {
   weight_kg?: number;
   unit_system?: 'metric' | 'imperial';
   display_mode?: 'simple' | 'advanced';
+  timezone?: string;
   push_token?: string;
   push_notifications_enabled?: boolean;
   morning_checkin_time?: string;  // "HH:MM:SS"

@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, full_name } = req.body;
+    const { email, password, full_name, timezone } = req.body;
 
     if (!email || !password) {
       res.status(400).json({ error: 'Email and password are required' });
@@ -39,6 +39,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
             id: authData.user.id,
             email,
             full_name: full_name || null,
+            timezone: timezone || 'America/Los_Angeles',
           },
           { onConflict: 'id' }
         )

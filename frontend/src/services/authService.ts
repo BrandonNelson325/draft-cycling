@@ -3,11 +3,12 @@ import type { AuthResponse, Athlete } from '../types/shared';
 import { useAuthStore } from '../stores/useAuthStore';
 
 export const authService = {
-  async register(email: string, password: string, full_name?: string) {
+  async register(email: string, password: string, full_name?: string, timezone?: string) {
     const { data, error } = await api.post<AuthResponse>('/api/auth/register', {
       email,
       password,
       full_name,
+      timezone,
     });
 
     if (error) {
@@ -65,7 +66,7 @@ export const authService = {
     return data;
   },
 
-  async updateProfile(updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial'; display_mode?: 'simple' | 'advanced' }) {
+  async updateProfile(updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial'; display_mode?: 'simple' | 'advanced'; timezone?: string }) {
     const { data, error } = await api.put<Athlete>('/api/auth/me', updates, true);
 
     if (error) {

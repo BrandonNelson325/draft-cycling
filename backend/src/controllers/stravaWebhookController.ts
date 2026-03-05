@@ -7,6 +7,7 @@ import { ftpEstimationService } from '../services/ftpEstimationService';
 import { trainingLoadService } from '../services/trainingLoadService';
 import { calculateTSS } from '../services/trainingCalculations';
 import { sendRideCompletedNotification } from '../services/pushNotificationService';
+import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
 
@@ -163,6 +164,9 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
       logger.debug(`Updating training status for athlete: ${athleteId}`);
       await trainingLoadService.getTrainingStatus(athleteId);
     }
+
+    // Invalidate cached suggestion so dashboard shows post-ride state
+    clearSuggestionCache(athleteId);
 
     // Send push notification
     await sendRideCompletedNotification(athleteId).catch((err) =>

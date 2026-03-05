@@ -1,9 +1,17 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authService } from '../../services/authService';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { getConversionUtils, convertToMetric } from '../../utils/units';
+
+const ALL_TIMEZONES: string[] = (() => {
+  try {
+    return Intl.supportedValuesOf('timeZone');
+  } catch {
+    return ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'];
+  }
+})();
 
 export function ProfileEditForm() {
   const user = useAuthStore((state) => state.user);
@@ -20,8 +28,18 @@ export function ProfileEditForm() {
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(
     user?.display_mode || 'advanced'
   );
+  const [timezone, setTimezone] = useState(
+    user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
+  );
+  const [tzSearch, setTzSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return ALL_TIMEZONES;
+    const q = tzSearch.toLowerCase();
+    return ALL_TIMEZONES.filter(tz => tz.toLowerCase().includes(q));
+  }, [tzSearch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,6 +73,10 @@ export function ProfileEditForm() {
 
       if (displayMode !== user?.display_mode) {
         updates.display_mode = displayMode;
+      }
+
+      if (timezone !== user?.timezone) {
+        (updates as any).timezone = timezone;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -174,6 +196,29 @@ export function ProfileEditForm() {
             <span className="text-sm">Advanced — full details</span>
           </label>
         </div>
+      </div>
+
+      <div>
+        <label htmlFor="timezone" className="block text-sm font-medium mb-2">
+          Timezone
+        </label>
+        <Input
+          type="text"
+          placeholder="Search timezones..."
+          value={tzSearch}
+          onChange={(e) => setTzSearch(e.target.value)}
+          className="mb-1"
+        />
+        <select
+          id="timezone"
+          value={timezone}
+          onChange={(e) => setTimezone(e.target.value)}
+          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          {filteredTimezones.map(tz => (
+            <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+          ))}
+        </select>
       </div>
 
       {message && (

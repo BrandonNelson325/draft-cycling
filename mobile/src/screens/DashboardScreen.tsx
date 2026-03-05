@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import type { StravaActivity } from '../services/calendarService';
 
@@ -17,6 +18,21 @@ const SNAP_POINTS = ['60%', '85%'];
 export default function DashboardScreen() {
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
   const activitySheetRef = useRef<BottomSheet>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Refresh when screen comes into focus (tab switch or app foreground)
+  useFocusEffect(
+    useCallback(() => {
+      const sub = AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
+          setRefreshKey((k) => k + 1);
+        }
+      });
+      // Also refresh on tab focus
+      setRefreshKey((k) => k + 1);
+      return () => sub.remove();
+    }, [])
+  );
 
   const handleActivityPress = useCallback((activity: StravaActivity) => {
     setSelectedActivity(activity);
@@ -30,12 +46,12 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
       >
-        <CoachCard />
+        <CoachCard key={`coach-${refreshKey}`} />
         <MetricsCard />
         <WeeklyVolumeChart />
         <PowerCurveChart />
         <FTPEstimateCard />
-        <RecentActivities onActivityPress={handleActivityPress} />
+        <RecentActivities key={`activities-${refreshKey}`} onActivityPress={handleActivityPress} />
         <View style={styles.bottomPad} />
       </ScrollView>
 

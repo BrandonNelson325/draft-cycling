@@ -3,11 +3,12 @@ import { useAuthStore } from '../stores/useAuthStore';
 import type { AuthResponse, Athlete } from '../types/shared';
 
 export const authService = {
-  async register(email: string, password: string, full_name?: string) {
+  async register(email: string, password: string, full_name?: string, timezone?: string) {
     const { data } = await apiClient.post<AuthResponse>('/api/auth/register', {
       email,
       password,
       full_name,
+      timezone,
     });
 
     if (!data?.session) {

@@ -2,22 +2,6 @@ import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
 
 /**
- * Returns true if the current UTC time falls within the quiet hours window.
- * Handles wrap-around midnight (e.g. 22:00 → 07:00).
- */
-function isInQuietHours(start: string, end: string): boolean {
-  const now = new Date();
-  const [sh, sm] = start.split(':').map(Number);
-  const [eh, em] = end.split(':').map(Number);
-  const nowMins = now.getUTCHours() * 60 + now.getUTCMinutes();
-  const startMins = sh * 60 + sm;
-  const endMins = eh * 60 + em;
-  // Handles wrap-around (e.g. 22:00 → 07:00)
-  if (startMins > endMins) return nowMins >= startMins || nowMins < endMins;
-  return nowMins >= startMins && nowMins < endMins;
-}
-
-/**
  * Send a push notification via the Expo Push Notification API.
  */
 export async function sendPushNotification(
@@ -63,7 +47,7 @@ export async function sendPushNotification(
 export async function sendRideCompletedNotification(athleteId: string): Promise<void> {
   const { data: athlete, error } = await supabaseAdmin
     .from('athletes')
-    .select('push_token, push_notifications_enabled, push_quiet_hours_start, push_quiet_hours_end')
+    .select('push_token, push_notifications_enabled')
     .eq('id', athleteId)
     .single();
 
@@ -73,14 +57,6 @@ export async function sendRideCompletedNotification(athleteId: string): Promise<
   }
 
   if (!athlete.push_notifications_enabled || !athlete.push_token) return;
-
-  const quietStart = athlete.push_quiet_hours_start ?? '22:00:00';
-  const quietEnd = athlete.push_quiet_hours_end ?? '07:00:00';
-
-  if (isInQuietHours(quietStart, quietEnd)) {
-    logger.debug(`[Push] Quiet hours active — skipping ride notification for ${athleteId}`);
-    return;
-  }
 
   await sendPushNotification(
     athlete.push_token,

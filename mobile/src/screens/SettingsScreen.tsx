@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,8 @@ import {
   Alert,
   ActivityIndicator,
   Switch,
+  Modal,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +22,14 @@ import { getConversionUtils, convertToMetric } from '../utils/units';
 import WelcomeModal from '../components/modals/WelcomeModal';
 
 WebBrowser.maybeCompleteAuthSession();
+
+const ALL_TIMEZONES: string[] = (() => {
+  try {
+    return (Intl as any).supportedValuesOf('timeZone');
+  } catch {
+    return ['America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Anchorage', 'Pacific/Honolulu', 'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Asia/Tokyo', 'Asia/Shanghai', 'Australia/Sydney'];
+  }
+})();
 
 export default function SettingsScreen({ navigation }: any) {
   const { user, logout } = useAuthStore();
@@ -36,7 +46,18 @@ export default function SettingsScreen({ navigation }: any) {
     return val.toFixed(1);
   });
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(user?.display_mode || 'advanced');
+  const [timezone, setTimezone] = useState(
+    user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
+  );
+  const [tzPickerVisible, setTzPickerVisible] = useState(false);
+  const [tzSearch, setTzSearch] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const filteredTimezones = useMemo(() => {
+    if (!tzSearch) return ALL_TIMEZONES;
+    const q = tzSearch.toLowerCase();
+    return ALL_TIMEZONES.filter(tz => tz.toLowerCase().includes(q));
+  }, [tzSearch]);
 
   // Notifications state
   const [pushEnabled, setPushEnabled] = useState(user?.push_notifications_enabled ?? false);
@@ -64,6 +85,7 @@ export default function SettingsScreen({ navigation }: any) {
         weight_kg: weightMetric ? Math.round(weightMetric * 10) / 10 : undefined,
         unit_system: unitSystem,
         display_mode: displayMode,
+        timezone,
       });
       Alert.alert('Saved', 'Profile updated successfully.');
     } catch {
@@ -261,6 +283,14 @@ export default function SettingsScreen({ navigation }: any) {
             ))}
           </View>
 
+          <Label>Timezone</Label>
+          <TouchableOpacity
+            style={styles.input}
+            onPress={() => setTzPickerVisible(true)}
+          >
+            <Text style={{ color: '#f1f5f9', fontSize: 15 }}>{timezone.replace(/_/g, ' ')}</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={[styles.btn, saving && styles.btnDisabled]}
             onPress={handleSaveProfile}
@@ -395,6 +425,40 @@ export default function SettingsScreen({ navigation }: any) {
 
         <View style={{ height: 32 }} />
       </ScrollView>
+
+      <Modal visible={tzPickerVisible} animationType="slide" presentationStyle="pageSheet">
+        <View style={{ flex: 1, backgroundColor: '#0f172a' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#334155' }}>
+            <Text style={{ color: '#f1f5f9', fontSize: 18, fontWeight: '600' }}>Select Timezone</Text>
+            <TouchableOpacity onPress={() => { setTzPickerVisible(false); setTzSearch(''); }}>
+              <Text style={{ color: '#60a5fa', fontSize: 16 }}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <TextInput
+            style={[styles.input, { margin: 16, marginBottom: 8 }]}
+            value={tzSearch}
+            onChangeText={setTzSearch}
+            placeholder="Search timezones..."
+            placeholderTextColor="#64748b"
+            autoFocus
+          />
+          <FlatList
+            data={filteredTimezones}
+            keyExtractor={(item) => item}
+            keyboardShouldPersistTaps="handled"
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={{ padding: 14, paddingHorizontal: 16, backgroundColor: item === timezone ? '#1e3a5f' : 'transparent' }}
+                onPress={() => { setTimezone(item); setTzPickerVisible(false); setTzSearch(''); }}
+              >
+                <Text style={{ color: item === timezone ? '#60a5fa' : '#f1f5f9', fontSize: 15 }}>
+                  {item.replace(/_/g, ' ')}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      </Modal>
 
       <WelcomeModal
         visible={showGuide}
