@@ -6,6 +6,7 @@ import { powerAnalysisService } from '../services/powerAnalysisService';
 import { ftpEstimationService } from '../services/ftpEstimationService';
 import { trainingLoadService } from '../services/trainingLoadService';
 import { calculateTSS } from '../services/trainingCalculations';
+import { sendRideCompletedNotification } from '../services/pushNotificationService';
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
 
@@ -162,6 +163,11 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
       logger.debug(`Updating training status for athlete: ${athleteId}`);
       await trainingLoadService.getTrainingStatus(athleteId);
     }
+
+    // Send push notification
+    await sendRideCompletedNotification(athleteId).catch((err) =>
+      logger.warn('Push notification failed:', err)
+    );
 
     logger.debug(`✅ Successfully processed new activity: ${stravaActivityId}`);
   } catch (error) {
