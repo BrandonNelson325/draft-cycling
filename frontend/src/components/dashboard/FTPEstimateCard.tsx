@@ -123,7 +123,7 @@ export function FTPEstimateCard() {
         <div className="space-y-4">
           {(() => {
             const ftpMatches = Number(user?.ftp) === Number(estimate.estimated_ftp);
-            const displayFtp = ftpMatches ? user.ftp : estimate.estimated_ftp;
+            const displayFtp = ftpMatches ? user?.ftp : estimate.estimated_ftp;
             return (
               <>
                 <div className="text-center">

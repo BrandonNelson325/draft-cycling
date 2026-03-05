@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
-import { Loader2, MessageCircle } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
 import { ChatThread } from '../components/chat/ChatThread';
 import { ChatInput } from '../components/chat/ChatInput';
