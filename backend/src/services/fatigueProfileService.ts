@@ -54,7 +54,7 @@ function computeRampRate(activities: any[]): RampRate | null {
   // Group by ISO week
   const weeklyTSS = new Map<string, number>();
   for (const a of activities) {
-    const date = new Date(a.start_date_local || a.start_date);
+    const date = new Date(a.start_date);
     const weekKey = getISOWeekKey(date);
     weeklyTSS.set(weekKey, (weeklyTSS.get(weekKey) || 0) + (a.tss || 0));
   }
@@ -104,7 +104,7 @@ function computeVolumeProfile(activities: any[]): VolumeProfile | null {
   sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
 
   const recentActivities = activities.filter((a) => {
-    const date = new Date(a.start_date_local || a.start_date);
+    const date = new Date(a.start_date);
     return date >= sixWeeksAgo;
   });
 
@@ -116,7 +116,7 @@ function computeVolumeProfile(activities: any[]): VolumeProfile | null {
   let totalTSS = 0;
 
   for (const a of recentActivities) {
-    const dateStr = (a.start_date_local || a.start_date).split('T')[0];
+    const dateStr = (a.start_date).split('T')[0];
     rideDays.add(dateStr);
     totalHours += (a.moving_time_seconds || 0) / 3600;
     totalTSS += a.tss || 0;
@@ -151,7 +151,7 @@ function computeHardEasyPattern(activities: any[], ftp: number | null): HardEasy
   const dayMap = new Map<string, { tss: number; avgWatts: number }>();
 
   for (const a of activities) {
-    const dateStr = (a.start_date_local || a.start_date).split('T')[0];
+    const dateStr = (a.start_date).split('T')[0];
     const date = new Date(dateStr + 'T12:00:00');
     const daysAgo = Math.round((today.getTime() - date.getTime()) / 86400000);
     if (daysAgo < 0 || daysAgo > 13) continue;
@@ -237,7 +237,7 @@ export const fatigueProfileService = {
         supabaseAdmin.from('athletes').select('ftp').eq('id', athleteId).single(),
         supabaseAdmin
           .from('strava_activities')
-          .select('start_date, start_date_local, moving_time_seconds, average_watts, tss')
+          .select('start_date, moving_time_seconds, average_watts, tss')
           .eq('athlete_id', athleteId)
           .gte('start_date', eightWeeksAgo.toISOString())
           .order('start_date', { ascending: true }),

@@ -825,7 +825,7 @@ export const aiToolExecutor = {
 
     const { data: activities, error } = await supabaseAdmin
       .from('strava_activities')
-      .select('id, strava_activity_id, name, start_date, start_date_local, distance_meters, moving_time_seconds, average_watts, tss, perceived_effort, post_activity_notes, raw_data')
+      .select('id, strava_activity_id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, perceived_effort, post_activity_notes, raw_data')
       .eq('athlete_id', athleteId)
       .gte('start_date', cutoff.toISOString())
       .order('start_date', { ascending: false })
@@ -841,7 +841,7 @@ export const aiToolExecutor = {
         return {
           id: a.id,
           name: a.name,
-          date: a.start_date_local?.split('T')[0] || a.start_date?.split('T')[0],
+          date: a.start_date?.split('T')[0],
           distance_km: a.distance_meters ? +(a.distance_meters / 1000).toFixed(1) : null,
           duration_min: a.moving_time_seconds ? Math.round(a.moving_time_seconds / 60) : null,
           avg_watts: a.average_watts,
@@ -901,7 +901,7 @@ export const aiToolExecutor = {
     return {
       id: activity.id,
       name: activity.name,
-      date: activity.start_date_local?.split('T')[0] || activity.start_date?.split('T')[0],
+      date: activity.start_date?.split('T')[0],
       distance_km: activity.distance_meters ? +(activity.distance_meters / 1000).toFixed(1) : null,
       duration_min: activity.moving_time_seconds ? Math.round(activity.moving_time_seconds / 60) : null,
       elapsed_min: raw.elapsed_time ? Math.round(raw.elapsed_time / 60) : null,

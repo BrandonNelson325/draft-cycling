@@ -2,6 +2,7 @@ import { anthropic, MODEL } from '../utils/anthropic';
 import { supabaseAdmin } from '../utils/supabase';
 import { trainingLoadService } from './trainingLoadService';
 import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
+import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { logger } from '../utils/logger';
 
 interface DailyAnalysisResult {
@@ -69,24 +70,27 @@ export const dailyAnalysisService = {
       .eq('id', athleteId)
       .single();
     const tz = athleteRow?.timezone || 'America/Los_Angeles';
-    const todayStr = this.todayInTimezone(tz);
+    const todayStr = todayInTimezone(tz);
     const yesterdayDate = new Date(todayStr + 'T12:00:00');
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
-    // Get yesterday's activities using local date to avoid UTC offset mismatches
+    // Convert local day boundaries to UTC for TIMESTAMPTZ queries
+    const yesterdayUTC = localDayToUTCRange(yesterdayStr, tz);
+
+    // Get yesterday's activities
     const { data: yesterdayActivities } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', athleteId)
-      .gte('start_date_local', yesterdayStr + 'T00:00:00')
-      .lte('start_date_local', yesterdayStr + 'T23:59:59')
-      .order('start_date_local', { ascending: false });
+      .gte('start_date', yesterdayUTC.start)
+      .lte('start_date', yesterdayUTC.end)
+      .order('start_date', { ascending: false });
 
     // Get current training status
     const trainingStatus = await trainingLoadService.getTrainingStatus(athleteId);
 
-    // Get today's scheduled workout (use athlete's local date)
+    // Get today's scheduled workout (calendar_entries.scheduled_date is a plain DATE, use local date)
     const { data: todayEntry } = await supabaseAdmin
       .from('calendar_entries')
       .select('*, workouts(*)')
@@ -98,12 +102,13 @@ export const dailyAnalysisService = {
     // Get last 7 days for pattern analysis
     const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoUTC = localDayToUTCRange(sevenDaysAgo.toISOString().split('T')[0], tz);
 
     const { data: recentActivities } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', athleteId)
-      .gte('start_date', sevenDaysAgo.toISOString())
+      .gte('start_date', sevenDaysAgoUTC.start)
       .order('start_date', { ascending: false });
 
     // Build context for AI
@@ -289,7 +294,7 @@ Format as JSON:
     if (!athlete?.last_daily_analysis_viewed) return false;
 
     const tz = athlete.timezone || 'America/Los_Angeles';
-    const todayStr = this.todayInTimezone(tz);
+    const todayStr = todayInTimezone(tz);
     const viewedStr = new Intl.DateTimeFormat('en-CA', { timeZone: tz })
       .format(new Date(athlete.last_daily_analysis_viewed));
 
@@ -309,13 +314,6 @@ Format as JSON:
   },
 
   /**
-   * Get today's date string in the athlete's timezone
-   */
-  todayInTimezone(tz: string): string {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
-  },
-
-  /**
    * Check if athlete has ridden today (timezone-aware)
    */
   async hasRiddenToday(athleteId: string): Promise<boolean> {
@@ -326,14 +324,15 @@ Format as JSON:
       .single();
 
     const tz = athlete?.timezone || 'America/Los_Angeles';
-    const todayStr = this.todayInTimezone(tz);
+    const todayStr = todayInTimezone(tz);
+    const todayUTC = localDayToUTCRange(todayStr, tz);
 
     const { data: todayActivities } = await supabaseAdmin
       .from('strava_activities')
       .select('id')
       .eq('athlete_id', athleteId)
-      .gte('start_date_local', todayStr + 'T00:00:00')
-      .lte('start_date_local', todayStr + 'T23:59:59')
+      .gte('start_date', todayUTC.start)
+      .lte('start_date', todayUTC.end)
       .limit(1);
 
     return (todayActivities?.length ?? 0) > 0;
@@ -351,7 +350,7 @@ Format as JSON:
       .single();
 
     const tz = athlete?.timezone || 'America/Los_Angeles';
-    const todayStr = this.todayInTimezone(tz);
+    const todayStr = todayInTimezone(tz);
 
     // Check if athlete has ridden today
     const riddenToday = await this.hasRiddenToday(athleteId);
@@ -365,7 +364,7 @@ Format as JSON:
       return cached;
     }
 
-    // Fetch context data in parallel
+    // Compute local day boundaries in UTC for TIMESTAMPTZ queries
     const yesterdayDate = new Date(todayStr + 'T12:00:00');
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
@@ -377,15 +376,19 @@ Format as JSON:
     const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
+    const yesterdayUTC = localDayToUTCRange(yesterdayStr, tz);
+    const todayUTC = localDayToUTCRange(todayStr, tz);
+    const sevenDaysAgoUTC = localDayToUTCRange(sevenDaysAgo.toISOString().split('T')[0], tz);
+
     const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile] = await Promise.all([
       trainingLoadService.getTrainingStatus(athleteId),
       supabaseAdmin
         .from('strava_activities')
         .select('*')
         .eq('athlete_id', athleteId)
-        .gte('start_date_local', yesterdayStr + 'T00:00:00')
-        .lte('start_date_local', yesterdayStr + 'T23:59:59')
-        .order('start_date_local', { ascending: false }),
+        .gte('start_date', yesterdayUTC.start)
+        .lte('start_date', yesterdayUTC.end)
+        .order('start_date', { ascending: false }),
       supabaseAdmin
         .from('calendar_entries')
         .select('*, workouts(*)')
@@ -404,14 +407,14 @@ Format as JSON:
         .from('strava_activities')
         .select('*')
         .eq('athlete_id', athleteId)
-        .gte('start_date_local', todayStr + 'T00:00:00')
-        .lte('start_date_local', todayStr + 'T23:59:59')
-        .order('start_date_local', { ascending: false }),
+        .gte('start_date', todayUTC.start)
+        .lte('start_date', todayUTC.end)
+        .order('start_date', { ascending: false }),
       supabaseAdmin
         .from('strava_activities')
         .select('*')
         .eq('athlete_id', athleteId)
-        .gte('start_date', sevenDaysAgo.toISOString())
+        .gte('start_date', sevenDaysAgoUTC.start)
         .order('start_date', { ascending: false }),
       fatigueProfileService.getFatigueProfile(athleteId),
     ]);

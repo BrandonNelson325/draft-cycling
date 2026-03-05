@@ -1,13 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { calendarService } from './calendarService';
-
-function todayInTimezone(tz: string): string {
-  try {
-    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date());
-  } catch {
-    return new Date().toISOString().split('T')[0];
-  }
-}
+import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 
 async function getAthleteTz(athleteId: string): Promise<string> {
   const { data } = await supabaseAdmin
@@ -109,26 +102,27 @@ export const dailyReadinessService = {
     const todayStr = todayInTimezone(tz);
     const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+    const sevenDaysAgoUTC = localDayToUTCRange(sevenDaysAgo.toISOString().split('T')[0], tz);
 
     // Get strava activities from last 7 days
     const { data: activities } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', athleteId)
-      .gte('start_date_local', sevenDaysAgoStr)
-      .order('start_date_local', { ascending: false });
+      .gte('start_date', sevenDaysAgoUTC.start)
+      .order('start_date', { ascending: false });
 
     const rides = activities || [];
     const totalTSS = rides.reduce((sum, ride) => sum + (ride.tss || 0), 0);
 
-    // Get yesterday's workout
+    // Get yesterday's workout — check if ride's UTC timestamp falls within yesterday's local day
     const yesterday = new Date(todayStr + 'T12:00:00');
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayStr = yesterday.toISOString().split('T')[0];
+    const yesterdayUTC = localDayToUTCRange(yesterdayStr, tz);
 
     const yesterdayRide = rides.find(
-      (r) => r.start_date_local?.startsWith(yesterdayStr)
+      (r) => r.start_date >= yesterdayUTC.start && r.start_date <= yesterdayUTC.end
     );
 
     // Get most recent ride
@@ -145,7 +139,7 @@ export const dailyReadinessService = {
             average_watts: yesterdayRide.average_watts,
           }
         : null,
-      lastRideDate: lastRide ? lastRide.start_date_local.split('T')[0] : null,
+      lastRideDate: lastRide ? lastRide.start_date.split('T')[0] : null,
       lastRideTSS: lastRide ? lastRide.tss : null,
     };
   },

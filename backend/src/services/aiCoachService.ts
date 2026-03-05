@@ -87,7 +87,7 @@ export const aiCoachService = {
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
         .from('strava_activities')
-        .select('id, name, start_date, start_date_local, distance_meters, moving_time_seconds, average_watts, tss, raw_data, perceived_effort, post_activity_notes')
+        .select('id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data, perceived_effort, post_activity_notes')
         .eq('athlete_id', athleteId)
         .gte('start_date', twoWeeksAgo.toISOString())
         .order('start_date', { ascending: false })
@@ -305,10 +305,7 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 `;
       const todayMidnight = new Date(isoDate + 'T00:00:00');
       recentRides.slice(0, 10).forEach((ride, i) => {
-        // Use start_date_local if available, else fall back to start_date
-        const rideDate = ride.start_date_local
-          ? ride.start_date_local.split('T')[0]
-          : new Date(ride.start_date).toISOString().split('T')[0];
+        const rideDate = new Date(ride.start_date).toISOString().split('T')[0];
         const rideMidnight = new Date(rideDate + 'T00:00:00');
         const diffDays = Math.round((todayMidnight.getTime() - rideMidnight.getTime()) / (1000 * 60 * 60 * 24));
         const relativeLabel =

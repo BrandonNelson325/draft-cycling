@@ -114,7 +114,6 @@ export const stravaService = {
         strava_activity_id: activity.id,
         name: activity.name,
         start_date: activity.start_date,
-        start_date_local: activity.start_date_local || activity.start_date,
         distance_meters: Math.round(activity.distance),
         moving_time_seconds: activity.moving_time,
         average_watts: activity.average_watts || null,
