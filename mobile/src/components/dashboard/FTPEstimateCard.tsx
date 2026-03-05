@@ -14,10 +14,13 @@ export default function FTPEstimateCard() {
   const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
-    ftpService.getEstimate().then(e => {
-      setEstimate(e);
-      setLoading(false);
-    }).catch(() => setLoading(false));
+    // Refresh user profile first to get current FTP (may have been auto-updated by backend)
+    authService.getProfile().catch(() => {}).then(() =>
+      ftpService.getEstimate().then(e => {
+        setEstimate(e);
+        setLoading(false);
+      }).catch(() => setLoading(false))
+    );
   }, []);
 
   const handleAccept = async () => {
@@ -46,7 +49,7 @@ export default function FTPEstimateCard() {
 
   const currentFtp = user?.ftp;
   const weightKg = user?.weight_kg;
-  const ftpMatches = currentFtp === estimate.estimated_ftp;
+  const ftpMatches = Number(currentFtp) === Number(estimate.estimated_ftp);
   const displayFtp = ftpMatches ? currentFtp : estimate.estimated_ftp;
   const wPerKg = currentFtp && weightKg ? (currentFtp / weightKg).toFixed(2) : null;
 

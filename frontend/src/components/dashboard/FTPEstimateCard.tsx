@@ -24,8 +24,10 @@ export function FTPEstimateCard() {
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchEstimate = async () => {
+    const fetchData = async () => {
       try {
+        // Refresh user profile to get current FTP (may have been auto-updated by backend)
+        await authService.getProfile();
         const data = await ftpService.getEstimate();
         setEstimate(data || null);
       } catch (err) {
@@ -35,7 +37,7 @@ export function FTPEstimateCard() {
       }
     };
 
-    fetchEstimate();
+    fetchData();
   }, []);
 
   const handleAcceptEstimate = async () => {
@@ -120,7 +122,7 @@ export function FTPEstimateCard() {
       <CardContent>
         <div className="space-y-4">
           {(() => {
-            const ftpMatches = user?.ftp === estimate.estimated_ftp;
+            const ftpMatches = Number(user?.ftp) === Number(estimate.estimated_ftp);
             const displayFtp = ftpMatches ? user.ftp : estimate.estimated_ftp;
             return (
               <>
