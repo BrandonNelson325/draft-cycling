@@ -22,6 +22,14 @@ const TYPE_TEXT: Record<string, string> = {
   Run: '#4ade80',
 };
 
+const RPE_DISPLAY: Record<number, { emoji: string; label: string }> = {
+  1: { emoji: '😴', label: 'Very Easy' },
+  2: { emoji: '🙂', label: 'Easy' },
+  3: { emoji: '😤', label: 'Moderate' },
+  4: { emoji: '💪', label: 'Hard' },
+  5: { emoji: '🔥', label: 'Max' },
+};
+
 export default function ActivityDetailSheet({ activity }: ActivityDetailSheetProps) {
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
@@ -114,6 +122,23 @@ export default function ActivityDetailSheet({ activity }: ActivityDetailSheetPro
           ))}
         </View>
       )}
+
+      {activity.perceived_effort && RPE_DISPLAY[activity.perceived_effort] && (
+        <View style={styles.rpeSection}>
+          <Text style={styles.rpeEmoji}>{RPE_DISPLAY[activity.perceived_effort].emoji}</Text>
+          <View>
+            <Text style={styles.rpeLabel}>Perceived Effort</Text>
+            <Text style={styles.rpeValue}>{RPE_DISPLAY[activity.perceived_effort].label}</Text>
+          </View>
+        </View>
+      )}
+
+      {activity.post_activity_notes ? (
+        <View style={styles.notesSection}>
+          <Text style={styles.notesLabel}>Notes</Text>
+          <Text style={styles.notesText}>{activity.post_activity_notes}</Text>
+        </View>
+      ) : null}
     </BottomSheetScrollView>
   );
 }
@@ -164,4 +189,25 @@ const styles = StyleSheet.create({
   },
   secondaryValue: { fontSize: 16, fontWeight: '600', color: '#f1f5f9' },
   secondaryLabel: { fontSize: 11, color: '#64748b' },
+  rpeSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 16,
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 12,
+  },
+  rpeEmoji: { fontSize: 28 },
+  rpeLabel: { fontSize: 11, color: '#64748b' },
+  rpeValue: { fontSize: 15, fontWeight: '600', color: '#f1f5f9' },
+  notesSection: {
+    marginTop: 12,
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 12,
+    gap: 4,
+  },
+  notesLabel: { fontSize: 11, color: '#64748b' },
+  notesText: { fontSize: 14, color: '#f1f5f9', lineHeight: 20 },
 });

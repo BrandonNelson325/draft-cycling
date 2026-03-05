@@ -5,6 +5,8 @@ import type { CalendarEntry, StravaActivity } from '../../services/calendarServi
 import { DraggableWorkoutItem } from './DraggableWorkoutItem';
 import { Activity } from 'lucide-react';
 
+const RPE_EMOJI: Record<number, string> = { 1: '😴', 2: '🙂', 3: '😤', 4: '💪', 5: '🔥' };
+
 interface DroppableCalendarDayProps {
   date: Date;
   isCurrentMonth: boolean;
@@ -125,6 +127,7 @@ export function DroppableCalendarDay({
                     {Math.round(activity.moving_time_seconds / 60)}min
                     {activity.average_watts && ` • ${activity.average_watts}W`}
                     {activity.tss && ` • ${Math.round(activity.tss)} TSS`}
+                    {activity.perceived_effort && ` • ${RPE_EMOJI[activity.perceived_effort]}`}
                   </div>
                 </div>
               </div>

@@ -24,9 +24,9 @@ interface PostRideModalProps {
 const RPE_EMOJIS = [
   { value: 1, emoji: '😴', label: 'Very Easy' },
   { value: 2, emoji: '🙂', label: 'Easy' },
-  { value: 3, emoji: '😊', label: 'Moderate' },
-  { value: 4, emoji: '😤', label: 'Hard' },
-  { value: 5, emoji: '😵', label: 'Max' },
+  { value: 3, emoji: '😤', label: 'Moderate' },
+  { value: 4, emoji: '💪', label: 'Hard' },
+  { value: 5, emoji: '🔥', label: 'Max' },
 ];
 
 export default function PostRideModal({ activity, onAcknowledge, onSkip }: PostRideModalProps) {

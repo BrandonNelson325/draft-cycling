@@ -288,6 +288,7 @@ export default function CalendarScreen() {
                         activity.distance_meters ? `${units.formatDistance(activity.distance_meters)} ${units.distanceUnitShort}` : null,
                         activity.moving_time_seconds ? `${Math.round(activity.moving_time_seconds / 60)}min` : null,
                         activity.average_watts ? `${Math.round(activity.average_watts)}w avg` : null,
+                        activity.perceived_effort ? ({ 1: '😴', 2: '🙂', 3: '😤', 4: '💪', 5: '🔥' } as Record<number, string>)[activity.perceived_effort] : null,
                       ].filter(Boolean).join(' · ')}
                     </Text>
                   </View>

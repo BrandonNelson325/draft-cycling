@@ -35,6 +35,8 @@ export interface StravaActivity {
   tss?: number;
   intensity_factor?: number;
   type: string;
+  perceived_effort?: number;
+  post_activity_notes?: string;
 }
 
 export interface CalendarData {
