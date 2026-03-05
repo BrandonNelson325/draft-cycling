@@ -38,6 +38,8 @@ export interface TodaySuggestion {
     suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
     status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
     currentTSB: number;
+    tomorrowsWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    todaysRides: { name: string; duration: number; tss: number }[];
   } | null;
 }
 
@@ -336,7 +338,12 @@ Format as JSON:
 
     const tz = athlete?.timezone || 'America/Los_Angeles';
     const todayStr = this.todayInTimezone(tz);
-    const cacheKey = `${athleteId}:${todayStr}`;
+
+    // Check if athlete has ridden today
+    const riddenToday = await this.hasRiddenToday(athleteId);
+
+    // Use different cache key for pre-ride vs post-ride
+    const cacheKey = `${athleteId}:${todayStr}:${riddenToday ? 'post' : 'pre'}`;
 
     // Check cache
     const cached = suggestionCache.get(cacheKey);
@@ -349,10 +356,14 @@ Format as JSON:
     yesterdayDate.setDate(yesterdayDate.getDate() - 1);
     const yesterdayStr = yesterdayDate.toISOString().split('T')[0];
 
+    const tomorrowDate = new Date(todayStr + 'T12:00:00');
+    tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+    const tomorrowStr = tomorrowDate.toISOString().split('T')[0];
+
     const sevenDaysAgo = new Date(todayStr + 'T12:00:00');
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
-    const [trainingStatus, yesterdayResult, todayEntry, recentResult, fatigueProfile] = await Promise.all([
+    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile] = await Promise.all([
       trainingLoadService.getTrainingStatus(athleteId),
       supabaseAdmin
         .from('strava_activities')
@@ -369,6 +380,20 @@ Format as JSON:
         .eq('completed', false)
         .single(),
       supabaseAdmin
+        .from('calendar_entries')
+        .select('*, workouts(*)')
+        .eq('athlete_id', athleteId)
+        .eq('scheduled_date', tomorrowStr)
+        .eq('completed', false)
+        .single(),
+      supabaseAdmin
+        .from('strava_activities')
+        .select('*')
+        .eq('athlete_id', athleteId)
+        .gte('start_date_local', todayStr + 'T00:00:00')
+        .lte('start_date_local', todayStr + 'T23:59:59')
+        .order('start_date_local', { ascending: false }),
+      supabaseAdmin
         .from('strava_activities')
         .select('*')
         .eq('athlete_id', athleteId)
@@ -379,20 +404,33 @@ Format as JSON:
 
     const yesterdayActivities = yesterdayResult.data || [];
     const recentActivities = recentResult.data || [];
+    const todayActivities = todayRidesResult.data || [];
     const hasPlannedWorkout = !!todayEntry.data?.workouts;
+    const hasTomorrowWorkout = !!tomorrowEntry.data?.workouts;
 
-    // Build AI context
-    const context = this.buildSuggestionContext(
-      yesterdayActivities,
-      trainingStatus,
-      todayEntry.data,
-      recentActivities,
-      hasPlannedWorkout,
-      fatigueProfile
-    );
+    // Build AI context — use post-ride prompt if ridden today
+    let context: string;
+    if (riddenToday) {
+      context = this.buildPostRideContext(
+        todayActivities,
+        trainingStatus,
+        tomorrowEntry.data,
+        recentActivities,
+        fatigueProfile
+      );
+    } else {
+      context = this.buildSuggestionContext(
+        yesterdayActivities,
+        trainingStatus,
+        todayEntry.data,
+        recentActivities,
+        hasPlannedWorkout,
+        fatigueProfile
+      );
+    }
 
     // Get AI suggestion
-    const aiResult = await this.getSuggestionAIAnalysis(context, hasPlannedWorkout);
+    const aiResult = await this.getSuggestionAIAnalysis(context, riddenToday ? true : hasPlannedWorkout);
 
     // Determine status
     const tsb = trainingStatus?.tsb || 0;
@@ -402,8 +440,23 @@ Format as JSON:
     else if (tsb > -20) status = 'slightly-tired';
     else status = 'fatigued';
 
+    const todaysRides = todayActivities.map((a: any) => ({
+      name: a.name || 'Ride',
+      duration: Math.round(a.moving_time_seconds / 60),
+      tss: a.tss || 0,
+    }));
+
+    const tomorrowsWorkout = hasTomorrowWorkout
+      ? {
+          name: tomorrowEntry.data.workouts.name,
+          type: tomorrowEntry.data.workouts.workout_type,
+          duration: tomorrowEntry.data.workouts.duration_minutes,
+          tss: tomorrowEntry.data.workouts.tss,
+        }
+      : null;
+
     const result: TodaySuggestion = {
-      hasRiddenToday: false,
+      hasRiddenToday: riddenToday,
       suggestion: {
         summary: aiResult.summary,
         recommendation: aiResult.recommendation,
@@ -419,6 +472,8 @@ Format as JSON:
         suggestedWorkout: aiResult.suggestedWorkout || null,
         status,
         currentTSB: tsb,
+        tomorrowsWorkout,
+        todaysRides,
       },
     };
 
@@ -507,6 +562,62 @@ Format as JSON:
     "duration": 60,
     "description": "1 sentence description"
   }
+}`;
+  },
+
+  /**
+   * Build context for post-ride summary + tomorrow preview
+   */
+  buildPostRideContext(
+    todayActivities: any[],
+    trainingStatus: any,
+    tomorrowEntry: any,
+    recentActivities: any[],
+    fatigueProfile: FatigueProfile | null = null
+  ): string {
+    const todayTSS = todayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+    const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+    const hasTomorrow = !!tomorrowEntry?.workouts;
+
+    return `You are a cycling coach reviewing an athlete's completed training for today and previewing tomorrow.
+
+TODAY'S COMPLETED RIDES:
+${todayActivities
+  .map(
+    (a) =>
+      `- ${a.name}: ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS, ${a.average_watts || 0}W avg`
+  )
+  .join('\n')}
+Total TSS today: ${todayTSS}
+
+CURRENT FITNESS STATUS:
+- TSB (Form): ${trainingStatus?.tsb?.toFixed(1) ?? '0.0'}
+- CTL (Fitness): ${trainingStatus?.ctl?.toFixed(1) ?? '0.0'}
+- ATL (Fatigue): ${trainingStatus?.atl?.toFixed(1) ?? '0.0'}
+
+LAST 7 DAYS:
+- Total rides: ${recentActivities.length}
+- Total TSS: ${recentTotalTSS}
+- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}
+
+${fatigueProfileService.formatForPrompt(fatigueProfile)}
+
+TOMORROW'S SCHEDULED WORKOUT:
+${hasTomorrow
+  ? `- ${tomorrowEntry.workouts.name}
+- Type: ${tomorrowEntry.workouts.workout_type}
+- Duration: ${tomorrowEntry.workouts.duration_minutes} minutes
+- TSS: ${tomorrowEntry.workouts.tss}`
+  : '- No workout scheduled'}
+
+YOUR TASK:
+Summarize today's training effort, how it fits the overall plan, preview tomorrow's workout, and assess recovery outlook. Be direct, no filler.
+
+Format as JSON:
+{
+  "summary": "1 sentence: today's ride recap (e.g. 'Solid 75 TSS endurance ride, right on target for a recovery day.')",
+  "recommendation": "1 sentence: recovery outlook + tomorrow preview (e.g. 'Get good rest tonight — tomorrow's threshold intervals will need fresh legs.')",
+  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
   },
 

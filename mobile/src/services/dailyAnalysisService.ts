@@ -34,6 +34,8 @@ export interface TodaySuggestion {
     suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
     status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
     currentTSB: number;
+    tomorrowsWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    todaysRides: { name: string; duration: number; tss: number }[];
   } | null;
 }
 

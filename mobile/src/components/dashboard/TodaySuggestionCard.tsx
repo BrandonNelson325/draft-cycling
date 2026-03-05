@@ -3,7 +3,6 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import Card from '../ui/Card';
 import Badge from '../ui/Badge';
 import { dailyAnalysisService, TodaySuggestion } from '../../services/dailyAnalysisService';
@@ -28,35 +27,20 @@ export default function TodaySuggestionCard() {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [data, setData] = useState<TodaySuggestion | null>(null);
   const [loaded, setLoaded] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
 
   useEffect(() => {
-    const todayKey = `suggestion_dismissed_${new Date().toISOString().split('T')[0]}`;
-    AsyncStorage.getItem(todayKey).then((val) => {
-      if (val === 'true') {
-        setDismissed(true);
+    dailyAnalysisService
+      .getTodaySuggestion()
+      .then((result) => {
+        setData(result);
         setLoaded(true);
-        return;
-      }
-      dailyAnalysisService
-        .getTodaySuggestion()
-        .then((result) => {
-          setData(result);
-          setLoaded(true);
-        })
-        .catch(() => setLoaded(true));
-    });
+      })
+      .catch(() => setLoaded(true));
   }, []);
 
-  const handleDismiss = async () => {
-    const todayKey = `suggestion_dismissed_${new Date().toISOString().split('T')[0]}`;
-    await AsyncStorage.setItem(todayKey, 'true');
-    setDismissed(true);
-  };
+  if (!loaded || !data?.suggestion) return null;
 
-  if (!loaded || dismissed || !data?.suggestion) return null;
-
-  const { suggestion } = data;
+  const { suggestion, hasRiddenToday } = data;
   const statusInfo = STATUS_COLORS[suggestion.status] || STATUS_COLORS['well-recovered'];
   const actionInfo = ACTION_LABELS[suggestion.suggestedAction] || ACTION_LABELS['proceed-as-planned'];
 
@@ -76,18 +60,31 @@ export default function TodaySuggestionCard() {
           color={statusInfo.bg}
           textColor={statusInfo.text}
         />
-        <View style={styles.headerRight}>
-          <Text style={styles.tsb}>TSB {suggestion.currentTSB.toFixed(0)}</Text>
-          <TouchableOpacity onPress={handleDismiss} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Ionicons name="close" size={18} color="#64748b" />
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.tsb}>TSB {suggestion.currentTSB.toFixed(0)}</Text>
       </View>
 
-      <Text style={styles.title}>Today's Suggestion</Text>
+      <Text style={styles.title}>
+        {hasRiddenToday ? "Today's Recap" : "Today's Plan"}
+      </Text>
       <Text style={styles.summary}>{suggestion.summary}</Text>
 
-      {suggestion.todaysWorkout && (
+      {/* Today's completed rides (post-ride) */}
+      {hasRiddenToday && suggestion.todaysRides.length > 0 && (
+        <View style={[styles.workoutBox, styles.completedBox]}>
+          <Text style={[styles.workoutLabel, styles.completedLabel]}>Completed Today</Text>
+          {suggestion.todaysRides.map((ride, i) => (
+            <View key={i} style={styles.rideRow}>
+              <Text style={styles.workoutName}>{ride.name}</Text>
+              <Text style={styles.workoutMeta}>
+                {ride.duration}min · {ride.tss} TSS
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* Today's planned workout (pre-ride) */}
+      {!hasRiddenToday && suggestion.todaysWorkout && (
         <View style={styles.workoutBox}>
           <Text style={styles.workoutLabel}>Planned</Text>
           <Text style={styles.workoutName}>{suggestion.todaysWorkout.name}</Text>
@@ -97,7 +94,8 @@ export default function TodaySuggestionCard() {
         </View>
       )}
 
-      {suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
+      {/* Suggested workout (pre-ride, no plan) */}
+      {!hasRiddenToday && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
         <View style={[styles.workoutBox, styles.suggestedBox]}>
           <Text style={[styles.workoutLabel, styles.suggestedLabel]}>Suggested</Text>
           <Text style={styles.workoutName}>{suggestion.suggestedWorkout.name}</Text>
@@ -105,6 +103,17 @@ export default function TodaySuggestionCard() {
             {suggestion.suggestedWorkout.duration} min · {suggestion.suggestedWorkout.type}
           </Text>
           <Text style={styles.workoutDesc}>{suggestion.suggestedWorkout.description}</Text>
+        </View>
+      )}
+
+      {/* Tomorrow's workout preview (post-ride) */}
+      {hasRiddenToday && suggestion.tomorrowsWorkout && (
+        <View style={[styles.workoutBox, styles.tomorrowBox]}>
+          <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
+          <Text style={styles.workoutName}>{suggestion.tomorrowsWorkout.name}</Text>
+          <Text style={styles.workoutMeta}>
+            {suggestion.tomorrowsWorkout.duration} min · {suggestion.tomorrowsWorkout.type} · {suggestion.tomorrowsWorkout.tss} TSS
+          </Text>
         </View>
       )}
 
@@ -129,11 +138,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
   },
   tsb: {
     fontSize: 12,
@@ -160,8 +164,14 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: '#3b82f6',
   },
+  completedBox: {
+    borderLeftColor: '#34d399',
+  },
   suggestedBox: {
     borderLeftColor: '#a78bfa',
+  },
+  tomorrowBox: {
+    borderLeftColor: '#60a5fa',
   },
   workoutLabel: {
     fontSize: 11,
@@ -171,8 +181,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
+  completedLabel: {
+    color: '#34d399',
+  },
   suggestedLabel: {
     color: '#a78bfa',
+  },
+  tomorrowLabel: {
+    color: '#60a5fa',
+  },
+  rideRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 2,
   },
   workoutName: {
     fontSize: 15,

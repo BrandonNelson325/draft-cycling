@@ -24,6 +24,21 @@ export interface DailyAnalysis {
   suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more';
 }
 
+export interface TodaySuggestion {
+  hasRiddenToday: boolean;
+  suggestion: {
+    summary: string;
+    recommendation: string;
+    suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more' | 'suggested-workout';
+    todaysWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
+    status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
+    currentTSB: number;
+    tomorrowsWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    todaysRides: { name: string; duration: number; tss: number }[];
+  } | null;
+}
+
 export const dailyAnalysisService = {
   async getTodaysAnalysis(): Promise<DailyAnalysis> {
     const { data, error } = await api.get<DailyAnalysis>('/api/daily-analysis/today', true);
@@ -55,5 +70,15 @@ export const dailyAnalysisService = {
     if (error) {
       console.error('Error marking analysis as viewed:', error);
     }
+  },
+
+  async getTodaySuggestion(): Promise<TodaySuggestion> {
+    const { data, error } = await api.get<TodaySuggestion>('/api/daily-analysis/suggestion', true);
+
+    if (error) {
+      throw new Error(error.error || 'Failed to get today\'s suggestion');
+    }
+
+    return data!;
   },
 };
