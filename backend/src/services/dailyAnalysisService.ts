@@ -579,62 +579,60 @@ Format as JSON:
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const hasTomorrow = !!tomorrowEntry?.workouts;
 
-    return `You are a cycling coach reviewing an athlete's completed training for today and previewing tomorrow.
+    const ridesText = todayActivities
+      .map(
+        (a) =>
+          '- ' + a.name + ': ' + Math.round(a.moving_time_seconds / 60) + 'min, ' + (a.tss || 0) + ' TSS, ' + (a.average_watts || 0) + 'W avg'
+      )
+      .join('\n');
 
-TODAY'S COMPLETED RIDES:
-${todayActivities
-  .map(
-    (a) =>
-      `- ${a.name}: ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS, ${a.average_watts || 0}W avg`
-  )
-  .join('\n')}
-Total TSS today: ${todayTSS}
+    let tomorrowSection: string;
+    if (hasTomorrow) {
+      tomorrowSection = '- ' + tomorrowEntry.workouts.name + '\n'
+        + '- Type: ' + tomorrowEntry.workouts.workout_type + '\n'
+        + '- Duration: ' + tomorrowEntry.workouts.duration_minutes + ' minutes\n'
+        + '- TSS: ' + tomorrowEntry.workouts.tss + '\n\n'
+        + 'YOUR TASK:\n'
+        + 'Summarize today\'s training effort, preview tomorrow\'s workout, and assess recovery outlook. Be direct, no filler.\n\n'
+        + 'Format as JSON:\n'
+        + '{\n'
+        + '  "summary": "1 sentence: today\'s ride recap (e.g. \'Solid 75 TSS endurance ride, right on target for a recovery day.\')",\n'
+        + '  "recommendation": "1 sentence: recovery outlook + tomorrow preview (e.g. \'Get good rest tonight — tomorrow\'s threshold intervals will need fresh legs.\')",\n'
+        + '  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"\n'
+        + '}';
+    } else {
+      tomorrowSection = '- No workout scheduled\n\n'
+        + 'YOUR TASK:\n'
+        + 'Summarize today\'s training effort and suggest a specific workout for tomorrow based on today\'s load, current fitness, and what would fit the training pattern. Be direct, no filler.\n\n'
+        + 'Format as JSON:\n'
+        + '{\n'
+        + '  "summary": "1 sentence: today\'s ride recap (e.g. \'Solid 75 TSS endurance ride, right on target.\')",\n'
+        + '  "recommendation": "1 sentence: why this tomorrow workout (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\')",\n'
+        + '  "suggestedAction": "proceed-as-planned",\n'
+        + '  "suggestedWorkout": {\n'
+        + '    "name": "Workout Name",\n'
+        + '    "type": "recovery|endurance|tempo|threshold|vo2max",\n'
+        + '    "duration": 60,\n'
+        + '    "description": "1 sentence description"\n'
+        + '  }\n'
+        + '}';
+    }
 
-CURRENT FITNESS STATUS:
-- TSB (Form): ${trainingStatus?.tsb?.toFixed(1) ?? '0.0'}
-- CTL (Fitness): ${trainingStatus?.ctl?.toFixed(1) ?? '0.0'}
-- ATL (Fatigue): ${trainingStatus?.atl?.toFixed(1) ?? '0.0'}
-
-LAST 7 DAYS:
-- Total rides: ${recentActivities.length}
-- Total TSS: ${recentTotalTSS}
-- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}
-
-${fatigueProfileService.formatForPrompt(fatigueProfile)}
-
-TOMORROW'S SCHEDULED WORKOUT:
-${hasTomorrow
-  ? `- ${tomorrowEntry.workouts.name}
-- Type: ${tomorrowEntry.workouts.workout_type}
-- Duration: ${tomorrowEntry.workouts.duration_minutes} minutes
-- TSS: ${tomorrowEntry.workouts.tss}
-
-YOUR TASK:
-Summarize today's training effort, preview tomorrow's workout, and assess recovery outlook. Be direct, no filler.
-
-Format as JSON:
-{
-  "summary": "1 sentence: today's ride recap (e.g. 'Solid 75 TSS endurance ride, right on target for a recovery day.')",
-  "recommendation": "1 sentence: recovery outlook + tomorrow preview (e.g. 'Get good rest tonight — tomorrow's threshold intervals will need fresh legs.')",
-  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
-}`
-  : `- No workout scheduled
-
-YOUR TASK:
-Summarize today's training effort and suggest a specific workout for tomorrow based on today's load, current fitness, and what would fit the training pattern. Be direct, no filler.
-
-Format as JSON:
-{
-  "summary": "1 sentence: today's ride recap (e.g. 'Solid 75 TSS endurance ride, right on target.')",
-  "recommendation": "1 sentence: why this tomorrow workout (e.g. 'After today's big effort, an easy spin tomorrow will aid recovery.')",
-  "suggestedAction": "proceed-as-planned",
-  "suggestedWorkout": {
-    "name": "Workout Name",
-    "type": "recovery|endurance|tempo|threshold|vo2max",
-    "duration": 60,
-    "description": "1 sentence description"
-  }
-}`}
+    return 'You are a cycling coach reviewing an athlete\'s completed training for today and previewing tomorrow.\n\n'
+      + 'TODAY\'S COMPLETED RIDES:\n'
+      + ridesText + '\n'
+      + 'Total TSS today: ' + todayTSS + '\n\n'
+      + 'CURRENT FITNESS STATUS:\n'
+      + '- TSB (Form): ' + (trainingStatus?.tsb?.toFixed(1) ?? '0.0') + '\n'
+      + '- CTL (Fitness): ' + (trainingStatus?.ctl?.toFixed(1) ?? '0.0') + '\n'
+      + '- ATL (Fatigue): ' + (trainingStatus?.atl?.toFixed(1) ?? '0.0') + '\n\n'
+      + 'LAST 7 DAYS:\n'
+      + '- Total rides: ' + recentActivities.length + '\n'
+      + '- Total TSS: ' + recentTotalTSS + '\n'
+      + '- Average TSS/day: ' + (recentTotalTSS / 7).toFixed(1) + '\n\n'
+      + fatigueProfileService.formatForPrompt(fatigueProfile) + '\n\n'
+      + 'TOMORROW\'S SCHEDULED WORKOUT:\n'
+      + tomorrowSection;
   },
 
   /**
