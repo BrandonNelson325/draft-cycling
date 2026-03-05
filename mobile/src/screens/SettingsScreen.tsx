@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
@@ -305,7 +306,12 @@ export default function SettingsScreen({ navigation }: any) {
         </View>
 
         {/* Strava Section */}
-        <Text style={styles.sectionTitle}>Strava</Text>
+        <View style={styles.stravaTitleRow}>
+          <Svg width={16} height={16} viewBox="0 0 24 24">
+            <Path d="M15.387 17.944l-2.089-4.116h-3.065L15.387 24l5.15-10.172h-3.066m-7.008-5.599l2.836 5.598h4.172L10.463 0l-7 13.828h4.169" fill="#FC4C02" />
+          </Svg>
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Strava</Text>
+        </View>
         <View style={styles.section}>
           {hasStrava ? (
             <>
@@ -583,6 +589,14 @@ const styles = StyleSheet.create({
     padding: 13,
   },
   guideBtnText: { color: '#60a5fa', fontWeight: '600', fontSize: 14 },
+  stravaTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 16,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
   logoutBtn: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
   logoutText: { color: '#ef4444', fontWeight: '600', fontSize: 14 },
   notifRow: {
