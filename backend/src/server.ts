@@ -57,6 +57,9 @@ app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }),
 // CORS Configuration
 const allowedOrigins = [
   config.frontendUrl,
+  // Support both www and non-www variants
+  config.frontendUrl.replace('https://www.', 'https://'),
+  config.frontendUrl.replace('https://', 'https://www.'),
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:4173', // vite preview
