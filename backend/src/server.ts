@@ -22,6 +22,7 @@ import trainingPlanRoutes from './routes/trainingPlanRoutes';
 import dailyCheckInRoutes from './routes/dailyCheckInRoutes';
 import activityFeedbackRoutes from './routes/activityFeedbackRoutes';
 import pushRoutes from './routes/push';
+import subscriptionRoutes from './routes/subscriptionRoutes';
 import { stravaCronService } from './services/stravaCronService';
 import { startMorningCheckInCron } from './services/morningCheckInCronService';
 
@@ -65,6 +66,12 @@ app.use(cors({
   credentials: true,
 }));
 
+// Stripe webhook needs raw body for signature verification — must come before express.json()
+app.use('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req, _res, next) => {
+  (req as any).rawBody = req.body;
+  next();
+});
+
 // Body Parser
 app.use(express.json());
 
@@ -91,6 +98,7 @@ app.use('/api/training-plans', trainingPlanRoutes);
 app.use('/api/daily-check-in', dailyCheckInRoutes);
 app.use('/api/activities', activityFeedbackRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/subscription', subscriptionRoutes);
 
 // Error handler (must be last)
 app.use(errorHandler);

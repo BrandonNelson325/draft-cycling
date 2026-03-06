@@ -16,7 +16,8 @@ export const config = {
   stripe: {
     secretKey: process.env.STRIPE_SECRET_KEY!,
     webhookSecret: process.env.STRIPE_WEBHOOK_SECRET!,
-    priceId: process.env.STRIPE_PRICE_ID!,
+    monthlyPriceId: process.env.STRIPE_MONTHLY_PRICE_ID!,
+    yearlyPriceId: process.env.STRIPE_YEARLY_PRICE_ID!,
   },
 
   strava: {

@@ -19,6 +19,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
+import { subscriptionService } from '../services/subscriptionService';
 import { getConversionUtils, convertToMetric } from '../utils/units';
 import WelcomeModal from '../components/modals/WelcomeModal';
 
@@ -402,13 +403,29 @@ export default function SettingsScreen({ navigation }: any) {
             <Text style={styles.infoLabel}>Email</Text>
             <Text style={styles.infoValue}>{user?.email}</Text>
           </View>
-          {user?.subscription_status && (
+          {(user?.subscription_status || user?.beta_access_code) && (
             <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Subscription</Text>
+              <Text style={styles.infoLabel}>Access</Text>
               <Text style={[styles.infoValue, styles.infoValueCapitalize]}>
-                {user.subscription_status}
+                {user?.beta_access_code ? 'Beta' : user?.subscription_status}
               </Text>
             </View>
+          )}
+          {(user?.subscription_status === 'active' || user?.subscription_status === 'trialing') && (
+            <TouchableOpacity
+              style={styles.guideBtn}
+              onPress={async () => {
+                try {
+                  const url = await subscriptionService.createPortal();
+                  await WebBrowser.openBrowserAsync(url);
+                } catch {
+                  Alert.alert('Error', 'Failed to open subscription management.');
+                }
+              }}
+            >
+              <Ionicons name="card-outline" size={16} color="#60a5fa" />
+              <Text style={styles.guideBtnText}>Manage Subscription</Text>
+            </TouchableOpacity>
           )}
 
           <TouchableOpacity

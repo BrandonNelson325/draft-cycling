@@ -1,9 +1,28 @@
+import { useState } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { subscriptionService } from '../../services/subscriptionService';
+import { Button } from '../ui/button';
 
 export function AccountInfo() {
   const user = useAuthStore((state) => state.user);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   if (!user) return null;
+
+  const hasSubscription = user.subscription_status === 'active' || user.subscription_status === 'trialing';
+  const hasBeta = !!user.beta_access_code;
+
+  const handleManageSubscription = async () => {
+    setPortalLoading(true);
+    try {
+      const url = await subscriptionService.createPortal();
+      window.location.href = url;
+    } catch (err) {
+      console.error('Failed to open billing portal:', err);
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -16,41 +35,44 @@ export function AccountInfo() {
 
       <div>
         <label className="block text-sm font-medium text-muted-foreground mb-1">
-          Beta Access
+          Access
         </label>
         <div className="text-sm">
-          {user.beta_access_code ? (
-            <span className="text-green-500">✓ Active (Code: {user.beta_access_code})</span>
-          ) : (
-            <span className="text-muted-foreground">No beta code</span>
+          {hasBeta && (
+            <span className="text-green-500">Beta Access (Code: {user.beta_access_code})</span>
           )}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-muted-foreground mb-1">
-          Subscription Status
-        </label>
-        <div className="text-sm">
-          {user.subscription_status === 'active' && (
-            <span className="text-green-500">✓ Active</span>
+          {hasSubscription && (
+            <span className="text-green-500">
+              {user.subscription_status === 'trialing' ? 'Trial' : 'Active Subscription'}
+              {user.subscription_current_period_end && (
+                <span className="text-muted-foreground ml-1">
+                  (renews {new Date(user.subscription_current_period_end).toLocaleDateString()})
+                </span>
+              )}
+            </span>
           )}
-          {user.subscription_status === 'trialing' && (
-            <span className="text-blue-500">Trial Period</span>
+          {!hasBeta && !hasSubscription && user.subscription_status === 'past_due' && (
+            <span className="text-red-500">Payment Past Due</span>
           )}
-          {user.subscription_status === 'canceled' && (
+          {!hasBeta && !hasSubscription && user.subscription_status === 'canceled' && (
             <span className="text-yellow-500">Canceled</span>
           )}
-          {user.subscription_status === 'past_due' && (
-            <span className="text-red-500">Past Due</span>
-          )}
-          {!user.subscription_status && (
-            <span className="text-muted-foreground">No subscription</span>
+          {!hasBeta && !hasSubscription && !user.subscription_status && (
+            <span className="text-muted-foreground">No active subscription</span>
           )}
         </div>
       </div>
 
-      {/* Subscription end date not yet implemented */}
+      {hasSubscription && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleManageSubscription}
+          disabled={portalLoading}
+        >
+          {portalLoading ? 'Loading...' : 'Manage Subscription'}
+        </Button>
+      )}
     </div>
   );
 }

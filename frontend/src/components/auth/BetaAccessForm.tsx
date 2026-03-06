@@ -1,86 +1,157 @@
 import { useState } from 'react';
-import { betaService } from '../../services/betaService';
+import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/authService';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 export function BetaAccessForm() {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [promoCode, setPromoCode] = useState('');
+  const [promoError, setPromoError] = useState('');
+  const [promoSuccess, setPromoSuccess] = useState('');
+  const [promoLoading, setPromoLoading] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
+  const { logout } = useAuthStore();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleRedeemCode = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setSuccess(false);
-    setLoading(true);
+    if (!promoCode.trim()) return;
+
+    setPromoError('');
+    setPromoSuccess('');
+    setPromoLoading(true);
 
     try {
-      await betaService.activateBetaAccess(code);
-      setSuccess(true);
+      const result = await subscriptionService.redeemCode(promoCode.trim());
+      setPromoSuccess(result.message);
 
-      // Refresh user profile to get updated beta access
+      // Refresh user profile
       await authService.getProfile();
 
-      // Give user a moment to see success message
-      setTimeout(() => {
-        window.location.reload();
-      }, 1500);
+      // If it was a beta/access code, page will re-render automatically
+      // If it was a discount code, user still needs to subscribe
+      if (result.type === 'beta_access') {
+        setTimeout(() => window.location.reload(), 1000);
+      }
     } catch (err: any) {
-      setError(err.message || 'Failed to activate beta access');
+      setPromoError(err.message || 'Invalid code');
     } finally {
-      setLoading(false);
+      setPromoLoading(false);
+    }
+  };
+
+  const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
+    setCheckoutLoading(plan);
+    try {
+      const url = await subscriptionService.createCheckout(plan);
+      window.location.href = url;
+    } catch (err: any) {
+      setPromoError(err.message || 'Failed to start checkout');
+      setCheckoutLoading(null);
     }
   };
 
   return (
-    <Card className="w-full max-w-md">
-      <CardHeader>
-        <CardTitle>Beta Access Required</CardTitle>
-        <CardDescription>
-          Enter your beta access code to start using Draft
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
-              {error}
+    <div className="w-full max-w-md space-y-6">
+      {/* Logo/Brand */}
+      <div className="text-center">
+        <img src="/logo.png" alt="Draft" className="h-32 w-auto mx-auto mb-4" />
+        <h1 className="text-2xl font-bold text-foreground">Get Started with Draft</h1>
+        <p className="text-muted-foreground mt-2">
+          AI-powered cycling coach that adapts to you
+        </p>
+      </div>
+
+      {/* Subscription Plans */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-lg">Choose a Plan</CardTitle>
+          <p className="text-sm text-muted-foreground">7-day free trial on all plans. Cancel anytime.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Monthly */}
+          <button
+            onClick={() => handleSubscribe('monthly')}
+            disabled={!!checkoutLoading}
+            className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 transition-all text-left disabled:opacity-50"
+          >
+            <div>
+              <p className="font-semibold text-foreground">Monthly</p>
+              <p className="text-sm text-muted-foreground">Cancel anytime</p>
             </div>
-          )}
-
-          {success && (
-            <div className="p-3 text-sm text-green-600 bg-green-50 rounded-md">
-              Beta access activated! Redirecting...
+            <div className="text-right">
+              <p className="text-xl font-bold text-foreground">$9.99</p>
+              <p className="text-xs text-muted-foreground">/month</p>
             </div>
-          )}
+            {checkoutLoading === 'monthly' && (
+              <span className="ml-2 animate-spin text-blue-500">&#8987;</span>
+            )}
+          </button>
 
-          <div className="space-y-2">
-            <label htmlFor="code" className="text-sm font-medium">
-              Beta Access Code
-            </label>
-            <Input
-              id="code"
-              type="text"
-              placeholder="Enter your code"
-              value={code}
-              onChange={(e) => setCode(e.target.value.toUpperCase())}
-              required
-              disabled={loading || success}
-              className="font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              Don't have a code? Contact us to request early access.
-            </p>
-          </div>
+          {/* Yearly */}
+          <button
+            onClick={() => handleSubscribe('yearly')}
+            disabled={!!checkoutLoading}
+            className="w-full flex items-center justify-between p-4 rounded-xl border-2 border-blue-500 bg-blue-50 hover:bg-blue-100 transition-all text-left relative disabled:opacity-50"
+          >
+            <span className="absolute -top-2.5 left-4 bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+              BEST VALUE
+            </span>
+            <div>
+              <p className="font-semibold text-foreground">Yearly</p>
+              <p className="text-sm text-muted-foreground">Save 34%</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xl font-bold text-foreground">$79</p>
+              <p className="text-xs text-muted-foreground">/year ($6.58/mo)</p>
+            </div>
+            {checkoutLoading === 'yearly' && (
+              <span className="ml-2 animate-spin text-blue-500">&#8987;</span>
+            )}
+          </button>
+        </CardContent>
+      </Card>
 
-          <Button type="submit" className="w-full" disabled={loading || success}>
-            {loading ? 'Activating...' : success ? 'Activated!' : 'Activate Beta Access'}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+      {/* Promo Code */}
+      <Card>
+        <CardContent className="pt-5">
+          <form onSubmit={handleRedeemCode} className="space-y-3">
+            <p className="text-sm font-medium text-muted-foreground">Have a promo code?</p>
+
+            {promoError && (
+              <div className="p-2 text-sm text-red-600 bg-red-50 rounded-md">{promoError}</div>
+            )}
+            {promoSuccess && (
+              <div className="p-2 text-sm text-green-600 bg-green-50 rounded-md">{promoSuccess}</div>
+            )}
+
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="Enter code"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                disabled={promoLoading}
+                className="font-mono flex-1"
+              />
+              <Button type="submit" variant="outline" disabled={promoLoading || !promoCode.trim()}>
+                {promoLoading ? '...' : 'Apply'}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Sign out */}
+      <div className="text-center">
+        <button
+          onClick={logout}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Sign out
+        </button>
+      </div>
+    </div>
   );
 }
