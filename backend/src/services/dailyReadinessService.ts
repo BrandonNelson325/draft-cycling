@@ -74,7 +74,7 @@ export const dailyReadinessService = {
     const today = todayInTimezone(tz);
 
     const { data: calendarEntry } = await supabaseAdmin
-      .from('calendar')
+      .from('calendar_entries')
       .select('*, workout:workouts(*)')
       .eq('athlete_id', athleteId)
       .eq('date', today)
@@ -135,7 +135,7 @@ export const dailyReadinessService = {
         ? {
             name: yesterdayRide.name,
             tss: yesterdayRide.tss,
-            duration_minutes: Math.round(yesterdayRide.moving_time / 60),
+            duration_minutes: Math.round((yesterdayRide.moving_time_seconds || 0) / 60),
             average_watts: yesterdayRide.average_watts,
           }
         : null,
