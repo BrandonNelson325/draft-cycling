@@ -171,13 +171,19 @@ export const subscriptionService = {
    * Sync a Stripe subscription object to the athletes table.
    */
   async syncSubscription(athleteId: string, subscription: Stripe.Subscription): Promise<void> {
+    logger.info(`[Stripe] syncSubscription raw: status=${subscription.status}, current_period_end=${(subscription as any).current_period_end}, type=${typeof (subscription as any).current_period_end}`);
+
     const status = subscription.status === 'active' || subscription.status === 'trialing'
       ? subscription.status
       : subscription.status === 'past_due'
         ? 'past_due'
         : 'canceled';
 
-    const periodEnd = new Date((subscription as any).current_period_end * 1000).toISOString();
+    const rawEnd = (subscription as any).current_period_end;
+    // Stripe may return a unix timestamp (number) or an ISO string depending on API version
+    const periodEnd = typeof rawEnd === 'number'
+      ? new Date(rawEnd * 1000).toISOString()
+      : rawEnd ? new Date(rawEnd).toISOString() : null;
 
     await supabaseAdmin
       .from('athletes')
