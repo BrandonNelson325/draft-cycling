@@ -48,6 +48,12 @@ const limiter = rateLimit({
 
 app.use('/api/', limiter);
 
+// Stripe webhook needs raw body for signature verification — must come before CORS/json parser
+app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req, _res, next) => {
+  (req as any).rawBody = req.body;
+  next();
+});
+
 // CORS Configuration
 const allowedOrigins = [
   config.frontendUrl,
@@ -65,12 +71,6 @@ app.use(cors({
   },
   credentials: true,
 }));
-
-// Stripe webhook needs raw body for signature verification — must come before express.json()
-app.use('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req, _res, next) => {
-  (req as any).rawBody = req.body;
-  next();
-});
 
 // Body Parser
 app.use(express.json());
