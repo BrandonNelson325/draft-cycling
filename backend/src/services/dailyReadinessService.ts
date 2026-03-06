@@ -270,7 +270,7 @@ export const dailyReadinessService = {
         notes: data.notes || null,
         check_in_completed: true,
         check_in_at: new Date().toISOString(),
-        training_load_last_7_days: recentActivity.last7DaysTSS,
+        training_load_last_7_days: Math.round(recentActivity.last7DaysTSS),
       },
       {
         onConflict: 'athlete_id,date',
