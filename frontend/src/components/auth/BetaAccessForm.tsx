@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/authService';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -12,7 +12,38 @@ export function BetaAccessForm() {
   const [promoSuccess, setPromoSuccess] = useState('');
   const [promoLoading, setPromoLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
+  const [waitingForWebhook, setWaitingForWebhook] = useState(false);
   const { logout } = useAuthStore();
+
+  // After Stripe checkout, poll for subscription activation
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('subscription') === 'success') {
+      setWaitingForWebhook(true);
+      // Clean up URL
+      window.history.replaceState({}, '', window.location.pathname);
+
+      let attempts = 0;
+      const poll = setInterval(async () => {
+        attempts++;
+        try {
+          await authService.getProfile();
+          const status = await subscriptionService.getStatus();
+          if (status.has_access) {
+            clearInterval(poll);
+            window.location.reload();
+          }
+        } catch { /* keep polling */ }
+        if (attempts >= 15) {
+          clearInterval(poll);
+          setWaitingForWebhook(false);
+          setPromoError('Subscription is taking longer than expected. Please refresh in a moment.');
+        }
+      }, 2000);
+
+      return () => clearInterval(poll);
+    }
+  }, []);
 
   const handleRedeemCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +82,17 @@ export function BetaAccessForm() {
       setCheckoutLoading(null);
     }
   };
+
+  if (waitingForWebhook) {
+    return (
+      <div className="w-full max-w-md text-center space-y-4">
+        <img src="/logo.png" alt="Draft" className="h-32 w-auto mx-auto" />
+        <h1 className="text-2xl font-bold text-foreground">Setting up your account...</h1>
+        <p className="text-muted-foreground">This usually takes just a few seconds.</p>
+        <div className="animate-spin text-3xl">&#9881;</div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full max-w-md space-y-6">

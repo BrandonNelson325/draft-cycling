@@ -43,8 +43,15 @@ export default function BetaAccessScreen() {
     try {
       const url = await subscriptionService.createCheckout(plan);
       await WebBrowser.openBrowserAsync(url);
-      // After returning from browser, refresh profile to check if subscription activated
-      await authService.getProfile();
+      // After returning from browser, poll until webhook updates subscription
+      for (let i = 0; i < 15; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
+        try {
+          await authService.getProfile();
+          const status = await subscriptionService.getStatus();
+          if (status.has_access) return; // Profile refresh triggers nav update
+        } catch { /* keep polling */ }
+      }
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to start checkout.');
     } finally {
