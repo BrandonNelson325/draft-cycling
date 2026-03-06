@@ -33,11 +33,11 @@ export function useDailyMorning() {
     );
   };
 
-  const checkAndLoad = async () => {
+  const checkAndLoad = async (skipLocalCheck = false) => {
     try {
       setLoading(true);
 
-      if (await hasShownTodayLocally()) {
+      if (!skipLocalCheck && await hasShownTodayLocally()) {
         setLoading(false);
         return;
       }
@@ -70,5 +70,9 @@ export function useDailyMorning() {
     setShouldShow(false);
   };
 
-  return { shouldShow, analysis, readiness, loading, dismiss };
+  const forceShow = () => {
+    checkAndLoad(true);
+  };
+
+  return { shouldShow, analysis, readiness, loading, dismiss, forceShow };
 }

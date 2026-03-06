@@ -78,6 +78,12 @@ export default function ActivityDetailSheet({ activity }: ActivityDetailSheetPro
       value: activity.intensity_factor.toFixed(2),
     });
   }
+  if (activity.calories) {
+    secondaryStats.push({
+      label: 'Calories',
+      value: `${Math.round(activity.calories)}`,
+    });
+  }
   if (activity.kilojoules) {
     secondaryStats.push({
       label: 'Kilojoules',

@@ -11,7 +11,8 @@ export const register = async (req: Request, res: Response): Promise<void> => {
       return;
     }
 
-    // Create user with Supabase Auth and generate session in one call
+    // Create user with Supabase Auth
+    let authUser;
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password,
@@ -19,10 +20,27 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (authError || !authData.user) {
-      const msg = authError?.message || 'Registration failed';
-      console.error('Auth createUser error:', msg);
-      res.status(400).json({ error: msg });
-      return;
+      // If user already exists in auth, look them up and reuse
+      if (authError?.message?.toLowerCase().includes('already') ||
+          authError?.message?.toLowerCase().includes('duplicate') ||
+          authError?.message?.toLowerCase().includes('exists')) {
+        // User exists in auth — try signing in with the provided password
+        // If that works, reuse the existing user. If not, tell them to log in.
+        const { data: signIn } = await supabase.auth.signInWithPassword({ email, password });
+        if (signIn?.user) {
+          authUser = signIn.user;
+        } else {
+          res.status(400).json({ error: 'An account with this email already exists. Please log in instead.' });
+          return;
+        }
+      } else {
+        const msg = authError?.message || 'Registration failed';
+        console.error('Auth createUser error:', msg);
+        res.status(400).json({ error: msg });
+        return;
+      }
+    } else {
+      authUser = authData.user;
     }
 
     // Upsert athlete row — handles both cases: trigger already created it, or it doesn't exist yet.
@@ -36,7 +54,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
         .from('athletes')
         .upsert(
           {
-            id: authData.user.id,
+            id: authUser.id,
             email,
             full_name: full_name || null,
             timezone: timezone || 'America/Los_Angeles',
@@ -55,7 +73,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     // delete the orphaned row and retry
     if (athleteError && athleteError.message?.includes('athletes_email_key')) {
       console.warn('Orphaned athlete row detected for email, cleaning up:', email);
-      await supabaseAdmin.from('athletes').delete().eq('email', email).neq('id', authData.user.id);
+      await supabaseAdmin.from('athletes').delete().eq('email', email).neq('id', authUser.id);
       const retry = await upsertAthleteRow();
       athlete = retry.data;
       athleteError = retry.error;
@@ -63,7 +81,7 @@ export const register = async (req: Request, res: Response): Promise<void> => {
 
     if (athleteError) {
       console.error('Error creating athlete profile:', athleteError.message, athleteError.details, athleteError.hint);
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+      await supabaseAdmin.auth.admin.deleteUser(authUser.id);
       res.status(500).json({ error: 'Failed to create user profile' });
       return;
     }

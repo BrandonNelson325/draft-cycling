@@ -29,7 +29,7 @@ function AppModals() {
   const { user } = useAuthStore();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
-  usePushNotifications(newActivities.refetch);
+  usePushNotifications(newActivities.refetch, dailyMorning.forceShow);
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {

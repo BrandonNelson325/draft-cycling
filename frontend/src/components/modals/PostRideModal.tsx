@@ -134,6 +134,12 @@ function SimpleModal({
               </div>
             )}
           </div>
+          {activity.calories != null && (
+            <div className="bg-gray-50 rounded-xl p-3 text-center">
+              <div className="text-lg font-bold text-gray-800">{Math.round(activity.calories)} cal</div>
+              <div className="text-xs text-gray-500">Calories</div>
+            </div>
+          )}
 
           {/* RPE */}
           <div>
@@ -202,6 +208,7 @@ function AdvancedModal({
     duration ? { label: 'Duration', value: duration } : null,
     activity.tss != null ? { label: 'TSS', value: String(Math.round(activity.tss)) } : null,
     activity.average_watts != null ? { label: 'Avg Power', value: `${Math.round(activity.average_watts)}W` } : null,
+    activity.calories != null ? { label: 'Calories', value: `${Math.round(activity.calories)}` } : null,
   ].filter(Boolean) as { label: string; value: string }[];
 
   const handleSave = () => {

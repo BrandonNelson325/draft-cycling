@@ -82,6 +82,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip }: PostR
               {distanceDisplay && <StatBadge label="Distance" value={`${distanceDisplay}${units.distanceUnitShort}`} />}
               {durationMin && <StatBadge label="Duration" value={`${durationMin}min`} />}
               {avgPower && <StatBadge label="Avg Power" value={`${avgPower}W`} />}
+              {activity.calories && <StatBadge label="Calories" value={String(activity.calories)} />}
               {activity.tss && <StatBadge label="TSS" value={String(Math.round(activity.tss))} />}
             </View>
           </View>
@@ -97,7 +98,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip }: PostR
                 onPress={() => setRpe(r.value)}
               >
                 <Text style={styles.rpeEmoji}>{r.emoji}</Text>
-                {isAdvanced && <Text style={styles.rpeLabel}>{r.label}</Text>}
+                <Text style={styles.rpeLabel}>{r.label}</Text>
               </TouchableOpacity>
             ))}
           </View>

@@ -9,6 +9,7 @@ export interface UnacknowledgedActivity {
   average_watts: number | null;
   tss: number | null;
   average_heartrate: number | null;
+  calories: number | null;
 }
 
 export interface ActivityFeedback {
@@ -42,6 +43,7 @@ export const activityFeedbackService = {
       average_watts: row.average_watts,
       tss: row.tss,
       average_heartrate: row.raw_data?.average_heartrate ?? null,
+      calories: row.raw_data?.calories ? Math.round(row.raw_data.calories) : (row.raw_data?.kilojoules ? Math.round(row.raw_data.kilojoules * 4.184) : null),
     }));
   },
 

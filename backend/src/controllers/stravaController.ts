@@ -226,12 +226,17 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Map database field names to frontend-expected names
-    const mappedActivities = (activities || []).map((activity: any) => ({
-      ...activity,
-      distance: activity.distance_meters, // Map distance_meters → distance
-      moving_time: activity.moving_time_seconds, // Map moving_time_seconds → moving_time
-    }));
+    // Map database field names to frontend-expected names and extract useful raw_data fields
+    const mappedActivities = (activities || []).map((activity: any) => {
+      const raw = activity.raw_data || {};
+      return {
+        ...activity,
+        distance: activity.distance_meters,
+        moving_time: activity.moving_time_seconds,
+        kilojoules: raw.kilojoules || null,
+        calories: raw.calories ? Math.round(raw.calories) : (raw.kilojoules ? Math.round(raw.kilojoules * 4.184) : null),
+      };
+    });
 
     res.json({ activities: mappedActivities });
   } catch (error) {

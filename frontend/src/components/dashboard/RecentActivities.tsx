@@ -14,6 +14,7 @@ interface Activity {
   total_elevation_gain: number;
   average_watts?: number;
   tss?: number;
+  calories?: number;
 }
 
 export function RecentActivities() {
@@ -118,6 +119,7 @@ export function RecentActivities() {
                 <span>{units.formatDistance(activity.distance)} {units.distanceUnitShort}</span>
                 <span>{formatDuration(activity.moving_time)}</span>
                 {activity.average_watts && <span>{activity.average_watts}W</span>}
+                {activity.calories && <span>{activity.calories} cal</span>}
                 {activity.tss && <span>TSS: {activity.tss}</span>}
               </div>
             </div>

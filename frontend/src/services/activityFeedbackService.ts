@@ -9,6 +9,7 @@ export interface UnacknowledgedActivity {
   average_watts: number | null;
   tss: number | null;
   average_heartrate: number | null;
+  calories: number | null;
 }
 
 export interface ActivityFeedback {
