@@ -229,10 +229,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#f1f5f9',
+    flex: 1,
+    marginRight: 8,
   },
   rideMeta: {
     fontSize: 13,
     color: '#94a3b8',
+    flexShrink: 0,
   },
   workoutName: {
     fontSize: 15,
