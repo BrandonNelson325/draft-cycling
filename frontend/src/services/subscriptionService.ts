@@ -13,7 +13,7 @@ export const subscriptionService = {
   async getPlans(): Promise<SubscriptionPlan[]> {
     const { data, error } = await api.get('/api/subscription/plans', false);
     if (error) throw new Error('Failed to load plans');
-    return data.plans;
+    return (data as any).plans;
   },
 
   async createCheckout(plan: 'monthly' | 'yearly', promoCode?: string): Promise<string> {
@@ -22,14 +22,14 @@ export const subscriptionService = {
       { plan, promo_code: promoCode },
       true
     );
-    if (error) throw new Error(error.error || 'Failed to create checkout');
-    return data.url;
+    if (error) throw new Error((error as any).error || 'Failed to create checkout');
+    return (data as any).url;
   },
 
   async createPortal(): Promise<string> {
     const { data, error } = await api.post('/api/subscription/portal', {}, true);
-    if (error) throw new Error(error.error || 'Failed to open billing portal');
-    return data.url;
+    if (error) throw new Error((error as any).error || 'Failed to open billing portal');
+    return (data as any).url;
   },
 
   async getStatus() {
@@ -45,7 +45,7 @@ export const subscriptionService = {
 
   async redeemCode(code: string) {
     const { data, error } = await api.post('/api/subscription/redeem', { code }, true);
-    if (error) throw new Error(error.error || 'Invalid promo code');
+    if (error) throw new Error((error as any).error || 'Invalid promo code');
     return data as { type: string; message: string; athlete: any };
   },
 };
