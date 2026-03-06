@@ -1,20 +1,26 @@
 import { supabaseAdmin } from '../utils/supabase';
+import { activityMatchingService, type PlannedWorkoutInfo } from './activityMatchingService';
 
 export interface UnacknowledgedActivity {
   id: string;
   name: string;
   start_date: string;
+  strava_activity_id: number;
   distance_meters: number | null;
   moving_time_seconds: number | null;
   average_watts: number | null;
   tss: number | null;
   average_heartrate: number | null;
   calories: number | null;
+  plannedWorkout: PlannedWorkoutInfo | null;
+  matchConfidence: 'high' | 'partial' | 'low' | null;
 }
 
 export interface ActivityFeedback {
   perceived_effort?: number;
   notes?: string;
+  was_planned_workout?: boolean; // true = confirm match, false = reject match
+  calendar_entry_id?: string; // the matched calendar entry
 }
 
 export const activityFeedbackService = {
@@ -24,7 +30,7 @@ export const activityFeedbackService = {
 
     const { data, error } = await supabaseAdmin
       .from('strava_activities')
-      .select('id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data')
+      .select('id, strava_activity_id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data')
       .eq('athlete_id', athleteId)
       .is('acknowledged_at', null)
       .gte('start_date', fourteenDaysAgo.toISOString())
@@ -34,17 +40,47 @@ export const activityFeedbackService = {
       throw new Error(`Failed to fetch unacknowledged activities: ${error.message}`);
     }
 
-    return (data || []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      start_date: row.start_date,
-      distance_meters: row.distance_meters,
-      moving_time_seconds: row.moving_time_seconds,
-      average_watts: row.average_watts,
-      tss: row.tss,
-      average_heartrate: row.raw_data?.average_heartrate ?? null,
-      calories: row.raw_data?.calories ? Math.round(row.raw_data.calories) : (row.raw_data?.kilojoules ? Math.round(row.raw_data.kilojoules * 4.184) : null),
-    }));
+    // For each activity, check if there's a planned workout for that day
+    const activities = await Promise.all(
+      (data || []).map(async (row) => {
+        let plannedWorkout: PlannedWorkoutInfo | null = null;
+        let matchConfidence: 'high' | 'partial' | 'low' | null = null;
+
+        try {
+          plannedWorkout = await activityMatchingService.getPlannedWorkoutForActivity(
+            athleteId,
+            row.start_date
+          );
+
+          if (plannedWorkout) {
+            const match = activityMatchingService.scoreMatch(
+              { tss: row.tss, moving_time_seconds: row.moving_time_seconds },
+              { tss: plannedWorkout.plannedTSS, duration_minutes: plannedWorkout.plannedDuration }
+            );
+            matchConfidence = match.confidence;
+          }
+        } catch {
+          // Non-fatal — just skip matching info
+        }
+
+        return {
+          id: row.id,
+          name: row.name,
+          start_date: row.start_date,
+          strava_activity_id: row.strava_activity_id,
+          distance_meters: row.distance_meters,
+          moving_time_seconds: row.moving_time_seconds,
+          average_watts: row.average_watts,
+          tss: row.tss,
+          average_heartrate: row.raw_data?.average_heartrate ?? null,
+          calories: row.raw_data?.calories ? Math.round(row.raw_data.calories) : (row.raw_data?.kilojoules ? Math.round(row.raw_data.kilojoules * 4.184) : null),
+          plannedWorkout,
+          matchConfidence,
+        };
+      })
+    );
+
+    return activities;
   },
 
   async acknowledgeActivity(
@@ -52,10 +88,10 @@ export const activityFeedbackService = {
     activityId: string,
     feedback: ActivityFeedback
   ): Promise<void> {
-    // Validate ownership
+    // Validate ownership and get strava_activity_id
     const { data: existing, error: fetchError } = await supabaseAdmin
       .from('strava_activities')
-      .select('id')
+      .select('id, strava_activity_id')
       .eq('id', activityId)
       .eq('athlete_id', athleteId)
       .single();
@@ -84,6 +120,22 @@ export const activityFeedbackService = {
 
     if (error) {
       throw new Error(`Failed to acknowledge activity: ${error.message}`);
+    }
+
+    // Handle workout matching
+    if (feedback.calendar_entry_id) {
+      if (feedback.was_planned_workout === true) {
+        await activityMatchingService.confirmMatch(
+          athleteId,
+          feedback.calendar_entry_id,
+          existing.strava_activity_id
+        );
+      } else if (feedback.was_planned_workout === false) {
+        await activityMatchingService.rejectMatch(
+          athleteId,
+          feedback.calendar_entry_id
+        );
+      }
     }
   },
 };

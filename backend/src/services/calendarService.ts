@@ -312,9 +312,19 @@ export const calendarService = {
       throw new Error(`Failed to fetch Strava activities: ${activitiesError.message}`);
     }
 
+    // Extract calories/kilojoules from raw_data
+    const mappedActivities = (activities || []).map((a: any) => {
+      const raw = a.raw_data || {};
+      return {
+        ...a,
+        kilojoules: raw.kilojoules || a.kilojoules || null,
+        calories: raw.calories ? Math.round(raw.calories) : (raw.kilojoules ? Math.round(raw.kilojoules * 4.184) : null),
+      };
+    });
+
     return {
       scheduledWorkouts: (workouts as CalendarEntry[]) || [],
-      stravaActivities: activities || [],
+      stravaActivities: mappedActivities,
     };
   },
 };

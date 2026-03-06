@@ -9,6 +9,16 @@ import { athletePreferencesService, type AthletePreferences } from './athletePre
 import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
 import { logger } from '../utils/logger';
 
+interface PlanDeviation {
+  scheduled_date: string;
+  workoutName: string;
+  workoutType: string;
+  plannedTSS: number | null;
+  status: 'missed' | 'different_ride';
+  actualRideName?: string;
+  actualTSS?: number | null;
+}
+
 interface AthleteContext {
   athlete: any;
   recentRides: any[];
@@ -21,6 +31,7 @@ interface AthleteContext {
   dailyCheckIn: any;
   rpeHistory: any[];
   fatigueProfile: FatigueProfile | null;
+  planDeviations: PlanDeviation[];
 }
 
 export const aiCoachService = {
@@ -115,6 +126,53 @@ export const aiCoachService = {
       fatigueProfileService.getFatigueProfile(athleteId),
     ]);
 
+    // Find plan deviations: missed workouts (past, not completed) and different rides
+    const sevenDaysAgo = new Date(today + 'T12:00:00');
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const sevenDaysAgoStr = sevenDaysAgo.toISOString().split('T')[0];
+
+    const { data: recentEntries } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('scheduled_date, completed, strava_activity_id, notes, workouts(name, workout_type, tss)')
+      .eq('athlete_id', athleteId)
+      .gte('scheduled_date', sevenDaysAgoStr)
+      .lt('scheduled_date', today)
+      .order('scheduled_date', { ascending: false });
+
+    const planDeviations: PlanDeviation[] = [];
+    for (const entry of recentEntries || []) {
+      const workout = entry.workouts as any;
+      if (!workout) continue;
+
+      if (!entry.completed) {
+        // Check if there's a ride on that day that wasn't matched
+        const matchingRide = (recentRides || []).find((r: any) => {
+          const rideDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(r.start_date));
+          return rideDate === entry.scheduled_date;
+        });
+
+        if (matchingRide) {
+          planDeviations.push({
+            scheduled_date: entry.scheduled_date,
+            workoutName: workout.name,
+            workoutType: workout.workout_type,
+            plannedTSS: workout.tss,
+            status: 'different_ride',
+            actualRideName: matchingRide.name,
+            actualTSS: matchingRide.tss,
+          });
+        } else {
+          planDeviations.push({
+            scheduled_date: entry.scheduled_date,
+            workoutName: workout.name,
+            workoutType: workout.workout_type,
+            plannedTSS: workout.tss,
+            status: 'missed',
+          });
+        }
+      }
+    }
+
     return {
       athlete,
       recentRides: recentRides || [],
@@ -127,6 +185,7 @@ export const aiCoachService = {
       dailyCheckIn,
       rpeHistory: rpeHistory || [],
       fatigueProfile,
+      planDeviations,
     };
   },
 
@@ -374,6 +433,28 @@ ${preferences.rest_days && preferences.rest_days.length > 0
         }
       });
       prompt += '\n';
+    }
+
+    // Add plan deviations
+    if (context.planDeviations.length > 0) {
+      prompt += `PLAN DEVIATIONS (Last 7 days):
+`;
+      for (const dev of context.planDeviations) {
+        if (dev.status === 'missed') {
+          prompt += `- ${dev.scheduled_date}: MISSED "${dev.workoutName}" (${dev.workoutType}, ${dev.plannedTSS || '?'} TSS)\n`;
+        } else {
+          prompt += `- ${dev.scheduled_date}: DID DIFFERENT RIDE instead of "${dev.workoutName}" (${dev.workoutType}, ${dev.plannedTSS || '?'} TSS planned) — Actually did: "${dev.actualRideName}" (${dev.actualTSS || '?'} TSS)\n`;
+        }
+      }
+      prompt += `
+**IMPORTANT:** The athlete's plan has deviated. When they open the chat, acknowledge this naturally and offer to help adapt. For example:
+- "I noticed you did a group ride instead of your planned sweet spot session on Tuesday. Want me to adjust the rest of the week to make sure you still hit your training targets?"
+- "Looks like you missed Monday's workout. No worries — want me to shuffle things around?"
+- Do NOT be judgmental. Life happens. Focus on adapting forward.
+- If they did a harder ride than planned, suggest more recovery. If they missed a key session, suggest fitting it in later.
+- Only bring this up ONCE at the start of conversation, not repeatedly.
+
+`;
     }
 
     prompt += `COACHING GUIDELINES:

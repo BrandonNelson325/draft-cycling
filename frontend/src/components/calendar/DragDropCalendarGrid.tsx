@@ -9,7 +9,7 @@ import { LoadingSpinner } from '../ui/LoadingSpinner';
 
 interface DragDropCalendarGridProps {
   onWorkoutClick?: (entry: CalendarEntry) => void;
-  onDayClick?: (date: Date, entries: CalendarEntry[]) => void;
+  onDayClick?: (date: Date, entries: CalendarEntry[], activities: StravaActivity[]) => void;
   refreshTrigger?: number; // Optional prop to trigger refresh from parent
 }
 
@@ -329,7 +329,7 @@ export function DragDropCalendarGrid({
                         isCurrentMonth={isCurrentMonth}
                         entries={dayWorkouts}
                         stravaActivities={dayActivities}
-                        onClick={() => onDayClick?.(date, dayWorkouts)}
+                        onClick={() => onDayClick?.(date, dayWorkouts, dayActivities)}
                         onDrop={handleDrop}
                         onWorkoutClick={onWorkoutClick}
                         phase={dayWeekInfo?.phase}

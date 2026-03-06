@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from './stores/useAuthStore';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
@@ -20,10 +20,15 @@ import { useNewActivities } from './hooks/useNewActivities';
 
 function ProtectedRoutes() {
   const user = useAuthStore((state) => state.user);
+  const navigate = useNavigate();
   const { shouldShow, analysis, readiness, dismiss } = useDailyMorning();
   const { activities, currentIndex, acknowledge, skip } = useNewActivities();
   const currentActivity = activities[currentIndex] ?? null;
   const [showWelcome, setShowWelcome] = useState(false);
+
+  const navigateToChat = useCallback((message: string) => {
+    navigate('/chat', { state: { initialMessage: message } });
+  }, [navigate]);
 
   useEffect(() => {
     if (user && !localStorage.getItem(`welcome_shown_${user.id}`)) {
@@ -92,6 +97,7 @@ function ProtectedRoutes() {
           displayMode={user?.display_mode ?? 'advanced'}
           onAcknowledge={acknowledge}
           onSkip={skip}
+          onNavigateToChat={navigateToChat}
           activityNumber={currentIndex + 1}
           totalActivities={activities.length}
         />

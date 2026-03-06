@@ -8,6 +8,7 @@ interface PostRideModalProps {
   displayMode: 'simple' | 'advanced';
   onAcknowledge: (feedback: ActivityFeedback) => void;
   onSkip: () => void;
+  onNavigateToChat?: (message: string) => void;
   activityNumber: number;
   totalActivities: number;
 }
@@ -32,177 +33,234 @@ function formatDate(isoDate: string): string {
 }
 
 const RPE_OPTIONS = [
-  { value: 1, emoji: '😴', label: 'Very easy' },
-  { value: 2, emoji: '🙂', label: 'Easy' },
-  { value: 3, emoji: '😤', label: 'Moderate' },
-  { value: 4, emoji: '💪', label: 'Hard' },
-  { value: 5, emoji: '🔥', label: 'Max' },
+  { value: 1, emoji: '\u{1F634}', label: 'Very easy' },
+  { value: 2, emoji: '\u{1F642}', label: 'Easy' },
+  { value: 3, emoji: '\u{1F624}', label: 'Moderate' },
+  { value: 4, emoji: '\u{1F4AA}', label: 'Hard' },
+  { value: 5, emoji: '\u{1F525}', label: 'Max' },
 ] as const;
+
+const WORKOUT_TYPE_LABELS: Record<string, string> = {
+  endurance: 'Endurance',
+  tempo: 'Tempo',
+  threshold: 'Threshold',
+  vo2max: 'VO2max',
+  sprint: 'Sprint',
+  recovery: 'Recovery',
+  custom: 'Custom',
+};
+
+function PlannedWorkoutCard({
+  activity,
+  wasPlanned,
+  setWasPlanned,
+  showAdaptPrompt,
+  onAdapt,
+  onDeclineAdapt,
+}: {
+  activity: UnacknowledgedActivity;
+  wasPlanned: boolean | null;
+  setWasPlanned: (v: boolean) => void;
+  showAdaptPrompt: boolean;
+  onAdapt: () => void;
+  onDeclineAdapt: () => void;
+}) {
+  const planned = activity.plannedWorkout;
+  if (!planned) return null;
+
+  const effectiveWasPlanned = wasPlanned ?? (activity.matchConfidence === 'high' ? true : null);
+
+  return (
+    <div className="border-l-4 border-blue-500 bg-blue-50 rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Planned for today</p>
+          <p className="font-bold text-gray-800">{planned.workoutName}</p>
+        </div>
+        <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded">
+          {WORKOUT_TYPE_LABELS[planned.workoutType] || planned.workoutType}
+        </span>
+      </div>
+      <div className="flex gap-4 text-sm text-gray-600">
+        <span>{planned.plannedDuration}min</span>
+        {planned.plannedTSS && <span>TSS {Math.round(planned.plannedTSS)}</span>}
+      </div>
+      {planned.description && (
+        <p className="text-xs text-gray-500 line-clamp-2">{planned.description}</p>
+      )}
+      <div className="pt-2 border-t border-blue-200">
+        {!showAdaptPrompt ? (
+          <>
+            <p className="text-sm font-medium text-gray-700 mb-2">Was this your planned workout?</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setWasPlanned(true)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${
+                  effectiveWasPlanned === true
+                    ? 'border-green-500 bg-green-50 text-green-700'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                Yes
+              </button>
+              <button
+                onClick={() => setWasPlanned(false)}
+                className={`flex-1 py-2 rounded-lg text-sm font-semibold border-2 transition-all ${
+                  effectiveWasPlanned === false
+                    ? 'border-orange-500 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                }`}
+              >
+                No
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="text-sm font-semibold text-gray-800 mb-1">Want to adapt your training plan?</p>
+            <p className="text-xs text-gray-500 mb-3">Your coach can suggest changes based on what you did instead.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={onAdapt}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-green-500 bg-green-50 text-green-700 transition-all hover:bg-green-100"
+              >
+                Yes, adapt
+              </button>
+              <button
+                onClick={onDeclineAdapt}
+                className="flex-1 py-2 rounded-lg text-sm font-semibold border-2 border-gray-200 text-gray-500 hover:border-gray-300 transition-all"
+              >
+                No thanks
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export function PostRideModal({
   activity,
   displayMode,
   onAcknowledge,
   onSkip,
+  onNavigateToChat,
   activityNumber,
   totalActivities,
 }: PostRideModalProps) {
   const [notes, setNotes] = useState('');
+  const [wasPlanned, setWasPlanned] = useState<boolean | null>(null);
+  const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
+  const [showAdaptPrompt, setShowAdaptPrompt] = useState(false);
 
   const distance = formatDistance(activity.distance_meters);
   const duration = formatDuration(activity.moving_time_seconds);
   const dateStr = formatDate(activity.start_date);
 
+  const planned = activity.plannedWorkout;
+  const effectiveWasPlanned = wasPlanned ?? (planned && activity.matchConfidence === 'high' ? true : null);
+
+  const buildFeedback = (rpe?: number): ActivityFeedback => ({
+    perceived_effort: rpe,
+    notes: notes.trim() || undefined,
+    was_planned_workout: planned ? effectiveWasPlanned ?? undefined : undefined,
+    calendar_entry_id: planned ? planned.calendarEntryId : undefined,
+  });
+
+  const handleSetWasPlanned = (v: boolean) => {
+    setWasPlanned(v);
+    if (!v && planned) {
+      setShowAdaptPrompt(true);
+    }
+  };
+
+  const handleAdapt = async () => {
+    await onAcknowledge(buildFeedback(selectedRpe ?? undefined));
+    const msg = `I just finished "${activity.name}" but it wasn't my planned workout "${planned?.workoutName}". Can you help me adapt my training plan?`;
+    onNavigateToChat?.(msg);
+  };
+
+  const handleDeclineAdapt = () => {
+    setShowAdaptPrompt(false);
+  };
+
   if (displayMode === 'simple') {
-    return <SimpleModal
-      activity={activity}
-      distance={distance}
-      duration={duration}
-      dateStr={dateStr}
-      activityNumber={activityNumber}
-      totalActivities={totalActivities}
-      onRpeSelect={(v) => onAcknowledge({ perceived_effort: v })}
-      onSkip={onSkip}
-    />;
-  }
-
-  return <AdvancedModal
-    activity={activity}
-    distance={distance}
-    duration={duration}
-    dateStr={dateStr}
-    notes={notes}
-    setNotes={setNotes}
-    activityNumber={activityNumber}
-    totalActivities={totalActivities}
-    onAcknowledge={onAcknowledge}
-    onSkip={onSkip}
-  />;
-}
-
-// ── Simple mode ──────────────────────────────────────────────────────────────
-
-interface SimpleModeProps {
-  activity: UnacknowledgedActivity;
-  distance: string | null;
-  duration: string | null;
-  dateStr: string;
-  activityNumber: number;
-  totalActivities: number;
-  onRpeSelect: (value: number) => void;
-  onSkip: () => void;
-}
-
-function SimpleModal({
-  activity,
-  distance,
-  duration,
-  dateStr,
-  activityNumber,
-  totalActivities,
-  onRpeSelect,
-  onSkip,
-}: SimpleModeProps) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full">
-        {/* Header */}
-        <div className="bg-gradient-to-r from-orange-400 to-rose-500 text-white p-5 rounded-t-2xl relative">
-          <button onClick={onSkip} className="absolute top-4 right-4 text-white/70 hover:text-white">
-            <X className="w-5 h-5" />
-          </button>
-          <div className="text-xs font-medium text-white/70 mb-1">
-            {totalActivities > 1 ? `Activity ${activityNumber} of ${totalActivities}` : 'New activity'}
-          </div>
-          <h2 className="text-xl font-bold leading-tight">{activity.name}</h2>
-          <p className="text-orange-100 text-sm mt-0.5">{dateStr}</p>
-        </div>
-
-        <div className="p-5 space-y-5">
-          {/* Stats */}
-          <div className="flex gap-4">
-            {distance && (
-              <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
-                <div className="text-lg font-bold text-gray-800">{distance}</div>
-                <div className="text-xs text-gray-500">Distance</div>
-              </div>
-            )}
-            {duration && (
-              <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
-                <div className="text-lg font-bold text-gray-800">{duration}</div>
-                <div className="text-xs text-gray-500">Duration</div>
-              </div>
-            )}
-          </div>
-          {activity.calories != null && (
-            <div className="bg-gray-50 rounded-xl p-3 text-center">
-              <div className="text-lg font-bold text-gray-800">{Math.round(activity.calories)} cal</div>
-              <div className="text-xs text-gray-500">Calories</div>
-            </div>
-          )}
-
-          {/* RPE */}
-          <div>
-            <p className="text-sm font-semibold text-gray-700 mb-3 text-center">How did that feel?</p>
-            <div className="flex justify-between gap-1">
-              {RPE_OPTIONS.map(({ value, emoji, label }) => (
-                <button
-                  key={value}
-                  onClick={() => onRpeSelect(value)}
-                  className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-orange-50 transition-colors group"
-                  title={label}
-                >
-                  <span className="text-2xl group-hover:scale-110 transition-transform">{emoji}</span>
-                  <span className="text-xs text-gray-500 leading-tight text-center">{label}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Skip */}
-          <div className="text-center">
-            <button
-              onClick={onSkip}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              Skip
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+        <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full max-h-[90vh] overflow-y-auto">
+          {/* Header */}
+          <div className="bg-gradient-to-r from-orange-400 to-rose-500 text-white p-5 rounded-t-2xl relative">
+            <button onClick={onSkip} className="absolute top-4 right-4 text-white/70 hover:text-white">
+              <X className="w-5 h-5" />
             </button>
+            <div className="text-xs font-medium text-white/70 mb-1">
+              {totalActivities > 1 ? `Activity ${activityNumber} of ${totalActivities}` : 'New activity'}
+            </div>
+            <h2 className="text-xl font-bold leading-tight">{activity.name}</h2>
+            <p className="text-orange-100 text-sm mt-0.5">{dateStr}</p>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* Stats */}
+            <div className="flex gap-4">
+              {distance && (
+                <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-lg font-bold text-gray-800">{distance}</div>
+                  <div className="text-xs text-gray-500">Distance</div>
+                </div>
+              )}
+              {duration && (
+                <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
+                  <div className="text-lg font-bold text-gray-800">{duration}</div>
+                  <div className="text-xs text-gray-500">Duration</div>
+                </div>
+              )}
+            </div>
+            {activity.calories != null && (
+              <div className="bg-gray-50 rounded-xl p-3 text-center">
+                <div className="text-lg font-bold text-gray-800">{Math.round(activity.calories)} cal</div>
+                <div className="text-xs text-gray-500">Calories</div>
+              </div>
+            )}
+
+            {/* Planned workout */}
+            <PlannedWorkoutCard activity={activity} wasPlanned={wasPlanned} setWasPlanned={handleSetWasPlanned} showAdaptPrompt={showAdaptPrompt} onAdapt={handleAdapt} onDeclineAdapt={handleDeclineAdapt} />
+
+            {/* RPE */}
+            <div>
+              <p className="text-sm font-semibold text-gray-700 mb-3 text-center">How did that feel?</p>
+              <div className="flex justify-between gap-1">
+                {RPE_OPTIONS.map(({ value, emoji, label }) => (
+                  <button
+                    key={value}
+                    onClick={() => onAcknowledge(buildFeedback(value))}
+                    className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-orange-50 transition-colors group"
+                    title={label}
+                  >
+                    <span className="text-2xl group-hover:scale-110 transition-transform">{emoji}</span>
+                    <span className="text-xs text-gray-500 leading-tight text-center">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Skip */}
+            <div className="text-center">
+              <button
+                onClick={onSkip}
+                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                Skip
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
-// ── Advanced mode ─────────────────────────────────────────────────────────────
-
-interface AdvancedModeProps {
-  activity: UnacknowledgedActivity;
-  distance: string | null;
-  duration: string | null;
-  dateStr: string;
-  notes: string;
-  setNotes: (v: string) => void;
-  activityNumber: number;
-  totalActivities: number;
-  onAcknowledge: (feedback: ActivityFeedback) => void;
-  onSkip: () => void;
-}
-
-function AdvancedModal({
-  activity,
-  distance,
-  duration,
-  dateStr,
-  notes,
-  setNotes,
-  activityNumber,
-  totalActivities,
-  onAcknowledge,
-  onSkip,
-}: AdvancedModeProps) {
-  const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
-
+  // Advanced mode
   const stats = [
     distance ? { label: 'Distance', value: distance } : null,
     duration ? { label: 'Duration', value: duration } : null,
@@ -210,13 +268,6 @@ function AdvancedModal({
     activity.average_watts != null ? { label: 'Avg Power', value: `${Math.round(activity.average_watts)}W` } : null,
     activity.calories != null ? { label: 'Calories', value: `${Math.round(activity.calories)}` } : null,
   ].filter(Boolean) as { label: string; value: string }[];
-
-  const handleSave = () => {
-    onAcknowledge({
-      perceived_effort: selectedRpe ?? undefined,
-      notes: notes.trim() || undefined,
-    });
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -245,6 +296,9 @@ function AdvancedModal({
               ))}
             </div>
           )}
+
+          {/* Planned workout */}
+          <PlannedWorkoutCard activity={activity} wasPlanned={wasPlanned} setWasPlanned={handleSetWasPlanned} showAdaptPrompt={showAdaptPrompt} onAdapt={handleAdapt} onDeclineAdapt={handleDeclineAdapt} />
 
           {/* RPE */}
           <div>
@@ -284,7 +338,7 @@ function AdvancedModal({
           {/* Actions */}
           <div className="flex items-center gap-3">
             <Button
-              onClick={handleSave}
+              onClick={() => onAcknowledge(buildFeedback(selectedRpe ?? undefined))}
               className="flex-1 bg-gradient-to-r from-orange-400 to-rose-500 hover:from-orange-500 hover:to-rose-600 text-white"
             >
               Save

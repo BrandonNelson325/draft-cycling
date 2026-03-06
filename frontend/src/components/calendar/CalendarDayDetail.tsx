@@ -1,12 +1,23 @@
-import { X, Check, Trash2, Download, Clock, Zap } from 'lucide-react';
-import type { CalendarEntry } from '../../services/calendarService';
+import { X, Check, Trash2, Download, Clock, Zap, Activity } from 'lucide-react';
+import type { CalendarEntry, StravaActivity } from '../../services/calendarService';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { IntervalVisualizer } from '../workout/IntervalVisualizer';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { getConversionUtils } from '../../utils/units';
+
+const RPE_DISPLAY: Record<number, { emoji: string; label: string }> = {
+  1: { emoji: '😴', label: 'Very Easy' },
+  2: { emoji: '🙂', label: 'Easy' },
+  3: { emoji: '😤', label: 'Moderate' },
+  4: { emoji: '💪', label: 'Hard' },
+  5: { emoji: '🔥', label: 'Max' },
+};
 
 interface CalendarDayDetailProps {
   date: Date;
   entries: CalendarEntry[];
+  stravaActivities?: StravaActivity[];
   onClose: () => void;
   onComplete?: (entry: CalendarEntry) => void;
   onDelete?: (entry: CalendarEntry) => void;
@@ -27,6 +38,7 @@ const formatDate = (date: Date): string => {
 export function CalendarDayDetail({
   date,
   entries,
+  stravaActivities = [],
   onClose,
   onComplete,
   onDelete,
@@ -35,6 +47,8 @@ export function CalendarDayDetail({
 }: CalendarDayDetailProps) {
   const isPast = date < new Date(new Date().setHours(0, 0, 0, 0));
   const isToday = date.toDateString() === new Date().toDateString();
+  const user = useAuthStore((state) => state.user);
+  const units = getConversionUtils(user);
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -221,8 +235,97 @@ export function CalendarDayDetail({
             </div>
           )}
 
+          {/* Strava Activities */}
+          {stravaActivities.length > 0 && (
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Activity className="w-5 h-5 text-orange-500" />
+                Completed Activities
+              </h3>
+              {stravaActivities.map((activity) => {
+                const duration = activity.moving_time_seconds
+                  ? `${Math.floor(activity.moving_time_seconds / 3600)}h ${Math.round((activity.moving_time_seconds % 3600) / 60)}m`
+                  : null;
+
+                const stats: { label: string; value: string }[] = [];
+                if (activity.distance_meters > 0) {
+                  stats.push({ label: units.distanceUnitShort, value: units.formatDistance(activity.distance_meters) });
+                }
+                if (duration) stats.push({ label: 'Duration', value: duration });
+                if (activity.average_watts) stats.push({ label: 'Avg Power', value: `${Math.round(activity.average_watts)}W` });
+                if (activity.tss) stats.push({ label: 'TSS', value: `${Math.round(activity.tss)}` });
+
+                const secondaryStats: { label: string; value: string }[] = [];
+                if (activity.total_elevation_gain) secondaryStats.push({ label: `Elevation (${units.elevationUnitShort})`, value: units.formatElevation(activity.total_elevation_gain) });
+                if (activity.average_heartrate) secondaryStats.push({ label: 'Avg HR', value: `${Math.round(activity.average_heartrate)} bpm` });
+                if (activity.max_heartrate) secondaryStats.push({ label: 'Max HR', value: `${Math.round(activity.max_heartrate)} bpm` });
+                if (activity.max_watts) secondaryStats.push({ label: 'Max Power', value: `${Math.round(activity.max_watts)}W` });
+                if (activity.weighted_average_watts) secondaryStats.push({ label: 'NP', value: `${Math.round(activity.weighted_average_watts)}W` });
+                if (activity.intensity_factor) secondaryStats.push({ label: 'IF', value: activity.intensity_factor.toFixed(2) });
+                if (activity.calories) secondaryStats.push({ label: 'Calories', value: `${Math.round(activity.calories)}` });
+                if (activity.kilojoules) secondaryStats.push({ label: 'Kilojoules', value: `${Math.round(activity.kilojoules)}` });
+
+                return (
+                  <Card key={activity.id} className="overflow-hidden border-orange-200 dark:border-orange-800">
+                    <CardContent className="p-6 space-y-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <h4 className="text-xl font-bold">{activity.name}</h4>
+                        <span className="px-3 py-1 rounded-full bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 text-sm whitespace-nowrap">
+                          {activity.type === 'VirtualRide' ? 'Virtual' : activity.type}
+                        </span>
+                      </div>
+
+                      {/* Primary stats */}
+                      {stats.length > 0 && (
+                        <div className={`grid gap-4 grid-cols-${Math.min(stats.length, 4)}`}>
+                          {stats.map(({ label, value }) => (
+                            <div key={label} className="text-center p-3 bg-muted rounded-lg">
+                              <div className="text-2xl font-bold">{value}</div>
+                              <p className="text-sm text-muted-foreground">{label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Secondary stats */}
+                      {secondaryStats.length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                          {secondaryStats.map(({ label, value }) => (
+                            <div key={label} className="p-2 bg-muted/50 rounded-lg">
+                              <div className="text-sm font-semibold">{value}</div>
+                              <p className="text-xs text-muted-foreground">{label}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* RPE */}
+                      {activity.perceived_effort && RPE_DISPLAY[activity.perceived_effort] && (
+                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
+                          <span className="text-2xl">{RPE_DISPLAY[activity.perceived_effort].emoji}</span>
+                          <div>
+                            <p className="text-xs text-muted-foreground">Perceived Effort</p>
+                            <p className="font-semibold">{RPE_DISPLAY[activity.perceived_effort].label}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Notes */}
+                      {activity.post_activity_notes && (
+                        <div className="p-3 bg-muted/50 rounded-lg">
+                          <p className="text-xs text-muted-foreground mb-1">Notes</p>
+                          <p className="text-sm">{activity.post_activity_notes}</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
           {/* Quick tips */}
-          {entries.length === 0 && (
+          {entries.length === 0 && stravaActivities.length === 0 && (
             <div className="bg-muted/50 p-4 rounded-lg">
               <h4 className="font-medium mb-2 text-sm">Quick Tips</h4>
               <ul className="text-sm text-muted-foreground space-y-1">

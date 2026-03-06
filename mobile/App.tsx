@@ -1,5 +1,5 @@
 import 'react-native-gesture-handler';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { NavigationContainer } from '@react-navigation/native';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import RootNavigator from './src/navigation/RootNavigator';
+import { navigationRef } from './src/navigation/navigationRef';
 import DailyMorningModal from './src/components/modals/DailyMorningModal';
 import PostRideModal from './src/components/modals/PostRideModal';
 import WelcomeModal from './src/components/modals/WelcomeModal';
@@ -50,6 +51,12 @@ function AppModals() {
   const currentActivity = newActivities.activities[newActivities.currentIndex];
   const showPostRide = !dailyMorning.shouldShow && !showWelcome && !!currentActivity;
 
+  const navigateToChat = useCallback((message: string) => {
+    if (navigationRef.isReady()) {
+      (navigationRef as any).navigate('Main', { screen: 'Chat', params: { initialMessage: message } });
+    }
+  }, []);
+
   if (!user) return null;
 
   return (
@@ -69,6 +76,7 @@ function AppModals() {
         activity={showPostRide ? currentActivity : null}
         onAcknowledge={newActivities.acknowledge}
         onSkip={newActivities.skip}
+        onNavigateToChat={navigateToChat}
       />
     </>
   );
@@ -79,7 +87,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <BottomSheetModalProvider>
-          <NavigationContainer linking={linking}>
+          <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="light" />
             <RootNavigator />
             <AppModals />

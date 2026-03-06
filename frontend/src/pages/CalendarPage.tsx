@@ -5,7 +5,7 @@ import { DragDropCalendarGrid } from '../components/calendar/DragDropCalendarGri
 import { WorkoutPickerSidebar } from '../components/calendar/WorkoutPickerSidebar';
 import { CalendarDayDetail } from '../components/calendar/CalendarDayDetail';
 import { WorkoutDetail } from '../components/workout/WorkoutDetail';
-import type { CalendarEntry } from '../services/calendarService';
+import type { CalendarEntry, StravaActivity } from '../services/calendarService';
 import { calendarService } from '../services/calendarService';
 import type { Workout } from '../services/workoutService';
 import { workoutService } from '../services/workoutService';
@@ -15,12 +15,14 @@ export function CalendarPage() {
   const navigate = useNavigate();
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedEntries, setSelectedEntries] = useState<CalendarEntry[]>([]);
+  const [selectedActivities, setSelectedActivities] = useState<StravaActivity[]>([]);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
-  const handleDayClick = (date: Date, entries: CalendarEntry[]) => {
+  const handleDayClick = (date: Date, entries: CalendarEntry[], activities: StravaActivity[]) => {
     setSelectedDate(date);
     setSelectedEntries(entries);
+    setSelectedActivities(activities);
   };
 
   const handleCompleteWorkout = async (entry: CalendarEntry) => {
@@ -135,6 +137,7 @@ export function CalendarPage() {
         <CalendarDayDetail
           date={selectedDate}
           entries={selectedEntries}
+          stravaActivities={selectedActivities}
           onClose={() => setSelectedDate(null)}
           onComplete={handleCompleteWorkout}
           onDelete={handleDeleteEntry}

@@ -8,6 +8,7 @@ import { trainingLoadService } from '../services/trainingLoadService';
 import { calculateTSS } from '../services/trainingCalculations';
 import { sendRideCompletedNotification } from '../services/pushNotificationService';
 import { clearSuggestionCache } from '../services/dailyAnalysisService';
+import { activityMatchingService } from '../services/activityMatchingService';
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
 
@@ -164,6 +165,14 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
       logger.debug(`Updating training status for athlete: ${athleteId}`);
       await trainingLoadService.getTrainingStatus(athleteId);
     }
+
+    // Check if activity matches a planned workout
+    await activityMatchingService.matchAndComplete(athleteId, '', {
+      start_date: activity.start_date,
+      tss,
+      moving_time_seconds: activity.moving_time,
+      strava_activity_id: stravaActivityId,
+    }).catch((err) => logger.warn('[Match] Matching failed:', err));
 
     // Invalidate cached suggestion so dashboard shows post-ride state
     clearSuggestionCache(athleteId);

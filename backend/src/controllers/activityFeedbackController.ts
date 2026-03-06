@@ -26,7 +26,7 @@ export const acknowledge = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const id = req.params.id as string;
-    const { perceived_effort, notes } = req.body;
+    const { perceived_effort, notes, was_planned_workout, calendar_entry_id } = req.body;
 
     if (perceived_effort !== undefined) {
       const effort = Number(perceived_effort);
@@ -39,6 +39,8 @@ export const acknowledge = async (req: AuthRequest, res: Response): Promise<void
     await activityFeedbackService.acknowledgeActivity(req.user.id, id, {
       perceived_effort: perceived_effort !== undefined ? Number(perceived_effort) : undefined,
       notes,
+      was_planned_workout,
+      calendar_entry_id,
     });
 
     res.json({ success: true });
