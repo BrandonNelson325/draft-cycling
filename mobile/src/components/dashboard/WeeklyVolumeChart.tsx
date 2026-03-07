@@ -97,7 +97,7 @@ export default function WeeklyVolumeChart() {
         </View>
         <View style={styles.legendItem}>
           <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
-          <Text style={styles.legendText}>TSS</Text>
+          <Text style={styles.legendText}>Training Load</Text>
         </View>
       </View>
 

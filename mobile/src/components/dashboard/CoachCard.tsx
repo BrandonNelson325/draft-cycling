@@ -91,14 +91,18 @@ export default function CoachCard() {
             </View>
           )}
 
-          {/* Suggested workout (pre-ride, no plan) */}
+          {/* Suggested workout or rest day (pre-ride, no plan) */}
           {!hasRidden && s.suggestedWorkout && !s.todaysWorkout && (
-            <View style={[styles.workoutBox, styles.suggestedBox]}>
-              <Text style={[styles.workoutLabel, styles.suggestedLabel]}>Suggested</Text>
-              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
-              <Text style={styles.workoutMeta}>
-                {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+            <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
+              <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
+                {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
               </Text>
+              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
+              {s.suggestedWorkout.type !== 'rest' && (
+                <Text style={styles.workoutMeta}>
+                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                </Text>
+              )}
               <Text style={styles.workoutDesc}>{s.suggestedWorkout.description}</Text>
             </View>
           )}
@@ -114,14 +118,18 @@ export default function CoachCard() {
             </View>
           )}
 
-          {/* Suggested tomorrow workout (post-ride, no scheduled workout) */}
+          {/* Suggested tomorrow workout or rest day (post-ride, no scheduled workout) */}
           {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
-            <View style={[styles.workoutBox, styles.suggestedBox]}>
-              <Text style={[styles.workoutLabel, styles.suggestedLabel]}>Suggested for Tomorrow</Text>
-              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
-              <Text style={styles.workoutMeta}>
-                {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+            <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
+              <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
+                {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
               </Text>
+              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
+              {s.suggestedWorkout.type !== 'rest' && (
+                <Text style={styles.workoutMeta}>
+                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                </Text>
+              )}
               <Text style={styles.workoutDesc}>{s.suggestedWorkout.description}</Text>
             </View>
           )}
@@ -144,16 +152,16 @@ export default function CoachCard() {
               size={14}
               color="#64748b"
             />
-            <Text style={styles.detailsToggleText}>Training load details</Text>
+            <Text style={styles.detailsToggleText}>Fitness & fatigue details</Text>
           </TouchableOpacity>
           {detailsOpen && (
             <View style={styles.detailsGrid}>
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>CTL (Fitness)</Text>
+                <Text style={styles.detailLabel}>Fitness</Text>
                 <Text style={styles.detailValue}>{Math.round(training.ctl)}</Text>
               </View>
               <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>ATL (Fatigue)</Text>
+                <Text style={styles.detailLabel}>Fatigue</Text>
                 <Text style={styles.detailValue}>{Math.round(training.atl)}</Text>
               </View>
             </View>
@@ -202,6 +210,10 @@ const styles = StyleSheet.create({
   tomorrowBox: {
     borderLeftColor: '#60a5fa',
   },
+  restBox: {
+    borderLeftColor: '#22c55e',
+    backgroundColor: '#052e16',
+  },
   workoutLabel: {
     fontSize: 11,
     fontWeight: '600',
@@ -218,6 +230,9 @@ const styles = StyleSheet.create({
   },
   tomorrowLabel: {
     color: '#60a5fa',
+  },
+  restLabel: {
+    color: '#22c55e',
   },
   rideRow: {
     flexDirection: 'row',

@@ -508,14 +508,17 @@ RESPONSE STYLE: ${athlete.display_mode === 'simple' ? 'simple' : 'advanced'}
 ${athlete.display_mode === 'simple'
   ? `**SIMPLE MODE BEHAVIOR:**
 - Keep responses to 2-4 sentences max unless more detail is genuinely needed.
-- No CTL, ATL, TSB, or power zone jargon — just clear, actionable language.
+- NEVER use acronyms: no CTL, ATL, TSB, TSS, NP, IF, or FTP. Instead say: fitness, fatigue, freshness, training load, normalized power, intensity, threshold power.
+- No power zone jargon — instead of "Zone 4 threshold intervals" say "hard intervals near your limit".
+- Use plain, conversational language that any cyclist can understand, regardless of experience level.
 - For single workout requests: analyze context silently, pick the best workout, create and schedule it, confirm in 1-2 sentences. Skip "here's my reasoning."
 - For plans: still confirm, but ask max 2-3 questions. When offering plan templates, list names and durations only.
 - Confirmation for single workouts: NO confirmation needed — just do it and report what you did.
 - Confirmation for multi-week plans: ALWAYS confirm before building.
 - Move/delete: Do it immediately if the request is clear.`
   : `**ADVANCED MODE BEHAVIOR:**
-- Provide detailed analysis with specific metrics (CTL, ATL, TSB, power zones, TSS).
+- Provide detailed analysis with specific metrics, but use human-readable labels first with acronyms in parentheses: "Fitness (CTL)", "Fatigue (ATL)", "Freshness (TSB)", "Training Load (TSS)".
+- Never lead with the acronym — always lead with the plain English term.
 - For single workouts: explain your reasoning briefly (1-2 sentences of rationale), then create.
 - For plans: outline periodization approach, reference training science.
 - Confirmation for single workouts: explain your choice, then create (no "shall I?" if they already said "for tomorrow").

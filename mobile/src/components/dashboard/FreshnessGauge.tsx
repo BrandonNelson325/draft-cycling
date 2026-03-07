@@ -36,29 +36,29 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
       </View>
 
       <View style={styles.labels}>
-        <Text style={styles.labelText}>-40</Text>
-        <Text style={styles.labelText}>0</Text>
-        <Text style={styles.labelText}>+40</Text>
+        <Text style={styles.labelText}>Tired</Text>
+        <Text style={styles.labelText}>Balanced</Text>
+        <Text style={styles.labelText}>Fresh</Text>
       </View>
 
       <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
         <Text style={[styles.statusText, { color: status.color }]}>
-          {status.label}  TSB: {tsb > 0 ? '+' : ''}{Math.round(tsb)}
+          {status.label}
         </Text>
       </View>
 
       {showDetails && (
         <View style={styles.metrics}>
           <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>CTL (Fitness)</Text>
+            <Text style={styles.metricLabel}>Fitness</Text>
             <Text style={styles.metricValue}>{Math.round(ctl)}</Text>
           </View>
           <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>ATL (Fatigue)</Text>
+            <Text style={styles.metricLabel}>Fatigue</Text>
             <Text style={styles.metricValue}>{Math.round(atl)}</Text>
           </View>
           <View style={styles.metricItem}>
-            <Text style={styles.metricLabel}>TSB (Form)</Text>
+            <Text style={styles.metricLabel}>Freshness</Text>
             <Text style={[styles.metricValue, { color: status.color }]}>
               {tsb > 0 ? '+' : ''}{Math.round(tsb)}
             </Text>

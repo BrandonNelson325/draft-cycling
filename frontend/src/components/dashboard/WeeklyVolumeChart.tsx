@@ -69,7 +69,7 @@ export function WeeklyVolumeChart() {
     <Card>
       <CardHeader className="pb-3">
         <CardTitle className="text-lg">Weekly Volume</CardTitle>
-        <CardDescription className="text-xs">Distance and TSS over the last 6 weeks</CardDescription>
+        <CardDescription className="text-xs">Distance and training load over the last 6 weeks</CardDescription>
       </CardHeader>
       <CardContent className="pb-4">
         <ResponsiveContainer width="100%" height={220}>
@@ -103,7 +103,7 @@ export function WeeklyVolumeChart() {
               stroke="#3b82f6"
               strokeWidth={2}
               dot={{ fill: '#3b82f6', r: 4 }}
-              name="TSS"
+              name="Training Load"
             />
           </LineChart>
         </ResponsiveContainer>

@@ -193,17 +193,17 @@ export function MetricsPage() {
           </CardContent>
         </Card>
 
-        {/* Total TSS */}
+        {/* Total Training Load */}
         <Card>
           <CardHeader>
-            <CardTitle>Total TSS</CardTitle>
-            <CardDescription>Training Stress Score</CardDescription>
+            <CardTitle>Training Load</CardTitle>
+            <CardDescription>Total effort this period</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="text-4xl font-bold text-primary mb-2">
               {metrics?.total_tss?.toFixed(0) || 0}
             </div>
-            <p className="text-sm text-muted-foreground">stress points</p>
+            <p className="text-sm text-muted-foreground">load points</p>
           </CardContent>
         </Card>
 

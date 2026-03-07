@@ -57,11 +57,11 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
 
       {/* Value and Status */}
       <div className={`text-center p-3 rounded-xl ${status.bgColor}`}>
-        <div className={`text-3xl font-bold ${status.textColor}`}>
-          {tsb.toFixed(1)}
+        <div className={`text-xl font-bold ${status.textColor}`}>
+          {status.label}
         </div>
         <div className="text-xs font-medium text-muted-foreground mt-0.5">
-          {status.label}
+          Freshness: {tsb > 0 ? '+' : ''}{tsb.toFixed(0)}
         </div>
       </div>
     </div>

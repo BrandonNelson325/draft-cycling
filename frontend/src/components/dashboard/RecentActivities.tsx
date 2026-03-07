@@ -120,7 +120,7 @@ export function RecentActivities() {
                 <span>{formatDuration(activity.moving_time)}</span>
                 {activity.average_watts && <span>{activity.average_watts}W</span>}
                 {activity.calories && <span>{activity.calories} cal</span>}
-                {activity.tss && <span>TSS: {activity.tss}</span>}
+                {activity.tss && <span>Load: {activity.tss}</span>}
               </div>
             </div>
           ))}

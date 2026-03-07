@@ -54,7 +54,7 @@ export default function RecentActivities({ onActivityPress }: RecentActivitiesPr
                   {activity.name || 'Ride'}
                 </Text>
                 <Text style={styles.meta}>
-                  {[date, dist, time, activity.calories ? `${activity.calories} cal` : null, activity.tss ? `TSS ${Math.round(activity.tss)}` : null]
+                  {[date, dist, time, activity.calories ? `${activity.calories} cal` : null, activity.tss ? `Load ${Math.round(activity.tss)}` : null]
                     .filter(Boolean)
                     .join(' · ')}
                 </Text>

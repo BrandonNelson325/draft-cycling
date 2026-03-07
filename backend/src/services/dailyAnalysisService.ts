@@ -551,12 +551,12 @@ TODAY'S SCHEDULED WORKOUT:
 - TSS: ${todayEntry.workouts.tss}
 
 YOUR TASK:
-Give a direct, no-fluff assessment. No greetings or filler.
+Give a direct, no-fluff assessment. If the athlete is significantly fatigued (TSB < -20) or overtrained, don't be afraid to recommend skipping the workout entirely and taking a rest day — use "add-rest". No greetings or filler.
 
 Format as JSON:
 {
-  "summary": "1 sentence: current state (e.g. 'Carrying some fatigue from yesterday's 90 TSS effort.')",
-  "recommendation": "1 sentence: what to do with today's workout (e.g. 'Proceed as planned — you're ready for it.')",
+  "summary": "1 sentence: current state (e.g. 'Carrying some fatigue from yesterday's 90 TSS effort.' or 'Deeply fatigued after a huge training week.')",
+  "recommendation": "1 sentence: what to do (e.g. 'Proceed as planned — you're ready for it.' or 'Skip today's workout and rest — your body needs recovery more than training right now.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
     }
@@ -566,18 +566,18 @@ Format as JSON:
 No workout is scheduled for today.
 
 YOUR TASK:
-Suggest a specific workout. Be direct, no filler.
+Suggest what the athlete should do today — this could be a workout OR a rest day. If the athlete is significantly fatigued (TSB < -20), overtrained, or has had multiple hard days in a row, prescribe a rest day. Rest is a real prescription. Be direct, no filler.
 
 Format as JSON:
 {
-  "summary": "1 sentence: current state (e.g. 'Fresh after 2 rest days with good fitness.')",
-  "recommendation": "1 sentence: why this workout (e.g. 'Good day for tempo work to build on your base.')",
+  "summary": "1 sentence: current state (e.g. 'Fresh after 2 rest days with good fitness.' or 'Carrying heavy fatigue after a big training week.')",
+  "recommendation": "1 sentence: why this choice (e.g. 'Good day for tempo work to build on your base.' or 'Take today completely off — your body needs to absorb the work.')",
   "suggestedAction": "suggested-workout",
   "suggestedWorkout": {
-    "name": "Workout Name",
-    "type": "recovery|endurance|tempo|threshold|vo2max",
-    "duration": 60,
-    "description": "1 sentence description"
+    "name": "Workout Name (or 'Rest Day')",
+    "type": "rest|recovery|endurance|tempo|threshold|vo2max",
+    "duration": 0,
+    "description": "1 sentence description (for rest: why rest is the right call)"
   }
 }`;
   },
@@ -620,16 +620,16 @@ Format as JSON:
     } else {
       tomorrowSection = '- No workout scheduled\n\n'
         + 'YOUR TASK:\n'
-        + 'Summarize today\'s training effort and suggest a specific workout for tomorrow based on today\'s load, current fitness, and what would fit the training pattern. Be direct, no filler.\n\n'
+        + 'Summarize today\'s training effort and suggest what to do tomorrow — this could be a workout OR a rest day. If the athlete is significantly fatigued (TSB < -20), overtrained, or has had multiple hard days in a row, prescribe rest. Rest is a real prescription. Be direct, no filler.\n\n'
         + 'Format as JSON:\n'
         + '{\n'
         + '  "summary": "1 sentence: today\'s ride recap (e.g. \'Solid 75 TSS endurance ride, right on target.\')",\n'
-        + '  "recommendation": "1 sentence: why this tomorrow workout (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\')",\n'
+        + '  "recommendation": "1 sentence: why this choice (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\' or \'Take tomorrow off — you\'ve earned it and your body needs rest.\')",\n'
         + '  "suggestedAction": "proceed-as-planned",\n'
         + '  "suggestedWorkout": {\n'
-        + '    "name": "Workout Name",\n'
-        + '    "type": "recovery|endurance|tempo|threshold|vo2max",\n'
-        + '    "duration": 60,\n'
+        + '    "name": "Workout Name (or \'Rest Day\')",\n'
+        + '    "type": "rest|recovery|endurance|tempo|threshold|vo2max",\n'
+        + '    "duration": 0,\n'
         + '    "description": "1 sentence description"\n'
         + '  }\n'
         + '}';

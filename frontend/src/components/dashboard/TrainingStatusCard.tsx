@@ -97,11 +97,11 @@ export function TrainingStatusCard() {
           <CardTitle className="text-lg">Training Status</CardTitle>
           <InfoTooltip content={
             <div className="space-y-2.5">
-              <p className="font-semibold text-foreground">Training Load Metrics</p>
+              <p className="font-semibold text-foreground">How to read these numbers</p>
               <div className="space-y-1.5">
-                <p><span className="font-medium">TSB (Form / Freshness)</span> = CTL − ATL. Positive means rested and ready. Negative means carrying fatigue from recent training. The productive zone is roughly −10 to +5.</p>
-                <p><span className="font-medium">CTL (Fitness)</span> — 42-day rolling average of daily training stress. Represents your long-term aerobic fitness base. Higher = more fit.</p>
-                <p><span className="font-medium">ATL (Fatigue)</span> — 7-day rolling average of daily training stress. Represents short-term fatigue from recent training. Rises quickly with hard weeks, drops on rest days.</p>
+                <p><span className="font-medium">Freshness</span> — Are you rested or carrying fatigue? Positive = fresh, negative = tired. The sweet spot for productive training is roughly −10 to +5.</p>
+                <p><span className="font-medium">Fitness</span> — Your long-term training base, built over ~6 weeks. Higher means you're fitter and can handle more work.</p>
+                <p><span className="font-medium">Fatigue</span> — How much stress your body absorbed in the last ~7 days. Goes up with hard training, drops with rest.</p>
               </div>
             </div>
           } />
@@ -112,32 +112,32 @@ export function TrainingStatusCard() {
         <div className="space-y-4">
           {/* Freshness Gauge */}
           <div>
-            <h4 className="text-xs font-semibold mb-2 text-center text-muted-foreground">TSB — Freshness</h4>
+            <h4 className="text-xs font-semibold mb-2 text-center text-muted-foreground">Freshness</h4>
             <FreshnessGauge tsb={status.tsb || 0} />
           </div>
 
           <div className="border-t border-gray-200 pt-3 space-y-2">
             <div className="border-l-4 border-primary pl-2">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-muted-foreground">CTL (Fitness)</span>
+                <span className="text-xs font-medium text-muted-foreground">Fitness</span>
                 <span className="text-xl font-bold text-foreground">
                   {status.ctl != null ? status.ctl.toFixed(1) : '0.0'}
                 </span>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Chronic Training Load
+                Long-term training base (~6 weeks)
               </p>
             </div>
 
             <div className="border-l-4 border-gray-300 pl-2">
               <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-muted-foreground">ATL (Fatigue)</span>
+                <span className="text-xs font-medium text-muted-foreground">Fatigue</span>
                 <span className="text-xl font-bold text-foreground">
                   {status.atl != null ? status.atl.toFixed(1) : '0.0'}
                 </span>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Acute Training Load
+                Recent training stress (~7 days)
               </p>
             </div>
 

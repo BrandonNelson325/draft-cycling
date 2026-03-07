@@ -94,14 +94,18 @@ export function CoachCard() {
               </div>
             )}
 
-            {/* Suggested workout (pre-ride, no plan) */}
+            {/* Suggested workout or rest day (pre-ride, no plan) */}
             {!hasRidden && s.suggestedWorkout && !s.todaysWorkout && (
-              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">Suggested</p>
-                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
-                <p className="text-xs text-gray-500">
-                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+              <div className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'}`}>
+                <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${s.suggestedWorkout.type === 'rest' ? 'text-green-700' : 'text-purple-700'}`}>
+                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
                 </p>
+                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
+                {s.suggestedWorkout.type !== 'rest' && (
+                  <p className="text-xs text-gray-500">
+                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">{s.suggestedWorkout.description}</p>
               </div>
             )}
@@ -117,14 +121,18 @@ export function CoachCard() {
               </div>
             )}
 
-            {/* Suggested tomorrow workout (post-ride, no scheduled workout) */}
+            {/* Suggested tomorrow workout or rest day (post-ride, no scheduled workout) */}
             {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
-              <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 mb-1">Suggested for Tomorrow</p>
-                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
-                <p className="text-xs text-gray-500">
-                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+              <div className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'}`}>
+                <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${s.suggestedWorkout.type === 'rest' ? 'text-green-700' : 'text-purple-700'}`}>
+                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
                 </p>
+                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
+                {s.suggestedWorkout.type !== 'rest' && (
+                  <p className="text-xs text-gray-500">
+                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500 mt-1">{s.suggestedWorkout.description}</p>
               </div>
             )}
@@ -145,16 +153,16 @@ export function CoachCard() {
               className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors w-full"
             >
               {detailsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              <span>Training load details</span>
+              <span>Fitness & fatigue details</span>
             </button>
             {detailsOpen && (
               <div className="mt-2 grid grid-cols-2 gap-3">
                 <div className="border-l-2 border-blue-500 pl-2">
-                  <span className="text-[10px] text-gray-400 uppercase">CTL (Fitness)</span>
+                  <span className="text-[10px] text-gray-400 uppercase">Fitness</span>
                   <p className="text-lg font-bold">{training.ctl.toFixed(1)}</p>
                 </div>
                 <div className="border-l-2 border-gray-300 pl-2">
-                  <span className="text-[10px] text-gray-400 uppercase">ATL (Fatigue)</span>
+                  <span className="text-[10px] text-gray-400 uppercase">Fatigue</span>
                   <p className="text-lg font-bold">{training.atl.toFixed(1)}</p>
                 </div>
               </div>

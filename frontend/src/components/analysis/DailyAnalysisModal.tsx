@@ -83,7 +83,7 @@ export function DailyAnalysisModal({ analysis, onClose }: DailyAnalysisModalProp
               <div>
                 <div className="font-semibold text-lg">{getStatusText()}</div>
                 <div className="text-sm text-muted-foreground">
-                  Form: {analysis.currentTSB.toFixed(1)} | Fitness: {analysis.currentCTL.toFixed(1)}
+                  Freshness: {analysis.currentTSB.toFixed(1)} | Fitness: {analysis.currentCTL.toFixed(1)}
                 </div>
               </div>
             </div>
