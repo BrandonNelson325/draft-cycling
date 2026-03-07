@@ -80,7 +80,7 @@ export const chatGreetingService = {
     hasTrainingPlan: boolean,
     healthData: any
   ): string {
-    const timeOfDay = this.getTimeOfDay();
+    const timeOfDay = this.getTimeOfDay(athlete?.timezone);
 
     return `You are an AI cycling coach starting a coaching session with an athlete who just opened the chat.
 
@@ -234,12 +234,14 @@ Generate the greeting now:`;
   },
 
   /**
-   * Get time of day greeting
+   * Get time of day greeting using athlete's timezone
    */
-  getTimeOfDay(): string {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'morning';
-    if (hour < 18) return 'afternoon';
+  getTimeOfDay(timezone?: string): string {
+    const tz = timezone || 'America/Los_Angeles';
+    const hour = new Date().toLocaleString('en-US', { timeZone: tz, hour: 'numeric', hour12: false });
+    const h = parseInt(hour, 10);
+    if (h < 12) return 'morning';
+    if (h < 18) return 'afternoon';
     return 'evening';
   },
 };
