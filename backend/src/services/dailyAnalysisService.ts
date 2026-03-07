@@ -556,7 +556,7 @@ Give a direct, no-fluff assessment. If the athlete is significantly fatigued (TS
 Format as JSON:
 {
   "summary": "1 sentence: current state (e.g. 'Carrying some fatigue from yesterday's 90 TSS effort.' or 'Deeply fatigued after a huge training week.')",
-  "recommendation": "1 sentence: what to do (e.g. 'Proceed as planned — you're ready for it.' or 'Skip today's workout and rest — your body needs recovery more than training right now.')",
+  "recommendation": "1 sentence: what to do (e.g. 'Proceed as planned — you're ready for it.' or 'I'd suggest skipping today's workout and resting — your body will benefit more from recovery right now.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
     }
@@ -571,7 +571,7 @@ Suggest what the athlete should do today — this could be a workout OR a rest d
 Format as JSON:
 {
   "summary": "1 sentence: current state (e.g. 'Fresh after 2 rest days with good fitness.' or 'Carrying heavy fatigue after a big training week.')",
-  "recommendation": "1 sentence: why this choice (e.g. 'Good day for tempo work to build on your base.' or 'Take today completely off — your body needs to absorb the work.')",
+  "recommendation": "1 sentence: why this choice (e.g. 'Good day for tempo work to build on your base.' or 'With the fatigue you're carrying, I'd suggest a full rest day to let your body recover.')",
   "suggestedAction": "suggested-workout",
   "suggestedWorkout": {
     "name": "Workout Name (or 'Rest Day')",
@@ -624,7 +624,7 @@ Format as JSON:
         + 'Format as JSON:\n'
         + '{\n'
         + '  "summary": "1 sentence: today\'s ride recap (e.g. \'Solid 75 TSS endurance ride, right on target.\')",\n'
-        + '  "recommendation": "1 sentence: why this choice (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\' or \'Take tomorrow off — you\'ve earned it and your body needs rest.\')",\n'
+        + '  "recommendation": "1 sentence: why this choice (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\' or \'With the load you\'ve built up, I\'d suggest taking tomorrow off to let your body recover.\')",\n'
         + '  "suggestedAction": "proceed-as-planned",\n'
         + '  "suggestedWorkout": {\n'
         + '    "name": "Workout Name (or \'Rest Day\')",\n'
