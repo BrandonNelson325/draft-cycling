@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuthStore } from './stores/useAuthStore';
 import { LoginForm } from './components/auth/LoginForm';
 import { RegisterForm } from './components/auth/RegisterForm';
 import { BetaAccessForm } from './components/auth/BetaAccessForm';
 import { AppLayout } from './components/layout/AppLayout';
+import { LandingPage } from './pages/LandingPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { WorkoutsPage } from './pages/WorkoutsPage';
 import { CalendarPage } from './pages/CalendarPage';
@@ -50,7 +51,7 @@ function ProtectedRoutes() {
     user?.subscription_status === 'trialing'
   );
 
-  // If no access, show beta access form
+  // If no access, show subscription/promo code form
   if (!hasAccess) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -107,7 +108,8 @@ function ProtectedRoutes() {
 }
 
 function AuthScreen() {
-  const [showLogin, setShowLogin] = useState(true);
+  const [searchParams] = useSearchParams();
+  const [showLogin, setShowLogin] = useState(!searchParams.get('register'));
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -136,11 +138,16 @@ function App() {
       {/* Strava callback route (accessible without full auth) */}
       <Route path="/strava/callback" element={<StravaCallback />} />
 
-      {/* Protected routes if user is logged in */}
       {user ? (
+        // Logged in — all routes go to protected app
         <Route path="*" element={<ProtectedRoutes />} />
       ) : (
-        <Route path="*" element={<AuthScreen />} />
+        // Not logged in — landing page + auth routes
+        <>
+          <Route path="/" element={<LandingPage />} />
+          <Route path="/login" element={<AuthScreen />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </>
       )}
     </Routes>
   );
