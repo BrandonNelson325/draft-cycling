@@ -55,24 +55,45 @@ app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }),
 });
 
 // CORS Configuration
-const allowedOrigins = [
-  config.frontendUrl,
-  // Support both www and non-www variants
-  config.frontendUrl.replace('https://www.', 'https://'),
-  config.frontendUrl.replace('https://', 'https://www.'),
-  'http://localhost:5173',
-  'http://localhost:3000',
-  'http://localhost:4173', // vite preview
-];
+const buildAllowedOrigins = (): string[] => {
+  const origins = new Set<string>();
 
-console.log('[CORS] Allowed origins:', allowedOrigins);
+  // Add configured frontend URL (strip trailing slash)
+  const frontendUrl = config.frontendUrl.replace(/\/+$/, '');
+  origins.add(frontendUrl);
+
+  // Support both www and non-www variants
+  if (frontendUrl.includes('://www.')) {
+    origins.add(frontendUrl.replace('://www.', '://'));
+  } else if (frontendUrl.startsWith('https://')) {
+    origins.add(frontendUrl.replace('https://', 'https://www.'));
+  }
+
+  // Additional allowed origins from env (comma-separated)
+  if (process.env.CORS_EXTRA_ORIGINS) {
+    for (const o of process.env.CORS_EXTRA_ORIGINS.split(',')) {
+      const trimmed = o.trim().replace(/\/+$/, '');
+      if (trimmed) origins.add(trimmed);
+    }
+  }
+
+  // Local development
+  origins.add('http://localhost:5173');
+  origins.add('http://localhost:3000');
+  origins.add('http://localhost:4173'); // vite preview
+
+  return Array.from(origins);
+};
+
+const allowedOrigins = buildAllowedOrigins();
+logger.info(`[CORS] Allowed origins: ${JSON.stringify(allowedOrigins)}`);
 
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    console.error(`[CORS] Blocked origin: "${origin}"`);
+    logger.warn(`[CORS] Blocked origin: "${origin}" — allowed: ${JSON.stringify(allowedOrigins)}`);
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,

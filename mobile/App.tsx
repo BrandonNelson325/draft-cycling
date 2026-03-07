@@ -57,7 +57,13 @@ function AppModals() {
     }
   }, []);
 
-  if (!user) return null;
+  // Don't show modals until user has passed the payment/beta gate
+  const hasBetaOrSubscription =
+    !!user?.beta_access_code ||
+    user?.subscription_status === 'active' ||
+    user?.subscription_status === 'trialing';
+
+  if (!user || !hasBetaOrSubscription) return null;
 
   return (
     <>

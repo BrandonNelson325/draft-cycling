@@ -4,6 +4,7 @@ import axios, {
   AxiosResponse,
   InternalAxiosRequestConfig,
 } from 'axios';
+import { useAuthStore } from '../stores/useAuthStore';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
@@ -34,9 +35,7 @@ const processQueue = (error: any, token: string | null = null) => {
 
 // Request interceptor: attach Authorization header
 apiClient.interceptors.request.use(
-  async (config: InternalAxiosRequestConfig) => {
-    // Import lazily to avoid circular deps
-    const { useAuthStore } = await import('../stores/useAuthStore');
+  (config: InternalAxiosRequestConfig) => {
     const token = useAuthStore.getState().accessToken;
     if (token && config.headers) {
       config.headers['Authorization'] = `Bearer ${token}`;
@@ -52,8 +51,18 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
-    const isAuthEndpoint = originalRequest.url?.includes('/auth/login') ||
-      originalRequest.url?.includes('/auth/register');
+    // Log all API errors for debugging
+    if (error.response) {
+      console.warn(
+        `[API] ${error.response.status} ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url}`,
+        error.response.data?.error || ''
+      );
+    } else if (error.request) {
+      console.warn(`[API] Network error: ${originalRequest?.method?.toUpperCase()} ${originalRequest?.url}`, error.message);
+    }
+
+    const isAuthEndpoint = originalRequest?.url?.includes('/auth/login') ||
+      originalRequest?.url?.includes('/auth/register');
 
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
@@ -72,7 +81,6 @@ apiClient.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { useAuthStore } = await import('../stores/useAuthStore');
         const refreshToken = useAuthStore.getState().refreshToken;
 
         if (!refreshToken) {
@@ -92,7 +100,6 @@ apiClient.interceptors.response.use(
         originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
-        const { useAuthStore } = await import('../stores/useAuthStore');
         useAuthStore.getState().logout();
         processQueue(refreshError, null);
         return Promise.reject(refreshError);
