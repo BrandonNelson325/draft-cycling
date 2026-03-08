@@ -37,7 +37,9 @@ export const weeklyMetricsService = {
     data.forEach((activity: any) => {
       const date = new Date(activity.start_date);
       const weekStart = new Date(date);
-      weekStart.setDate(date.getDate() - date.getDay()); // Start of week (Sunday)
+      const day = date.getDay(); // 0=Sun, 1=Mon, ...
+      const diffToMonday = day === 0 ? 6 : day - 1;
+      weekStart.setDate(date.getDate() - diffToMonday); // Start of week (Monday)
       const weekKey = weekStart.toISOString().split('T')[0];
 
       if (!weeklyMap.has(weekKey)) {

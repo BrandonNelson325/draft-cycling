@@ -14,12 +14,20 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     let startDate: Date;
 
     switch (period) {
-      case 'week':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case 'week': {
+        // Current week: Monday to Sunday
+        const day = now.getDay(); // 0=Sun, 1=Mon, ...
+        const diffToMonday = day === 0 ? 6 : day - 1;
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - diffToMonday);
+        startDate.setHours(0, 0, 0, 0);
         break;
-      case 'month':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+      case 'month': {
+        // Current calendar month: 1st of the month
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
         break;
+      }
       case '8weeks':
         startDate = new Date(now.getTime() - 56 * 24 * 60 * 60 * 1000);
         break;
@@ -29,8 +37,13 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
       case 'all':
         startDate = new Date(0); // Beginning of time
         break;
-      default:
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      default: {
+        const defaultDay = now.getDay();
+        const defaultDiff = defaultDay === 0 ? 6 : defaultDay - 1;
+        startDate = new Date(now);
+        startDate.setDate(now.getDate() - defaultDiff);
+        startDate.setHours(0, 0, 0, 0);
+      }
     }
 
     // Get activities in time period

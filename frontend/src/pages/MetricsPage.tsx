@@ -43,11 +43,11 @@ export function MetricsPage() {
   const getPeriodLabel = () => {
     switch (period) {
       case 'week':
-        return 'Last 7 Days';
+        return 'This Week';
       case 'month':
-        return 'Last 30 Days';
+        return 'This Month';
       case 'year':
-        return 'Last 365 Days';
+        return 'This Year';
       case 'all':
         return 'All Time';
     }
