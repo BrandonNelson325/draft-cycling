@@ -82,9 +82,8 @@ export function LandingPage() {
       {/* Nav */}
       <nav className="fixed top-0 w-full z-50 bg-gray-950/80 backdrop-blur-md border-b border-gray-800">
         <div className="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
-            <img src="/logo.png" alt="Draft" className="h-8 w-auto" />
-            <span className="text-lg font-bold">Draft</span>
+          <Link to="/" className="flex items-center gap-2">
+            <img src="/logo-dark.png" alt="Draft" className="h-10 w-auto" />
           </Link>
           <div className="flex items-center gap-4">
             <Link
@@ -265,7 +264,7 @@ export function LandingPage() {
       <footer className="border-t border-gray-800 py-8 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src="/logo.png" alt="Draft" className="h-6 w-auto" />
+            <img src="/logo-dark.png" alt="Draft" className="h-7 w-auto" />
             <span className="text-sm text-gray-500">&copy; {new Date().getFullYear()} Draft Cycling. All rights reserved.</span>
           </div>
           <div className="flex gap-6 text-sm text-gray-500">

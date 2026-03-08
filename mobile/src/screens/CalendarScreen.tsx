@@ -389,12 +389,14 @@ export default function CalendarScreen() {
   const month = currentDate.getMonth();
 
   useEffect(() => {
+    if (!user) return;
     loadCalendar();
-  }, [year, month]);
+  }, [year, month, user?.id]);
 
   useEffect(() => {
+    if (!user) return;
     trainingPlanService.getActivePlan().then(setPlan).catch(() => setPlan(null));
-  }, []);
+  }, [user?.id]);
 
   const loadCalendar = async () => {
     setLoading(true);

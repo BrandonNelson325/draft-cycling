@@ -40,11 +40,16 @@ export default function WeeklyVolumeChart() {
   const units = getConversionUtils(user);
 
   useEffect(() => {
+    if (!user) return;
+    setLoading(true);
     chartsService.getWeeklyData(8).then(d => {
       setData(d);
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    }).catch((err) => {
+      console.warn('[WeeklyVolumeChart] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
+      setLoading(false);
+    });
+  }, [user?.id]);
 
   if (loading) {
     return (

@@ -40,7 +40,10 @@ export default function PowerCurveChart() {
     metricsService.getMetrics(period).then(d => {
       setPrs(d.power_prs as unknown as Record<string, number>);
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err) => {
+      console.warn('[PowerCurveChart] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
+      setLoading(false);
+    });
   }, [period]);
 
   if (loading) {

@@ -15,11 +15,12 @@ export const authService = {
       throw new Error((data as any)?.error || 'Registration failed');
     }
 
-    useAuthStore.getState().setUser(data.user);
+    // Set tokens BEFORE user so API calls have auth ready when navigator renders
     useAuthStore.getState().setTokens(
       data.session.access_token,
       data.session.refresh_token
     );
+    useAuthStore.getState().setUser(data.user);
 
     return data;
   },
@@ -34,11 +35,12 @@ export const authService = {
       throw new Error((data as any)?.error || 'Login failed');
     }
 
-    useAuthStore.getState().setUser(data.user);
+    // Set tokens BEFORE user so API calls have auth ready when navigator renders
     useAuthStore.getState().setTokens(
       data.session.access_token,
       data.session.refresh_token
     );
+    useAuthStore.getState().setUser(data.user);
 
     return data;
   },

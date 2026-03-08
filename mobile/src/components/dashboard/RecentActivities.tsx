@@ -13,22 +13,33 @@ interface RecentActivitiesProps {
 export default function RecentActivities({ onActivityPress }: RecentActivitiesProps) {
   const [activities, setActivities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
 
   useEffect(() => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
     stravaService.getActivities().then((data: any) => {
       const list = Array.isArray(data) ? data : data?.activities || [];
       setActivities(list.slice(0, 5));
       setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
+    }).catch((err) => {
+      const msg = err?.response?.data?.error || err.message || 'Failed to load';
+      console.warn('[RecentActivities] fetch error:', err?.response?.status, msg);
+      setError(msg);
+      setLoading(false);
+    });
+  }, [user?.id]);
 
   return (
     <Card>
       <Text style={styles.title}>Recent Activities</Text>
       {loading ? (
         <ActivityIndicator color="#3b82f6" style={{ marginVertical: 8 }} />
+      ) : error ? (
+        <Text style={styles.empty}>Error: {error}</Text>
       ) : activities.length === 0 ? (
         <Text style={styles.empty}>No activities yet. Connect Strava to sync rides.</Text>
       ) : (

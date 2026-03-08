@@ -23,15 +23,17 @@ export default function MetricsCard() {
   const units = getConversionUtils(user);
 
   useEffect(() => {
+    if (!user) return;
     load();
-  }, [period]);
+  }, [period, user?.id]);
 
   const load = async () => {
     setLoading(true);
     try {
       const d = await metricsService.getMetrics(period);
       setData(d);
-    } catch {
+    } catch (err: any) {
+      console.warn('[MetricsCard] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
       setData(null);
     } finally {
       setLoading(false);
