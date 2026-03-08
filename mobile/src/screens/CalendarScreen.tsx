@@ -7,12 +7,14 @@ import {
   FlatList,
   Alert,
   ActivityIndicator,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { calendarService, type CalendarData, type CalendarEntry, type StravaActivity } from '../services/calendarService';
 import { workoutService, type Workout } from '../services/workoutService';
+import { trainingPlanService, type TrainingPlan } from '../services/trainingPlanService';
 import { parseLocalDate, toDateString } from '../utils/date';
 import { useAuthStore } from '../stores/useAuthStore';
 import { getConversionUtils } from '../utils/units';
@@ -24,6 +26,178 @@ const SNAP_POINTS_DAY = ['70%', '90%'];
 const SNAP_POINTS_PICKER = ['80%'];
 const SNAP_POINTS_DETAIL = ['60%', '85%'];
 
+const PHASE_COLORS: Record<string, { bg: string; text: string; bar: string }> = {
+  base: { bg: '#1e3a5f', text: '#60a5fa', bar: '#3b82f6' },
+  build: { bg: '#1e3a1f', text: '#4ade80', bar: '#22c55e' },
+  peak: { bg: '#3f1020', text: '#f87171', bar: '#ef4444' },
+  taper: { bg: '#2d1f00', text: '#fbbf24', bar: '#f59e0b' },
+};
+
+function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
+  const today = toDateString(new Date());
+  const planStart = parseLocalDate(plan.start_date);
+  const daysSinceStart = Math.floor((new Date().getTime() - planStart.getTime()) / (1000 * 60 * 60 * 24));
+  const currentWeekNum = Math.max(1, Math.floor(daysSinceStart / 7) + 1);
+  const currentWeek = plan.weeks.find(w => w.week_number === currentWeekNum);
+  const totalWeeks = plan.weeks.length;
+  const progress = Math.min(100, Math.max(0, (currentWeekNum / totalWeeks) * 100));
+
+  return (
+    <View style={planStyles.container}>
+      <View style={planStyles.header}>
+        <Text style={planStyles.title}>{plan.goal_event}</Text>
+        <Text style={planStyles.subtitle}>
+          {parseLocalDate(plan.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+          {' → '}
+          {parseLocalDate(plan.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+        </Text>
+      </View>
+
+      {/* Progress bar */}
+      <View style={planStyles.progressContainer}>
+        <View style={planStyles.progressTrack}>
+          {plan.weeks.map((week, i) => {
+            const color = PHASE_COLORS[week.phase]?.bar || '#475569';
+            const widthPct = 100 / totalWeeks;
+            return (
+              <View
+                key={i}
+                style={{
+                  width: `${widthPct}%`,
+                  height: '100%',
+                  backgroundColor: color,
+                  opacity: week.week_number <= currentWeekNum ? 1 : 0.3,
+                }}
+              />
+            );
+          })}
+        </View>
+        <Text style={planStyles.progressText}>Week {currentWeekNum} of {totalWeeks}</Text>
+      </View>
+
+      {/* Phase legend */}
+      <View style={planStyles.phaseLegend}>
+        {['base', 'build', 'peak', 'taper'].map(phase => {
+          const count = plan.weeks.filter(w => w.phase === phase).length;
+          if (!count) return null;
+          const c = PHASE_COLORS[phase];
+          return (
+            <View key={phase} style={[planStyles.phaseChip, { backgroundColor: c.bg }]}>
+              <Text style={[planStyles.phaseChipText, { color: c.text }]}>
+                {phase} ({count}w)
+              </Text>
+            </View>
+          );
+        })}
+      </View>
+
+      {/* Current week workouts */}
+      {currentWeek && (
+        <View style={planStyles.currentWeek}>
+          <Text style={planStyles.currentWeekTitle}>
+            This Week — {currentWeek.phase.charAt(0).toUpperCase() + currentWeek.phase.slice(1)}
+          </Text>
+          {currentWeek.workouts.map((w, i) => (
+            <View key={i} style={planStyles.workoutRow}>
+              <Text style={planStyles.workoutDay}>
+                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day_of_week]}
+              </Text>
+              <Text style={planStyles.workoutName} numberOfLines={1}>{w.name}</Text>
+              <Text style={planStyles.workoutMeta}>{w.duration_minutes}m</Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+const planStyles = StyleSheet.create({
+  container: {
+    marginHorizontal: 12,
+    marginTop: 12,
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 14,
+    gap: 10,
+  },
+  header: {
+    gap: 2,
+  },
+  title: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#f1f5f9',
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+  progressContainer: {
+    gap: 4,
+  },
+  progressTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#0f172a',
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  progressText: {
+    fontSize: 11,
+    color: '#94a3b8',
+  },
+  phaseLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  phaseChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  phaseChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    textTransform: 'capitalize',
+  },
+  currentWeek: {
+    borderTopWidth: 1,
+    borderTopColor: '#0f172a',
+    paddingTop: 10,
+    gap: 6,
+  },
+  currentWeekTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#94a3b8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  workoutRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  workoutDay: {
+    width: 30,
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  workoutName: {
+    flex: 1,
+    fontSize: 13,
+    color: '#f1f5f9',
+  },
+  workoutMeta: {
+    fontSize: 12,
+    color: '#64748b',
+  },
+});
+
 export default function CalendarScreen() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calData, setCalData] = useState<CalendarData>({ scheduledWorkouts: [], stravaActivities: [] });
@@ -33,6 +207,7 @@ export default function CalendarScreen() {
   const [loading, setLoading] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
+  const [plan, setPlan] = useState<TrainingPlan | null>(null);
 
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
@@ -48,6 +223,10 @@ export default function CalendarScreen() {
   useEffect(() => {
     loadCalendar();
   }, [year, month]);
+
+  useEffect(() => {
+    trainingPlanService.getActivePlan().then(setPlan).catch(() => setPlan(null));
+  }, []);
 
   const loadCalendar = async () => {
     setLoading(true);
@@ -149,6 +328,7 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
+      <ScrollView>
       {/* Calendar header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={prevMonth} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -201,6 +381,11 @@ export default function CalendarScreen() {
           })}
         </View>
       )}
+
+      {/* Training Plan Summary (below calendar) */}
+      {plan && <TrainingPlanSummary plan={plan} />}
+      <View style={{ height: 16 }} />
+      </ScrollView>
 
       {/* Day Detail Bottom Sheet */}
       <BottomSheet

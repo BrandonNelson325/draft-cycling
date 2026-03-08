@@ -83,6 +83,9 @@ export const aiToolExecutor = {
           case 'update_athlete_preferences':
             result = await this.updateAthletePreferences(athleteId, toolCall.input);
             break;
+          case 'clear_calendar_range':
+            result = await this.clearCalendarRange(athleteId, toolCall.input);
+            break;
           default:
             throw new Error(`Unknown tool: ${toolCall.name}`);
         }
@@ -253,6 +256,23 @@ export const aiToolExecutor = {
       );
     }
 
+    // Check for existing workout on this date — only 1 workout per day allowed
+    const dateStr = input.scheduled_date; // YYYY-MM-DD
+    const { data: existing } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id, workouts(name)')
+      .eq('athlete_id', athleteId)
+      .eq('scheduled_date', dateStr)
+      .is('completed_at', null);
+
+    if (existing && existing.length > 0) {
+      const existingName = (existing[0] as any).workouts?.name || 'a workout';
+      throw new Error(
+        `There is already a workout scheduled on ${dateStr} ("${existingName}"). ` +
+        `Only one workout per day is allowed. Delete the existing one first with delete_workout_from_calendar (entry_id: "${existing[0].id}"), or choose a different date.`
+      );
+    }
+
     const entry = await calendarService.scheduleWorkout(
       athleteId,
       input.workout_id,
@@ -306,6 +326,59 @@ export const aiToolExecutor = {
     return {
       success: true,
       message: 'Workout removed from calendar',
+    };
+  },
+
+  /**
+   * Clear all calendar entries in a date range (bulk delete)
+   */
+  async clearCalendarRange(athleteId: string, input: any): Promise<any> {
+    const { start_date, end_date } = input;
+
+    if (!start_date || !end_date) {
+      throw new Error('Both start_date and end_date are required (YYYY-MM-DD format)');
+    }
+
+    // Get all entries in range (only non-completed ones)
+    const { data: entries, error: fetchError } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id, scheduled_date, workouts(name)')
+      .eq('athlete_id', athleteId)
+      .gte('scheduled_date', start_date)
+      .lte('scheduled_date', end_date)
+      .is('completed_at', null);
+
+    if (fetchError) {
+      throw new Error(`Failed to fetch calendar entries: ${fetchError.message}`);
+    }
+
+    if (!entries || entries.length === 0) {
+      return { success: true, deleted_count: 0, message: 'No entries found in that date range' };
+    }
+
+    // Delete all entries in one query
+    const entryIds = entries.map(e => e.id);
+    const { error: deleteError } = await supabaseAdmin
+      .from('calendar_entries')
+      .delete()
+      .in('id', entryIds)
+      .eq('athlete_id', athleteId);
+
+    if (deleteError) {
+      throw new Error(`Failed to delete calendar entries: ${deleteError.message}`);
+    }
+
+    // Also deactivate any active training plans that fall in this range
+    await supabaseAdmin
+      .from('training_plans')
+      .update({ status: 'cancelled' })
+      .eq('athlete_id', athleteId)
+      .eq('status', 'active');
+
+    return {
+      success: true,
+      deleted_count: entries.length,
+      message: `Cleared ${entries.length} workouts from ${start_date} to ${end_date}`,
     };
   },
 
@@ -510,9 +583,42 @@ export const aiToolExecutor = {
       }
     }
 
+    // Deduplicate: only one workout per date (keep the last one if AI sent duplicates)
+    const dateMap = new Map<string, typeof workouts[0]>();
+    for (const w of workouts) {
+      dateMap.set(w.date, w);
+    }
+    const deduplicatedWorkouts = Array.from(dateMap.values());
+    logger.debug(`Plan scheduling: ${workouts.length} entries → ${deduplicatedWorkouts.length} after dedup`);
+
+    // Clear existing non-completed calendar entries on these dates to prevent doubles
+    const planDates = deduplicatedWorkouts.map(w => w.date);
+    const { data: existingEntries } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id')
+      .eq('athlete_id', athleteId)
+      .in('scheduled_date', planDates)
+      .is('completed_at', null);
+
+    if (existingEntries && existingEntries.length > 0) {
+      logger.debug(`Clearing ${existingEntries.length} existing entries on plan dates`);
+      await supabaseAdmin
+        .from('calendar_entries')
+        .delete()
+        .in('id', existingEntries.map(e => e.id))
+        .eq('athlete_id', athleteId);
+    }
+
+    // Deactivate any existing active plan
+    await supabaseAdmin
+      .from('training_plans')
+      .update({ status: 'cancelled' })
+      .eq('athlete_id', athleteId)
+      .eq('status', 'active');
+
     // Create all athlete workouts in parallel (no ZWO/FIT generation — done on demand)
     const created = await Promise.all(
-      workouts.map(async (item) => {
+      deduplicatedWorkouts.map(async (item) => {
         const t = templateMap.get(item.template_id)!;
         const workout = await workoutService.createWorkout(athleteId, {
           name: t.name,

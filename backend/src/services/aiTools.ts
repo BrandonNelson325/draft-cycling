@@ -125,6 +125,26 @@ export const AI_TOOLS: Tool[] = [
   },
 
   {
+    name: 'clear_calendar_range',
+    description:
+      'Remove ALL scheduled workouts in a date range (bulk delete). Use this when the athlete wants to clear their calendar or start fresh. Only deletes non-completed entries. Also deactivates any active training plan.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        start_date: {
+          type: 'string',
+          description: 'Start date in YYYY-MM-DD format',
+        },
+        end_date: {
+          type: 'string',
+          description: 'End date in YYYY-MM-DD format',
+        },
+      },
+      required: ['start_date', 'end_date'],
+    },
+  },
+
+  {
     name: 'get_calendar',
     description: "Get the athlete's training calendar for a date range to see what workouts are scheduled",
     input_schema: {

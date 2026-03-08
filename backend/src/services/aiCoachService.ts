@@ -960,6 +960,12 @@ For training plans: if the athlete explicitly requests a plan, ask goal, event d
 - DO NOT ask the athlete what today's date is
 - **CHECK THE DAY OF WEEK** - make sure it's not a rest day before scheduling
 
+**ONE WORKOUT PER DAY — ABSOLUTE RULE:**
+- NEVER schedule two workouts on the same date. The system enforces this — schedule_workout will reject duplicates.
+- Before scheduling, check if a workout already exists on that date
+- If replacing a workout, use delete_workout_from_calendar first, then schedule the new one
+- When building plans with schedule_plan_from_templates, the system auto-deduplicates and clears existing entries on those dates
+
 **AUTOMATIC SCHEDULING:**
 - If they mention a date when creating a workout, schedule it automatically
 - "Create X for tomorrow" → create_workout THEN schedule_workout for tomorrow (IF NOT A REST DAY)
@@ -985,7 +991,8 @@ For training plans: if the athlete explicitly requests a plan, ask goal, event d
 - **generate_training_plan**: After gathering goals/event/fitness level. Generates and schedules ALL workouts.
 - **get_calendar**: When they ask "what's on my schedule", "what workouts do I have"
 - **move_workout**: When they say "move my workout", "reschedule", "change the date"
-- **delete_workout_from_calendar**: When they say "remove", "delete", "cancel" a scheduled workout
+- **delete_workout_from_calendar**: When they say "remove", "delete", "cancel" a single scheduled workout
+- **clear_calendar_range**: When they say "clear my calendar", "start fresh", "remove all workouts", or want to redo a plan. Pass start_date and end_date. Much faster than deleting one-by-one.
 - **update_athlete_ftp**: When recent power suggests FTP changed OR they tell you new FTP
 
 **EXAMPLE FLOW:**
