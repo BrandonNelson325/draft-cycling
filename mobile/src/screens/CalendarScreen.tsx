@@ -34,80 +34,160 @@ const PHASE_COLORS: Record<string, { bg: string; text: string; bar: string }> = 
 };
 
 function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
-  const today = toDateString(new Date());
-  const planStart = parseLocalDate(plan.start_date);
-  const daysSinceStart = Math.floor((new Date().getTime() - planStart.getTime()) / (1000 * 60 * 60 * 24));
-  const currentWeekNum = Math.max(1, Math.floor(daysSinceStart / 7) + 1);
-  const currentWeek = plan.weeks.find(w => w.week_number === currentWeekNum);
-  const totalWeeks = plan.weeks.length;
-  const progress = Math.min(100, Math.max(0, (currentWeekNum / totalWeeks) * 100));
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<number>>(() => {
+    const planStart = parseLocalDate(plan.start_date);
+    const daysSinceStart = Math.floor((new Date().getTime() - planStart.getTime()) / (1000 * 60 * 60 * 24));
+    const currentWeekNum = Math.max(1, Math.floor(daysSinceStart / 7) + 1);
+    return new Set([currentWeekNum]);
+  });
+
+  const totalWorkouts = plan.weeks.reduce((sum, w) => sum + w.workouts.length, 0);
+  const avgWeeklyTss = Math.round(plan.total_tss / plan.weeks.length);
+  const workoutsPerWeek = (totalWorkouts / plan.weeks.length).toFixed(1);
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+  const formatDate = (dateStr: string) => {
+    const d = parseLocalDate(dateStr);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+
+  const getWeekDates = (weekNumber: number) => {
+    const start = parseLocalDate(plan.start_date);
+    start.setDate(start.getDate() + (weekNumber - 1) * 7);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    return {
+      start: start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      end: end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+    };
+  };
+
+  const toggleWeek = (weekNum: number) => {
+    setExpandedWeeks(prev => {
+      const next = new Set(prev);
+      if (next.has(weekNum)) next.delete(weekNum);
+      else next.add(weekNum);
+      return next;
+    });
+  };
 
   return (
     <View style={planStyles.container}>
-      <View style={planStyles.header}>
-        <Text style={planStyles.title}>{plan.goal_event}</Text>
-        <Text style={planStyles.subtitle}>
-          {parseLocalDate(plan.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-          {' → '}
-          {parseLocalDate(plan.event_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-        </Text>
-      </View>
+      {/* Plan Overview */}
+      <View style={planStyles.overviewCard}>
+        <View style={planStyles.overviewHeader}>
+          <View style={{ flex: 1 }}>
+            <Text style={planStyles.goalLabel}>Goal Event</Text>
+            <Text style={planStyles.goalEvent}>{plan.goal_event}</Text>
+            <Text style={planStyles.dateRange}>
+              {formatDate(plan.start_date)} → {formatDate(plan.event_date)}
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={planStyles.goalLabel}>Duration</Text>
+            <Text style={planStyles.goalEvent}>{plan.weeks.length}w</Text>
+          </View>
+        </View>
 
-      {/* Progress bar */}
-      <View style={planStyles.progressContainer}>
-        <View style={planStyles.progressTrack}>
-          {plan.weeks.map((week, i) => {
-            const color = PHASE_COLORS[week.phase]?.bar || '#475569';
-            const widthPct = 100 / totalWeeks;
+        {/* Stats Grid */}
+        <View style={planStyles.statsGrid}>
+          <View style={planStyles.statBox}>
+            <Text style={planStyles.statValue}>{plan.total_tss}</Text>
+            <Text style={planStyles.statLabel}>Total TSS</Text>
+          </View>
+          <View style={planStyles.statBox}>
+            <Text style={planStyles.statValue}>{totalWorkouts}</Text>
+            <Text style={planStyles.statLabel}>Workouts</Text>
+          </View>
+          <View style={planStyles.statBox}>
+            <Text style={planStyles.statValue}>{avgWeeklyTss}</Text>
+            <Text style={planStyles.statLabel}>Avg TSS/wk</Text>
+          </View>
+          <View style={planStyles.statBox}>
+            <Text style={planStyles.statValue}>{workoutsPerWeek}</Text>
+            <Text style={planStyles.statLabel}>WO/wk</Text>
+          </View>
+        </View>
+
+        {/* Phase Badges */}
+        <View style={planStyles.phaseLegend}>
+          {(['base', 'build', 'peak', 'taper'] as const).map(phase => {
+            const count = plan.weeks.filter(w => w.phase === phase).length;
+            if (!count) return null;
+            const c = PHASE_COLORS[phase];
             return (
-              <View
-                key={i}
-                style={{
-                  width: `${widthPct}%`,
-                  height: '100%',
-                  backgroundColor: color,
-                  opacity: week.week_number <= currentWeekNum ? 1 : 0.3,
-                }}
-              />
+              <View key={phase} style={[planStyles.phaseChip, { backgroundColor: c.bg }]}>
+                <Text style={[planStyles.phaseChipText, { color: c.text }]}>
+                  {phase.charAt(0).toUpperCase() + phase.slice(1)}: {count}w
+                </Text>
+              </View>
             );
           })}
         </View>
-        <Text style={planStyles.progressText}>Week {currentWeekNum} of {totalWeeks}</Text>
       </View>
 
-      {/* Phase legend */}
-      <View style={planStyles.phaseLegend}>
-        {['base', 'build', 'peak', 'taper'].map(phase => {
-          const count = plan.weeks.filter(w => w.phase === phase).length;
-          if (!count) return null;
-          const c = PHASE_COLORS[phase];
-          return (
-            <View key={phase} style={[planStyles.phaseChip, { backgroundColor: c.bg }]}>
-              <Text style={[planStyles.phaseChipText, { color: c.text }]}>
-                {phase} ({count}w)
-              </Text>
-            </View>
-          );
-        })}
-      </View>
+      {/* Week Breakdown */}
+      <Text style={planStyles.sectionTitle}>Week Breakdown</Text>
+      {plan.weeks.map(week => {
+        const isExpanded = expandedWeeks.has(week.week_number);
+        const dates = getWeekDates(week.week_number);
+        const phaseColor = PHASE_COLORS[week.phase] || PHASE_COLORS.base;
 
-      {/* Current week workouts */}
-      {currentWeek && (
-        <View style={planStyles.currentWeek}>
-          <Text style={planStyles.currentWeekTitle}>
-            This Week — {currentWeek.phase.charAt(0).toUpperCase() + currentWeek.phase.slice(1)}
-          </Text>
-          {currentWeek.workouts.map((w, i) => (
-            <View key={i} style={planStyles.workoutRow}>
-              <Text style={planStyles.workoutDay}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day_of_week]}
-              </Text>
-              <Text style={planStyles.workoutName} numberOfLines={1}>{w.name}</Text>
-              <Text style={planStyles.workoutMeta}>{w.duration_minutes}m</Text>
-            </View>
-          ))}
-        </View>
-      )}
+        return (
+          <View key={week.week_number} style={[planStyles.weekCard, { borderLeftColor: phaseColor.bar }]}>
+            <TouchableOpacity
+              style={planStyles.weekHeader}
+              onPress={() => toggleWeek(week.week_number)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={isExpanded ? 'chevron-down' : 'chevron-forward'}
+                size={16}
+                color="#64748b"
+              />
+              <View style={{ flex: 1 }}>
+                <View style={planStyles.weekTitleRow}>
+                  <Text style={planStyles.weekTitle}>Week {week.week_number}</Text>
+                  <View style={[planStyles.phaseBadge, { backgroundColor: phaseColor.bg }]}>
+                    <Text style={[planStyles.phaseBadgeText, { color: phaseColor.text }]}>
+                      {week.phase.charAt(0).toUpperCase() + week.phase.slice(1)}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={planStyles.weekMeta}>
+                  {dates.start} – {dates.end} · {week.workouts.length} workouts · {week.tss} TSS
+                </Text>
+                {week.notes && <Text style={planStyles.weekNotes}>{week.notes}</Text>}
+              </View>
+            </TouchableOpacity>
+
+            {isExpanded && (
+              <View style={planStyles.weekWorkouts}>
+                {week.workouts.map((wo, idx) => (
+                  <View key={idx} style={planStyles.woCard}>
+                    <View style={planStyles.woCardHeader}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={planStyles.woName}>{wo.name}</Text>
+                        <Text style={planStyles.woDay}>{dayNames[wo.day_of_week]}</Text>
+                      </View>
+                      <View style={{ alignItems: 'flex-end' }}>
+                        <Text style={planStyles.woDuration}>{wo.duration_minutes} min</Text>
+                        <Text style={planStyles.woType}>{wo.workout_type}</Text>
+                      </View>
+                    </View>
+                    {wo.description ? (
+                      <Text style={planStyles.woDesc} numberOfLines={3}>{wo.description}</Text>
+                    ) : null}
+                    {wo.rationale ? (
+                      <Text style={planStyles.woRationale}>💡 {wo.rationale}</Text>
+                    ) : null}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -115,37 +195,56 @@ function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
 const planStyles = StyleSheet.create({
   container: {
     marginHorizontal: 12,
-    marginTop: 12,
+    marginTop: 16,
+    gap: 10,
+  },
+  overviewCard: {
     backgroundColor: '#1e293b',
     borderRadius: 12,
     padding: 14,
-    gap: 10,
+    gap: 12,
   },
-  header: {
-    gap: 2,
+  overviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
-  title: {
-    fontSize: 15,
+  goalLabel: {
+    fontSize: 11,
+    color: '#64748b',
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  goalEvent: {
+    fontSize: 18,
     fontWeight: '700',
     color: '#f1f5f9',
   },
-  subtitle: {
+  dateRange: {
     fontSize: 12,
     color: '#64748b',
+    marginTop: 2,
   },
-  progressContainer: {
-    gap: 4,
-  },
-  progressTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#0f172a',
+  statsGrid: {
     flexDirection: 'row',
-    overflow: 'hidden',
+    gap: 8,
   },
-  progressText: {
-    fontSize: 11,
-    color: '#94a3b8',
+  statBox: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 10,
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#f1f5f9',
+  },
+  statLabel: {
+    fontSize: 10,
+    color: '#64748b',
+    marginTop: 2,
   },
   phaseLegend: {
     flexDirection: 'row',
@@ -153,48 +252,117 @@ const planStyles = StyleSheet.create({
     gap: 6,
   },
   phaseChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
   phaseChipText: {
-    fontSize: 11,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  currentWeek: {
-    borderTopWidth: 1,
-    borderTopColor: '#0f172a',
-    paddingTop: 10,
-    gap: 6,
-  },
-  currentWeekTitle: {
     fontSize: 12,
     fontWeight: '600',
+  },
+  sectionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
     color: '#94a3b8',
+    marginTop: 4,
+    marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
-    marginBottom: 2,
   },
-  workoutRow: {
+  weekCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 10,
+    borderLeftWidth: 4,
+    overflow: 'hidden',
+  },
+  weekHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    gap: 8,
+  },
+  weekTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  workoutDay: {
-    width: 30,
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#475569',
-  },
-  workoutName: {
-    flex: 1,
-    fontSize: 13,
+  weekTitle: {
+    fontSize: 15,
+    fontWeight: '700',
     color: '#f1f5f9',
   },
-  workoutMeta: {
+  phaseBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  phaseBadgeText: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  weekMeta: {
     fontSize: 12,
     color: '#64748b',
+    marginTop: 2,
+  },
+  weekNotes: {
+    fontSize: 12,
+    color: '#64748b',
+    fontStyle: 'italic',
+    marginTop: 2,
+  },
+  weekWorkouts: {
+    paddingHorizontal: 12,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  woCard: {
+    backgroundColor: '#0f172a',
+    borderRadius: 8,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#1e293b',
+  },
+  woCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  woName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f1f5f9',
+  },
+  woDay: {
+    fontSize: 12,
+    color: '#64748b',
+    marginTop: 1,
+  },
+  woDuration: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#f1f5f9',
+  },
+  woType: {
+    fontSize: 11,
+    color: '#64748b',
+    textTransform: 'capitalize',
+    marginTop: 1,
+  },
+  woDesc: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 6,
+    lineHeight: 17,
+  },
+  woRationale: {
+    fontSize: 11,
+    color: '#64748b',
+    fontStyle: 'italic',
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
   },
 });
 

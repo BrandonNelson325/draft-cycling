@@ -17,7 +17,7 @@ const FEATURES = [
     title: 'Strava Integration',
     description:
       'Connect Strava and your rides sync automatically. Your coach sees every ride and uses the data to fine-tune your plan.',
-    icon: '\u{1F6B4}',
+    icon: 'strava',
   },
   {
     title: 'Structured Workouts',
@@ -55,6 +55,26 @@ const PRICING = [
     highlight: true,
   },
 ];
+
+function StravaLogo({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 64 64"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M41.03 47.852l-5.572-10.976h-8.172L41.03 64l13.736-27.124h-8.18L41.03 47.852z"
+        fill="#F9B797"
+      />
+      <path
+        d="M27.898 36.876l-2.63-5.18L12.67 0h10.54l7.318 14.424 7.318-14.424h10.54L27.898 36.876z"
+        fill="#F05222"
+      />
+    </svg>
+  );
+}
 
 export function LandingPage() {
   return (
@@ -129,7 +149,9 @@ export function LandingPage() {
                 key={f.title}
                 className="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-6 hover:border-gray-600 transition-colors"
               >
-                <div className="text-3xl mb-4">{f.icon}</div>
+                <div className="text-3xl mb-4">
+                  {f.icon === 'strava' ? <StravaLogo className="w-9 h-9" /> : f.icon}
+                </div>
                 <h3 className="text-lg font-semibold mb-2">{f.title}</h3>
                 <p className="text-sm text-gray-400 leading-relaxed">{f.description}</p>
               </div>
