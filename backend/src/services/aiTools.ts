@@ -440,6 +440,11 @@ export const AI_TOOLS: Tool[] = [
               type: 'boolean',
               description: 'Whether they have Zwift',
             },
+            ftp_test_preference: {
+              type: 'string',
+              enum: ['test', 'ai_estimation'],
+              description: 'Whether the athlete prefers real FTP tests or AI estimation from ride data',
+            },
           },
         },
       },

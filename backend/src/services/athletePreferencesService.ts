@@ -11,6 +11,7 @@ export interface AthletePreferences {
   indoor_outdoor?: 'indoor' | 'outdoor' | 'both';
   zwift_available?: boolean;
   intensity_preference?: string;
+  ftp_test_preference?: 'test' | 'ai_estimation';
   learned_patterns?: {
     typical_workout_duration?: number;
     favorite_interval_type?: string;
@@ -162,6 +163,10 @@ export class AthletePreferencesService {
 
     if (preferences.intensity_preference) {
       formatted += `\n**Intensity Preference:** ${preferences.intensity_preference}`;
+    }
+
+    if (preferences.ftp_test_preference) {
+      formatted += `\n**FTP Testing:** ${preferences.ftp_test_preference === 'ai_estimation' ? 'Prefers AI estimation (no physical tests)' : 'Prefers regular FTP tests'}`;
     }
 
     if (preferences.indoor_outdoor) {

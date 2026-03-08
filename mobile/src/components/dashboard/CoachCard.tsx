@@ -62,11 +62,9 @@ export default function CoachCard() {
       {/* Freshness Gauge — compact, no CTL/ATL details */}
       <FreshnessGauge tsb={tsb} showDetails={false} />
 
-      {/* AI summary + workout blocks */}
+      {/* Workout blocks + recommendation */}
       {s && (
         <View style={styles.aiSection}>
-          <Text style={styles.summary}>{s.summary}</Text>
-
           {/* Today's completed rides (post-ride) */}
           {hasRidden && s.todaysRides.length > 0 && (
             <View style={[styles.workoutBox, styles.completedBox]}>
@@ -74,7 +72,7 @@ export default function CoachCard() {
               {s.todaysRides.map((ride, i) => (
                 <View key={i} style={styles.rideRow}>
                   <Text style={styles.rideName}>{ride.name}</Text>
-                  <Text style={styles.rideMeta}>{ride.duration}min · {ride.tss} TSS</Text>
+                  <Text style={styles.rideMeta}>{ride.duration}min · Load {ride.tss}</Text>
                 </View>
               ))}
             </View>
@@ -86,7 +84,7 @@ export default function CoachCard() {
               <Text style={styles.workoutLabel}>Planned</Text>
               <Text style={styles.workoutName}>{s.todaysWorkout.name}</Text>
               <Text style={styles.workoutMeta}>
-                {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · {s.todaysWorkout.tss} TSS
+                {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · Load {s.todaysWorkout.tss}
               </Text>
             </View>
           )}
@@ -103,7 +101,6 @@ export default function CoachCard() {
                   {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
                 </Text>
               )}
-              <Text style={styles.workoutDesc}>{s.suggestedWorkout.description}</Text>
             </View>
           )}
 
@@ -113,7 +110,7 @@ export default function CoachCard() {
               <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
               <Text style={styles.workoutName}>{s.tomorrowsWorkout.name}</Text>
               <Text style={styles.workoutMeta}>
-                {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · {s.tomorrowsWorkout.tss} TSS
+                {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · Load {s.tomorrowsWorkout.tss}
               </Text>
             </View>
           )}
@@ -130,11 +127,10 @@ export default function CoachCard() {
                   {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
                 </Text>
               )}
-              <Text style={styles.workoutDesc}>{s.suggestedWorkout.description}</Text>
             </View>
           )}
 
-          {/* Recommendation */}
+          {/* Single recommendation line — the only AI text shown */}
           <Text style={styles.recommendation}>{s.recommendation}</Text>
         </View>
       )}
@@ -188,11 +184,6 @@ const styles = StyleSheet.create({
   aiSection: {
     marginTop: 16,
     gap: 10,
-  },
-  summary: {
-    fontSize: 14,
-    color: '#cbd5e1',
-    lineHeight: 20,
   },
   workoutBox: {
     backgroundColor: '#0f172a',
@@ -261,12 +252,6 @@ const styles = StyleSheet.create({
   workoutMeta: {
     fontSize: 13,
     color: '#94a3b8',
-  },
-  workoutDesc: {
-    fontSize: 13,
-    color: '#94a3b8',
-    marginTop: 4,
-    lineHeight: 18,
   },
   recommendation: {
     fontSize: 13,
