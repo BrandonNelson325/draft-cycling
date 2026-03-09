@@ -180,7 +180,7 @@ export function MetricsCard() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-2xl font-bold text-foreground">
-              {Math.round(metrics?.total_tss || 0)}
+              {Math.round(metrics?.total_tss || 0).toLocaleString()}
             </div>
           </CardContent>
         </Card>
@@ -191,7 +191,7 @@ export function MetricsCard() {
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-2xl font-bold text-foreground">
-              {Math.round((metrics?.total_calories || 0) / 280)}
+              {Math.round((metrics?.total_calories || 0) / 280).toLocaleString()}
             </div>
             <p className="text-xs text-muted-foreground">{(metrics?.total_calories || 0).toLocaleString()} cal</p>
           </CardContent>

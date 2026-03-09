@@ -35,7 +35,7 @@ export function getConversionUtils(user: Athlete | null): ConversionUtils {
     formatDistance: (meters: number) => {
       if (meters == null) return '0.0';
       const value = isImperial ? meters * 0.000621371 : meters / 1000;
-      return value.toFixed(1);
+      return Number(value.toFixed(1)).toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     },
     formatDistanceValue: (meters: number) => {
       if (meters == null) return 0;
@@ -61,7 +61,7 @@ export function getConversionUtils(user: Athlete | null): ConversionUtils {
     formatElevation: (meters: number) => {
       if (meters == null) return '0';
       const value = isImperial ? meters * 3.28084 : meters;
-      return Math.round(value).toString();
+      return Math.round(value).toLocaleString();
     },
     formatElevationValue: (meters: number) => {
       if (meters == null) return 0;

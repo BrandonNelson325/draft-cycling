@@ -29,17 +29,18 @@ function interpolateColor(pct: number): string {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
-function darkenColor(pct: number): string {
+function textColorForBg(pct: number): string {
   const t = Math.max(0, Math.min(1, pct / 100));
   let i = 0;
   while (i < GRADIENT_STOPS.length - 2 && GRADIENT_STOPS[i + 1].pos < t) i++;
   const a = GRADIENT_STOPS[i];
   const b = GRADIENT_STOPS[i + 1];
   const localT = (t - a.pos) / (b.pos - a.pos);
-  const r = Math.round((a.r + (b.r - a.r) * localT) * 0.15);
-  const g = Math.round((a.g + (b.g - a.g) * localT) * 0.15);
-  const bl = Math.round((a.b + (b.b - a.b) * localT) * 0.15);
-  return `rgb(${r}, ${g}, ${bl})`;
+  const r = a.r + (b.r - a.r) * localT;
+  const g = a.g + (b.g - a.g) * localT;
+  const bl = a.b + (b.b - a.b) * localT;
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * bl) / 255;
+  return luminance > 0.5 ? '#000000' : '#ffffff';
 }
 
 function getStatus(tsb: number) {
@@ -55,8 +56,8 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
   const status = getStatus(tsb);
   // Map TSB from [-40, 40] to [0%, 100%]
   const pct = Math.max(0, Math.min(100, ((tsb + 40) / 80) * 100));
-  const color = interpolateColor(pct);
-  const bg = darkenColor(pct);
+  const bg = interpolateColor(pct);
+  const textColor = textColorForBg(pct);
 
   return (
     <View style={styles.container}>
@@ -78,10 +79,10 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
       </View>
 
       <View style={[styles.statusBadge, { backgroundColor: bg }]}>
-        <Text style={[styles.statusText, { color }]}>
+        <Text style={[styles.statusText, { color: textColor }]}>
           {status.label}
         </Text>
-        <Text style={styles.statusSubtitle}>{status.subtitle}</Text>
+        <Text style={[styles.statusSubtitle, { color: textColor, opacity: 0.8 }]}>{status.subtitle}</Text>
       </View>
 
       {showDetails && (
@@ -95,7 +96,7 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
             <Text style={styles.metricLabel}>Fatigue</Text>
           </View>
           <View style={styles.metricItem}>
-            <Text style={[styles.metricValue, { color }]}>
+            <Text style={[styles.metricValue, { color: bg }]}>
               {tsb > 0 ? '+' : ''}{Math.round(tsb)}
             </Text>
             <Text style={styles.metricLabel}>Form</Text>

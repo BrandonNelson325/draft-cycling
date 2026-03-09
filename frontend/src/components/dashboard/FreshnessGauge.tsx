@@ -22,17 +22,19 @@ function interpolateColor(pct: number): string {
   return `rgb(${r}, ${g}, ${bl})`;
 }
 
-function darkenColor(pct: number): string {
+function textColorForBg(pct: number): string {
   const t = Math.max(0, Math.min(1, pct / 100));
   let i = 0;
   while (i < GRADIENT_STOPS.length - 2 && GRADIENT_STOPS[i + 1].pos < t) i++;
   const a = GRADIENT_STOPS[i];
   const b = GRADIENT_STOPS[i + 1];
   const localT = (t - a.pos) / (b.pos - a.pos);
-  const r = Math.round((a.r + (b.r - a.r) * localT) * 0.15);
-  const g = Math.round((a.g + (b.g - a.g) * localT) * 0.15);
-  const bl = Math.round((a.b + (b.b - a.b) * localT) * 0.15);
-  return `rgb(${r}, ${g}, ${bl})`;
+  const r = a.r + (b.r - a.r) * localT;
+  const g = a.g + (b.g - a.g) * localT;
+  const bl = a.b + (b.b - a.b) * localT;
+  // Luminance check — use white text on dark backgrounds, black on light
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * bl) / 255;
+  return luminance > 0.5 ? '#000000' : '#ffffff';
 }
 
 function getStatus(tsb: number) {
@@ -49,8 +51,8 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
 
   // Map TSB from [-40, 40] to [0%, 100%]
   const pct = Math.max(0, Math.min(100, ((tsb + 40) / 80) * 100));
-  const color = interpolateColor(pct);
-  const bg = darkenColor(pct);
+  const bg = interpolateColor(pct);
+  const textColor = textColorForBg(pct);
 
   return (
     <div className="space-y-3">
@@ -64,7 +66,7 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
           className="absolute top-[-3px] w-1.5 h-[18px] bg-white rounded-sm shadow-md transition-all"
           style={{
             left: `${pct}%`,
-            borderColor: color,
+            borderColor: bg,
             borderWidth: 2,
             transform: 'translateX(-50%)',
           }}
@@ -78,12 +80,12 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
         <span>Fresh</span>
       </div>
 
-      {/* Status Badge — color sampled from gradient */}
+      {/* Status Badge — background matches gradient position */}
       <div className="text-center p-3 rounded-xl" style={{ backgroundColor: bg }}>
-        <div className="text-xl font-bold" style={{ color }}>
+        <div className="text-xl font-bold" style={{ color: textColor }}>
           {status.label}
         </div>
-        <div className="text-xs font-medium text-muted-foreground mt-0.5">
+        <div className="text-xs font-medium" style={{ color: textColor, opacity: 0.8 }}>
           {status.subtitle}
         </div>
       </div>
