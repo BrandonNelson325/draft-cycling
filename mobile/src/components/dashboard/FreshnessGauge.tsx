@@ -10,12 +10,12 @@ interface FreshnessGaugeProps {
 }
 
 function getStatus(tsb: number) {
-  if (tsb < -30) return { label: 'Overreaching', subtitle: 'Time for recovery', color: '#ef4444', bg: '#450a0a' };
-  if (tsb < -20) return { label: 'Building Fitness', subtitle: 'Plan a recovery day soon', color: '#f97316', bg: '#431407' };
-  if (tsb < -5) return { label: 'Building Fitness', subtitle: 'Right where you want to be', color: '#f97316', bg: '#431407' };
-  if (tsb <= 5) return { label: 'Balanced', subtitle: 'Recovered and ready', color: '#22c55e', bg: '#052e16' };
-  if (tsb <= 25) return { label: 'Fresh', subtitle: 'Ready for a big effort', color: '#60a5fa', bg: '#1e3a5f' };
-  return { label: 'Losing Fitness', subtitle: 'Time to get back on the bike', color: '#94a3b8', bg: '#1e293b' };
+  if (tsb < -30) return { label: 'Overreaching', subtitle: 'Time for recovery', color: '#ef4444', bg: '#1c1217' };
+  if (tsb < -20) return { label: 'Optimal', subtitle: 'Recovery day coming up', color: '#a78bfa', bg: '#1a1525' };
+  if (tsb < -5) return { label: 'Optimal', subtitle: 'Right where you want to be', color: '#a78bfa', bg: '#1a1525' };
+  if (tsb < 5) return { label: 'Balanced', subtitle: 'Recovered and ready', color: '#34d399', bg: '#0d1f17' };
+  if (tsb < 25) return { label: 'Fresh', subtitle: 'Ready for a big effort', color: '#3b82f6', bg: '#111827' };
+  return { label: 'Detrained', subtitle: 'Time to get back on the bike', color: '#6b7280', bg: '#1e293b' };
 }
 
 export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = true }: FreshnessGaugeProps) {

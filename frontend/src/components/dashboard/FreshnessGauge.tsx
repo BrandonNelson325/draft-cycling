@@ -5,11 +5,11 @@ interface FreshnessGaugeProps {
 export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
   const getStatus = () => {
     if (tsb < -30) return { label: 'Overreaching', subtitle: 'Time for recovery', bgColor: 'bg-red-100 dark:bg-red-950', textColor: 'text-red-600 dark:text-red-400', color: '#ef4444' };
-    if (tsb < -20) return { label: 'Building Fitness', subtitle: 'Plan a recovery day soon', bgColor: 'bg-emerald-100 dark:bg-emerald-950', textColor: 'text-emerald-600 dark:text-emerald-400', color: '#34d399' };
-    if (tsb < -5) return { label: 'Building Fitness', subtitle: 'Right where you want to be', bgColor: 'bg-green-100 dark:bg-green-950', textColor: 'text-green-600 dark:text-green-400', color: '#22c55e' };
-    if (tsb < 5) return { label: 'Balanced', subtitle: 'Recovered and ready', bgColor: 'bg-green-100 dark:bg-green-950', textColor: 'text-green-600 dark:text-green-400', color: '#22c55e' };
+    if (tsb < -20) return { label: 'Optimal', subtitle: 'Recovery day coming up', bgColor: 'bg-violet-100 dark:bg-violet-950', textColor: 'text-violet-600 dark:text-violet-400', color: '#a78bfa' };
+    if (tsb < -5) return { label: 'Optimal', subtitle: 'Right where you want to be', bgColor: 'bg-violet-100 dark:bg-violet-950', textColor: 'text-violet-600 dark:text-violet-400', color: '#a78bfa' };
+    if (tsb < 5) return { label: 'Balanced', subtitle: 'Recovered and ready', bgColor: 'bg-emerald-100 dark:bg-emerald-950', textColor: 'text-emerald-600 dark:text-emerald-400', color: '#34d399' };
     if (tsb < 25) return { label: 'Fresh', subtitle: 'Ready for a big effort', bgColor: 'bg-blue-100 dark:bg-blue-950', textColor: 'text-blue-600 dark:text-blue-400', color: '#3b82f6' };
-    return { label: 'Losing Fitness', subtitle: 'Time to get back on the bike', bgColor: 'bg-gray-100 dark:bg-gray-900', textColor: 'text-gray-600 dark:text-gray-400', color: '#6b7280' };
+    return { label: 'Detrained', subtitle: 'Time to get back on the bike', bgColor: 'bg-gray-100 dark:bg-gray-900', textColor: 'text-gray-600 dark:text-gray-400', color: '#6b7280' };
   };
 
   const status = getStatus();

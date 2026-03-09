@@ -143,12 +143,12 @@ export function calculateTSB(ctl: number, atl: number): number {
  */
 export function getFormStatus(tsb: number): string {
   if (tsb < -30) return 'Overreaching - Consider Rest';
-  if (tsb < -20) return 'Building Fitness - Plan Recovery Soon';
-  if (tsb < -5) return 'Building Fitness - Right On Track';
+  if (tsb < -20) return 'Optimal - Plan Recovery Soon';
+  if (tsb < -5) return 'Optimal - Right On Track';
   if (tsb < 5) return 'Balanced / Maintaining';
   if (tsb < 15) return 'Freshening - Good Form';
   if (tsb < 25) return 'Fresh - Race Ready';
-  return 'Very Fresh - Detraining Risk';
+  return 'Detrained - Time to Ride';
 }
 
 /**
