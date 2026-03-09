@@ -68,7 +68,7 @@ export default function MetricsCard() {
           <StatBox label="Time" value={formatDuration(data.total_time_seconds)} />
           <StatBox label="Elevation" value={`${units.formatElevation(data.total_elevation_meters)}${units.elevationUnitShort}`} />
           <StatBox label="Training Load" value={String(Math.round(data.total_tss))} />
-          <StatBox label="20m Power" value={data.power_prs?.power_20min ? `${data.power_prs.power_20min}w` : '—'} />
+          <StatBox label="🍩 Burned" value={data.total_calories > 0 ? String(Math.round(data.total_calories / 280)) : '0'} />
         </View>
       ) : (
         <Text style={styles.empty}>No data for this period</Text>

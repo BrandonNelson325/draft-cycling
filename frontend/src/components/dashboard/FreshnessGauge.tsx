@@ -3,30 +3,33 @@ interface FreshnessGaugeProps {
 }
 
 export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
-  // TSB interpretation:
-  // < -30: Overtrained
-  // -30 to -10: High fatigue
-  // -10 to 5: Optimal training
+  // TSB interpretation (aligned with industry standards):
+  // < -30: Overreaching
+  // -30 to -20: Hard training block
+  // -20 to -5: Optimal training zone (where fitness is built!)
+  // -5 to 5: Balanced
   // 5 to 25: Fresh/race ready
-  // > 25: Detraining
+  // > 25: Detraining risk
 
   const getStatus = () => {
-    if (tsb < -30) return { label: 'Overtrained', color: '#ef4444', bgColor: 'bg-red-100', textColor: 'text-red-600' };
-    if (tsb < -10) return { label: 'Fatigued', color: '#f97316', bgColor: 'bg-orange-100', textColor: 'text-orange-600' };
-    if (tsb < 5) return { label: 'Optimal', color: '#22c55e', bgColor: 'bg-green-100', textColor: 'text-green-600' };
-    if (tsb < 25) return { label: 'Fresh', color: '#3b82f6', bgColor: 'bg-blue-100', textColor: 'text-blue-600' };
-    return { label: 'Detraining', color: '#6b7280', bgColor: 'bg-gray-100', textColor: 'text-gray-600' };
+    if (tsb < -30) return { label: 'Overreaching', color: '#ef4444', bgColor: 'bg-red-100 dark:bg-red-950', textColor: 'text-red-600 dark:text-red-400' };
+    if (tsb < -20) return { label: 'Hard Training', color: '#f97316', bgColor: 'bg-orange-100 dark:bg-orange-950', textColor: 'text-orange-600 dark:text-orange-400' };
+    if (tsb < -5) return { label: 'Optimal', color: '#22c55e', bgColor: 'bg-green-100 dark:bg-green-950', textColor: 'text-green-600 dark:text-green-400' };
+    if (tsb < 5) return { label: 'Balanced', color: '#22c55e', bgColor: 'bg-green-100 dark:bg-green-950', textColor: 'text-green-600 dark:text-green-400' };
+    if (tsb < 25) return { label: 'Fresh', color: '#3b82f6', bgColor: 'bg-blue-100 dark:bg-blue-950', textColor: 'text-blue-600 dark:text-blue-400' };
+    return { label: 'Detraining', color: '#6b7280', bgColor: 'bg-gray-100 dark:bg-gray-900', textColor: 'text-gray-600 dark:text-gray-400' };
   };
 
   const status = getStatus();
 
-  // Map TSB to percentage (simplified)
+  // Map TSB to percentage on the gauge
   const getPercentage = () => {
-    if (tsb < -30) return 0;
-    if (tsb < -10) return 25;
-    if (tsb < 5) return 50;
+    if (tsb < -30) return 5;
+    if (tsb < -20) return 20;
+    if (tsb < -5) return 40;
+    if (tsb < 5) return 55;
     if (tsb < 25) return 75;
-    return 100;
+    return 95;
   };
 
   const percentage = getPercentage();
@@ -49,8 +52,8 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
 
       {/* Labels */}
       <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>Overtrained</span>
-        <span>Fatigued</span>
+        <span>Overreaching</span>
+        <span>Training</span>
         <span>Optimal</span>
         <span>Fresh</span>
       </div>

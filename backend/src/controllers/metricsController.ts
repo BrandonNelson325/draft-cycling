@@ -67,6 +67,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
         total_time_seconds: 0,
         total_elevation_meters: 0,
         total_tss: 0,
+        total_calories: 0,
         ride_count: 0,
         avg_distance_meters: 0,
         avg_time_seconds: 0,
@@ -87,6 +88,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     const totalTime = activities.reduce((sum, a) => sum + (a.moving_time_seconds || 0), 0);
     const totalElevation = activities.reduce((sum, a) => sum + ((a.raw_data?.total_elevation_gain || 0)), 0);
     const totalTSS = activities.reduce((sum, a) => sum + (a.tss || 0), 0);
+    const totalCalories = activities.reduce((sum, a) => sum + (a.raw_data?.kilojoules ? Math.round(a.raw_data.kilojoules) : 0), 0);
 
     // Get power PRs from power_curves table
     const { data: powerCurves } = await supabaseAdmin
@@ -132,6 +134,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
       total_time_seconds: totalTime,
       total_elevation_meters: Math.round(totalElevation),
       total_tss: Math.round(totalTSS * 10) / 10,
+      total_calories: totalCalories,
       ride_count: activities.length,
       avg_distance_meters: Math.round(totalDistance / activities.length),
       avg_time_seconds: Math.round(totalTime / activities.length),

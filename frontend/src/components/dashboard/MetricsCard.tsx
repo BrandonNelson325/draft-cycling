@@ -195,16 +195,16 @@ export function MetricsCard() {
           </CardContent>
         </Card>
 
-        {/* Avg Time */}
+        {/* Donuts Burned */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Avg Time</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">🍩 Burned</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-2xl font-bold text-foreground">
-              {formatDuration(metrics?.avg_time_seconds || 0)}
+              {Math.round((metrics?.total_calories || 0) / 280)}
             </div>
-            <p className="text-xs text-muted-foreground">per ride</p>
+            <p className="text-xs text-muted-foreground">donuts worth</p>
           </CardContent>
         </Card>
 

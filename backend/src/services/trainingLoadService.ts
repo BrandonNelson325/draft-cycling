@@ -156,35 +156,35 @@ export const trainingLoadService = {
    * Determine training status from TSB
    */
   determineStatus(tsb: number): TrainingStatus {
-    if (tsb > 10) {
+    if (tsb > 15) {
       return {
         status: 'fresh',
-        description: 'You are well-rested and ready for hard efforts',
-        recommendation: 'Good time for high-intensity training or racing',
+        description: 'You are well-rested and ready for hard efforts or racing',
+        recommendation: 'Good time for high-intensity training, races, or FTP tests',
       };
     } else if (tsb >= -5) {
       return {
         status: 'optimal',
-        description: 'You are in an optimal training zone',
+        description: 'You are balanced and in good form',
         recommendation: 'Continue with planned training, mix of intensity and volume',
       };
-    } else if (tsb >= -15) {
+    } else if (tsb >= -20) {
       return {
         status: 'productive',
-        description: 'You are carrying fatigue but adapting well',
-        recommendation: 'Maintain current training load, recovery is important',
+        description: 'You are in the optimal training zone — absorbing fitness gains',
+        recommendation: 'This is where fitness is built. Continue training as planned, ensure good recovery between hard days',
       };
     } else if (tsb >= -30) {
       return {
         status: 'overreaching',
-        description: 'You are significantly fatigued',
-        recommendation: 'Consider reducing training volume and adding recovery days',
+        description: 'You are in a heavy training block with significant fatigue',
+        recommendation: 'Consider a recovery day soon. Ensure adequate sleep and nutrition',
       };
     } else {
       return {
         status: 'overtraining',
-        description: 'You are at risk of overtraining',
-        recommendation: 'IMPORTANT: Take 3-5 days of complete rest or very easy recovery',
+        description: 'Deep fatigue — risk of overtraining if sustained',
+        recommendation: 'Plan 2-3 easy/rest days to recover before resuming hard training',
       };
     }
   },

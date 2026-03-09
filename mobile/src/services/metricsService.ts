@@ -6,6 +6,7 @@ export interface MetricsData {
   total_time_seconds: number;
   total_elevation_meters: number;
   total_tss: number;
+  total_calories: number;
   ride_count: number;
   avg_distance_meters: number;
   avg_time_seconds: number;

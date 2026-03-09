@@ -135,9 +135,9 @@ export const dailyAnalysisService = {
     // Determine status based on TSB
     let status: DailyAnalysisResult['status'];
     const tsb = trainingStatus?.tsb || 0;
-    if (tsb > 5) status = 'fresh';
-    else if (tsb > -10) status = 'well-recovered';
-    else if (tsb > -20) status = 'slightly-tired';
+    if (tsb > 10) status = 'fresh';
+    else if (tsb > -5) status = 'well-recovered';
+    else if (tsb > -25) status = 'slightly-tired';
     else status = 'fatigued';
 
     return {

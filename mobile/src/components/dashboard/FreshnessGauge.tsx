@@ -10,9 +10,10 @@ interface FreshnessGaugeProps {
 }
 
 function getStatus(tsb: number) {
-  if (tsb < -30) return { label: 'Overtrained', color: '#ef4444', bg: '#450a0a' };
-  if (tsb < -10) return { label: 'Fatigued', color: '#f97316', bg: '#431407' };
-  if (tsb <= 5) return { label: 'Optimal', color: '#22c55e', bg: '#052e16' };
+  if (tsb < -30) return { label: 'Overreaching', color: '#ef4444', bg: '#450a0a' };
+  if (tsb < -20) return { label: 'Hard Training', color: '#f97316', bg: '#431407' };
+  if (tsb < -5) return { label: 'Optimal', color: '#22c55e', bg: '#052e16' };
+  if (tsb <= 5) return { label: 'Balanced', color: '#22c55e', bg: '#052e16' };
   if (tsb <= 25) return { label: 'Fresh', color: '#60a5fa', bg: '#1e3a5f' };
   return { label: 'Detraining', color: '#94a3b8', bg: '#1e293b' };
 }

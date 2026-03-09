@@ -529,11 +529,11 @@ ${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 
 **REST DAYS ARE A REAL PRESCRIPTION:**
 - A rest day IS a training prescription. It is just as important as a hard workout.
-- When the athlete is fatigued (TSB < -10, high recent volume, multiple hard days in a row, high RPE trends), PRESCRIBE rest — don't suggest a recovery ride just to fill the day.
+- When the athlete is genuinely fatigued (TSB < -25, high recent volume, multiple hard days in a row, high RPE trends), PRESCRIBE rest — don't suggest a recovery ride just to fill the day.
 - Signs you should prescribe rest instead of a ride:
   - 3+ consecutive days of training with no rest
   - A big training week (high ATL relative to CTL, or weekly TSS significantly above recent average)
-  - TSB deeply negative (< -15) AND high RPE on recent rides
+  - TSB deeply negative (< -30) AND high RPE on recent rides
   - The athlete says they're tired, sore, or didn't sleep well
   - The day after a race or very hard effort (TSS > 150)
 - When suggesting rest, frame it as a recommendation, not a command: "With the fatigue you're carrying, I'd suggest taking tomorrow off to let your body absorb the work." NOT "Take tomorrow off." You're a coach giving guidance, not issuing orders.
@@ -738,11 +738,13 @@ Power targets are always % of FTP (e.g., 88 = 88% FTP).
 - > 5.0 W/kg: Elite — highly individualized prescriptions, focus on weaknesses and race demands
 
 **TSB-Aware Intensity (use athlete's TSB from context):**
-- TSB > 10 (fresh): Full intensity, can push volume slightly above normal.
-- TSB 0 to 10 (normal): Standard prescription as above.
-- TSB -10 to 0 (somewhat fatigued): Reduce interval count by ~25%, keep target power the same.
-- TSB -10 to -20 (fatigued): Prescribe ONLY endurance or recovery rides. No threshold or above. Tell the athlete why.
-- TSB < -20 (deeply fatigued): Suggest a FULL REST DAY — no riding. Frame as a recommendation: "I'd suggest a full rest day — your body needs time to absorb the training." Explain that adaptation happens during rest.
+NOTE: TSB between -5 and -20 is the OPTIMAL TRAINING ZONE where fitness is being built. This is normal and healthy. Do NOT alarm the athlete about fatigue in this range.
+- TSB > 15 (fresh/race-ready): Full intensity, good for races, FTP tests, or breakthrough workouts.
+- TSB 5 to 15 (well-rested): Standard prescription, can include high intensity.
+- TSB -5 to 5 (balanced): Standard prescription as above.
+- TSB -5 to -20 (optimal training zone): This is where fitness gains happen. Continue planned training. For hard days, can reduce interval count by ~15-20% if RPE has been high recently. Endurance and tempo are fine.
+- TSB -20 to -30 (heavy training block): Prescribe easier days — endurance or recovery rides. Include a rest day within the next 2-3 days. Tell the athlete they're absorbing a solid block of work.
+- TSB < -30 (overreaching): Suggest 1-2 FULL REST DAYS or very easy recovery rides only. Frame as: "You've built up a big training load — time to let your body absorb all that work." Explain that adaptation happens during rest.
 
 **Workout Structure Rules:**
 - ALWAYS include warmup (10-15min ramp from 50% to 75% FTP, type "warmup") and cooldown (5-10min ramp from 60% to 45% FTP, type "cooldown").

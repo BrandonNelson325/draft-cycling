@@ -263,7 +263,6 @@ export function CalendarDayDetail({
                 if (activity.weighted_average_watts) secondaryStats.push({ label: 'NP', value: `${Math.round(activity.weighted_average_watts)}W` });
                 if (activity.intensity_factor) secondaryStats.push({ label: 'IF', value: activity.intensity_factor.toFixed(2) });
                 if (activity.calories) secondaryStats.push({ label: 'Calories', value: `${Math.round(activity.calories)}` });
-                if (activity.kilojoules) secondaryStats.push({ label: 'Kilojoules', value: `${Math.round(activity.kilojoules)}` });
 
                 return (
                   <Card key={activity.id} className="overflow-hidden border-orange-200 dark:border-orange-800">

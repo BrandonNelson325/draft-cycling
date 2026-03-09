@@ -84,12 +84,6 @@ export default function ActivityDetailSheet({ activity }: ActivityDetailSheetPro
       value: `${Math.round(activity.calories)}`,
     });
   }
-  if (activity.kilojoules) {
-    secondaryStats.push({
-      label: 'Kilojoules',
-      value: `${Math.round(activity.kilojoules)}`,
-    });
-  }
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.content}>

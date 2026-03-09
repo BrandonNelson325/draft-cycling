@@ -318,7 +318,7 @@ export const calendarService = {
       return {
         ...a,
         kilojoules: raw.kilojoules || a.kilojoules || null,
-        calories: raw.calories ? Math.round(raw.calories) : (raw.kilojoules ? Math.round(raw.kilojoules * 4.184) : null),
+        calories: raw.kilojoules ? Math.round(raw.kilojoules) : (a.kilojoules ? Math.round(a.kilojoules) : null),
       };
     });
 

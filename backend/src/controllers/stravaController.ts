@@ -234,7 +234,7 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
         distance: activity.distance_meters,
         moving_time: activity.moving_time_seconds,
         kilojoules: raw.kilojoules || null,
-        calories: raw.calories ? Math.round(raw.calories) : (raw.kilojoules ? Math.round(raw.kilojoules * 4.184) : null),
+        calories: raw.kilojoules ? Math.round(raw.kilojoules) : null,
       };
     });
 

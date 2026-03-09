@@ -142,10 +142,10 @@ export function calculateTSB(ctl: number, atl: number): number {
  * Get form status based on TSB
  */
 export function getFormStatus(tsb: number): string {
-  if (tsb < -30) return 'Overreaching - High Fatigue';
-  if (tsb < -20) return 'Heavy Training - Tired';
-  if (tsb < -10) return 'Productive Training';
-  if (tsb < 5) return 'Neutral / Maintaining';
+  if (tsb < -30) return 'Overreaching - Consider Rest';
+  if (tsb < -20) return 'Hard Training Block';
+  if (tsb < -5) return 'Optimal Training Zone';
+  if (tsb < 5) return 'Balanced / Maintaining';
   if (tsb < 15) return 'Freshening - Good Form';
   if (tsb < 25) return 'Fresh - Race Ready';
   return 'Very Fresh - Detraining Risk';
