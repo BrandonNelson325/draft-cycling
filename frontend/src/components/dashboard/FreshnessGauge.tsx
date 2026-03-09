@@ -2,31 +2,69 @@ interface FreshnessGaugeProps {
   tsb: number;
 }
 
-export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
-  const getStatus = () => {
-    if (tsb < -30) return { label: 'Overreaching', subtitle: 'Time for recovery', bgColor: 'bg-red-100 dark:bg-red-950', textColor: 'text-red-600 dark:text-red-400', color: '#ef4444' };
-    if (tsb < -20) return { label: 'Optimal', subtitle: 'Recovery day coming up', bgColor: 'bg-violet-100 dark:bg-violet-950', textColor: 'text-violet-600 dark:text-violet-400', color: '#a78bfa' };
-    if (tsb < -5) return { label: 'Optimal', subtitle: 'Right where you want to be', bgColor: 'bg-violet-100 dark:bg-violet-950', textColor: 'text-violet-600 dark:text-violet-400', color: '#a78bfa' };
-    if (tsb < 5) return { label: 'Balanced', subtitle: 'Recovered and ready', bgColor: 'bg-emerald-100 dark:bg-emerald-950', textColor: 'text-emerald-600 dark:text-emerald-400', color: '#34d399' };
-    if (tsb < 25) return { label: 'Fresh', subtitle: 'Ready for a big effort', bgColor: 'bg-blue-100 dark:bg-blue-950', textColor: 'text-blue-600 dark:text-blue-400', color: '#3b82f6' };
-    return { label: 'Detrained', subtitle: 'Time to get back on the bike', bgColor: 'bg-gray-100 dark:bg-gray-900', textColor: 'text-gray-600 dark:text-gray-400', color: '#6b7280' };
-  };
+// Gradient stops: Red (0%) → Green (50%) → Blue (100%)
+const GRADIENT_STOPS = [
+  { pos: 0, r: 239, g: 68, b: 68 },    // #ef4444 red
+  { pos: 0.5, r: 34, g: 197, b: 94 },   // #22c55e green
+  { pos: 1, r: 59, g: 130, b: 246 },     // #3b82f6 blue
+];
 
-  const status = getStatus();
+function interpolateColor(pct: number): string {
+  const t = Math.max(0, Math.min(1, pct / 100));
+  let i = 0;
+  while (i < GRADIENT_STOPS.length - 2 && GRADIENT_STOPS[i + 1].pos < t) i++;
+  const a = GRADIENT_STOPS[i];
+  const b = GRADIENT_STOPS[i + 1];
+  const localT = (t - a.pos) / (b.pos - a.pos);
+  const r = Math.round(a.r + (b.r - a.r) * localT);
+  const g = Math.round(a.g + (b.g - a.g) * localT);
+  const bl = Math.round(a.b + (b.b - a.b) * localT);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+function darkenColor(pct: number): string {
+  const t = Math.max(0, Math.min(1, pct / 100));
+  let i = 0;
+  while (i < GRADIENT_STOPS.length - 2 && GRADIENT_STOPS[i + 1].pos < t) i++;
+  const a = GRADIENT_STOPS[i];
+  const b = GRADIENT_STOPS[i + 1];
+  const localT = (t - a.pos) / (b.pos - a.pos);
+  const r = Math.round((a.r + (b.r - a.r) * localT) * 0.15);
+  const g = Math.round((a.g + (b.g - a.g) * localT) * 0.15);
+  const bl = Math.round((a.b + (b.b - a.b) * localT) * 0.15);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+function getStatus(tsb: number) {
+  if (tsb < -30) return { label: 'Overreaching', subtitle: 'Time for recovery' };
+  if (tsb < -20) return { label: 'Optimal', subtitle: 'Recovery day coming up' };
+  if (tsb < -5) return { label: 'Optimal', subtitle: 'Right where you want to be' };
+  if (tsb < 5) return { label: 'Balanced', subtitle: 'Recovered and ready' };
+  if (tsb < 25) return { label: 'Fresh', subtitle: 'Ready for a big effort' };
+  return { label: 'Detrained', subtitle: 'Time to get back on the bike' };
+}
+
+export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
+  const status = getStatus(tsb);
 
   // Map TSB from [-40, 40] to [0%, 100%]
   const pct = Math.max(0, Math.min(100, ((tsb + 40) / 80) * 100));
+  const color = interpolateColor(pct);
+  const bg = darkenColor(pct);
 
   return (
     <div className="space-y-3">
-      {/* Gradient Gauge */}
+      {/* Gradient Gauge: Red → Green → Blue */}
       <div className="relative">
-        <div className="h-3 bg-gradient-to-r from-red-400 via-yellow-400 via-green-400 to-blue-400 rounded-full" />
+        <div
+          className="h-3 rounded-full"
+          style={{ background: 'linear-gradient(to right, #ef4444, #22c55e, #3b82f6)' }}
+        />
         <div
           className="absolute top-[-3px] w-1.5 h-[18px] bg-white rounded-sm shadow-md transition-all"
           style={{
             left: `${pct}%`,
-            borderColor: status.color,
+            borderColor: color,
             borderWidth: 2,
             transform: 'translateX(-50%)',
           }}
@@ -36,13 +74,13 @@ export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
       {/* Labels */}
       <div className="flex justify-between text-[10px] text-muted-foreground">
         <span>Tired</span>
-        <span>Training</span>
+        <span>Optimal</span>
         <span>Fresh</span>
       </div>
 
-      {/* Status Badge */}
-      <div className={`text-center p-3 rounded-xl ${status.bgColor}`}>
-        <div className={`text-xl font-bold ${status.textColor}`}>
+      {/* Status Badge — color sampled from gradient */}
+      <div className="text-center p-3 rounded-xl" style={{ backgroundColor: bg }}>
+        <div className="text-xl font-bold" style={{ color }}>
           {status.label}
         </div>
         <div className="text-xs font-medium text-muted-foreground mt-0.5">
