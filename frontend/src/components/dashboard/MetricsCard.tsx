@@ -130,72 +130,61 @@ export function MetricsCard() {
 
       {/* Metrics Grid */}
       <div className="grid gap-3 grid-cols-3">
-        {/* Total Distance */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Total Distance</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-foreground">
-              {units.formatDistance(metrics?.total_distance_meters || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">{units.distanceUnit}</p>
-          </CardContent>
-        </Card>
-
-        {/* Total Time */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Total Time</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-foreground">
-              {formatDuration(metrics?.total_time_seconds || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">riding time</p>
-          </CardContent>
-        </Card>
-
-        {/* Total Elevation */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Total Elevation</CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4">
-            <div className="text-2xl font-bold text-foreground">
-              {units.formatElevation(metrics?.total_elevation_meters || 0)}
-            </div>
-            <p className="text-xs text-muted-foreground">{units.elevationUnit}</p>
-          </CardContent>
-        </Card>
-
-        {/* Total Rides */}
-        <Card>
-          <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Total Rides</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Rides</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-2xl font-bold text-foreground">
               {metrics?.ride_count || 0}
             </div>
-            <p className="text-xs text-muted-foreground">activities</p>
           </CardContent>
         </Card>
 
-        {/* Avg Distance */}
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
-            <CardTitle className="text-xs font-medium text-muted-foreground">Avg Distance</CardTitle>
+            <CardTitle className="text-xs font-medium text-muted-foreground">Distance ({units.distanceUnitShort})</CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4">
             <div className="text-2xl font-bold text-foreground">
-              {units.formatDistance(metrics?.avg_distance_meters || 0)}
+              {units.formatDistance(metrics?.total_distance_meters || 0)}
             </div>
-            <p className="text-xs text-muted-foreground">{units.distanceUnitShort}/ride</p>
           </CardContent>
         </Card>
 
-        {/* Donuts Burned */}
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Time</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-2xl font-bold text-foreground">
+              {formatDuration(metrics?.total_time_seconds || 0)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Elevation</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-2xl font-bold text-foreground">
+              {units.formatElevation(metrics?.total_elevation_meters || 0)}{units.elevationUnitShort}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <CardTitle className="text-xs font-medium text-muted-foreground">Training Load</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            <div className="text-2xl font-bold text-foreground">
+              {Math.round(metrics?.total_tss || 0)}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-2 pt-4 px-4">
             <CardTitle className="text-xs font-medium text-muted-foreground">🍩 Burned</CardTitle>
@@ -204,7 +193,7 @@ export function MetricsCard() {
             <div className="text-2xl font-bold text-foreground">
               {Math.round((metrics?.total_calories || 0) / 280)}
             </div>
-            <p className="text-xs text-muted-foreground">donuts worth</p>
+            <p className="text-xs text-muted-foreground">{(metrics?.total_calories || 0).toLocaleString()} cal</p>
           </CardContent>
         </Card>
 

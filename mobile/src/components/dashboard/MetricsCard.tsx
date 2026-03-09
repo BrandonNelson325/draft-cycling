@@ -68,7 +68,7 @@ export default function MetricsCard() {
           <StatBox label="Time" value={formatDuration(data.total_time_seconds)} />
           <StatBox label="Elevation" value={`${units.formatElevation(data.total_elevation_meters)}${units.elevationUnitShort}`} />
           <StatBox label="Training Load" value={String(Math.round(data.total_tss))} />
-          <StatBox label="🍩 Burned" value={data.total_calories > 0 ? String(Math.round(data.total_calories / 280)) : '0'} />
+          <StatBox label="🍩 Burned" value={data.total_calories > 0 ? String(Math.round(data.total_calories / 280)) : '0'} subtitle={data.total_calories > 0 ? `${data.total_calories.toLocaleString()} cal` : undefined} />
         </View>
       ) : (
         <Text style={styles.empty}>No data for this period</Text>
@@ -77,11 +77,12 @@ export default function MetricsCard() {
   );
 }
 
-function StatBox({ label, value }: { label: string; value: string }) {
+function StatBox({ label, value, subtitle }: { label: string; value: string; subtitle?: string }) {
   return (
     <View style={styles.statBox}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
+      {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
     </View>
   );
 }
@@ -137,6 +138,11 @@ const styles = StyleSheet.create({
   statLabel: {
     fontSize: 11,
     color: '#64748b',
+    textAlign: 'center',
+  },
+  statSubtitle: {
+    fontSize: 9,
+    color: '#475569',
     textAlign: 'center',
   },
   empty: {
