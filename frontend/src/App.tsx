@@ -13,6 +13,7 @@ import { ChatPage } from './pages/ChatPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StravaCallback } from './pages/StravaCallback';
 import { TrainingPlanPage } from './pages/TrainingPlanPage';
+import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { DailyMorningModal } from './components/modals/DailyMorningModal';
 import { PostRideModal } from './components/modals/PostRideModal';
 import { WelcomeModal } from './components/modals/WelcomeModal';
@@ -135,8 +136,9 @@ function App() {
 
   return (
     <Routes>
-      {/* Strava callback route (accessible without full auth) */}
+      {/* Public routes (accessible without auth) */}
       <Route path="/strava/callback" element={<StravaCallback />} />
+      <Route path="/privacy" element={<PrivacyPolicy />} />
 
       {user ? (
         // Logged in — all routes go to protected app

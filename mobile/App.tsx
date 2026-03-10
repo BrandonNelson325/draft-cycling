@@ -15,6 +15,7 @@ import WelcomeModal from './src/components/modals/WelcomeModal';
 import { useDailyMorning } from './src/hooks/useDailyMorning';
 import { useNewActivities } from './src/hooks/useNewActivities';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
+import { useTokenRefresh } from './src/hooks/useTokenRefresh';
 import { useAuthStore } from './src/stores/useAuthStore';
 
 const linking = {
@@ -28,6 +29,7 @@ const linking = {
 
 function AppModals() {
   const { user } = useAuthStore();
+  useTokenRefresh();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
   usePushNotifications(newActivities.refetch, dailyMorning.forceShow);

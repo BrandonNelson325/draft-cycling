@@ -89,20 +89,37 @@ apiClient.interceptors.response.use(
           return Promise.reject(error);
         }
 
-        const response = await axios.post(`${API_URL}/api/auth/refresh`, {
-          refresh_token: refreshToken,
-        });
+        // Attempt refresh with one retry for transient failures
+        let lastError: any;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await axios.post(`${API_URL}/api/auth/refresh`, {
+              refresh_token: refreshToken,
+            });
 
-        const { access_token, refresh_token } = response.data.session;
-        useAuthStore.getState().setTokens(access_token, refresh_token);
+            const { access_token, refresh_token } = response.data.session;
+            useAuthStore.getState().setTokens(access_token, refresh_token);
 
-        processQueue(null, access_token);
-        originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
-        return apiClient(originalRequest);
-      } catch (refreshError) {
+            processQueue(null, access_token);
+            originalRequest.headers['Authorization'] = `Bearer ${access_token}`;
+            return apiClient(originalRequest);
+          } catch (err: any) {
+            lastError = err;
+            const status = err?.response?.status;
+            // 401/403 from refresh = token permanently invalid, don't retry
+            if (status === 401 || status === 403) break;
+            // Transient error — wait briefly then retry
+            if (attempt === 0) {
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+          }
+        }
+
+        // Only logout if refresh is permanently broken
+        console.warn('[API] Token refresh failed, logging out:', lastError?.response?.status || lastError?.message);
         useAuthStore.getState().logout();
-        processQueue(refreshError, null);
-        return Promise.reject(refreshError);
+        processQueue(lastError, null);
+        return Promise.reject(lastError);
       } finally {
         isRefreshing = false;
       }

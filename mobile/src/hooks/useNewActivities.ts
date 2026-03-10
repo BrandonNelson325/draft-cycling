@@ -68,7 +68,12 @@ export function useNewActivities() {
   };
 
   const refetch = async () => {
-    await fetchUnacknowledged();
+    try {
+      await fetchUnacknowledged();
+    } catch (error) {
+      // Don't let a failed refetch (e.g. during token refresh) break the app
+      console.warn('[useNewActivities] refetch failed:', error);
+    }
   };
 
   return { activities, currentIndex, acknowledge, skip, refetch };

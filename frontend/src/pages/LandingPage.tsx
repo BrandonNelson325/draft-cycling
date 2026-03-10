@@ -271,6 +271,7 @@ export function LandingPage() {
             <a href="#features" className="hover:text-gray-300 transition-colors">Features</a>
             <a href="#pricing" className="hover:text-gray-300 transition-colors">Pricing</a>
             <a href="mailto:support@draftcycling.com" className="hover:text-gray-300 transition-colors">Support</a>
+            <a href="/privacy" className="hover:text-gray-300 transition-colors">Privacy Policy</a>
           </div>
         </div>
       </footer>
