@@ -1,13 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import type { StravaActivity } from '../../services/calendarService';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getConversionUtils } from '../../utils/units';
+import { activityFeedbackService } from '../../services/activityFeedbackService';
 import Badge from '../ui/Badge';
 
 interface ActivityDetailSheetProps {
   activity: StravaActivity | null;
+  onFeedbackSaved?: (activityId: string, effort: number) => void;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -30,11 +32,24 @@ const RPE_DISPLAY: Record<number, { emoji: string; label: string }> = {
   5: { emoji: '🔥', label: 'Max' },
 };
 
-export default function ActivityDetailSheet({ activity }: ActivityDetailSheetProps) {
+export default function ActivityDetailSheet({ activity, onFeedbackSaved }: ActivityDetailSheetProps) {
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
+  const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
+  const [savingRpe, setSavingRpe] = useState(false);
+  // Track saved feedback per activity ID so it persists across re-opens
+  const [feedbackMap, setFeedbackMap] = useState<Record<string, number>>({});
+
+  // Reset RPE selection when switching to a different activity
+  useEffect(() => {
+    setSelectedRpe(null);
+    setSavingRpe(false);
+  }, [activity?.id]);
 
   if (!activity) return null;
+
+  const displayedEffort = feedbackMap[activity.id] ?? activity.perceived_effort;
+  const needsFeedback = !displayedEffort;
 
   const duration = activity.moving_time_seconds
     ? `${Math.floor(activity.moving_time_seconds / 3600)}h ${Math.round((activity.moving_time_seconds % 3600) / 60)}m`
@@ -123,15 +138,60 @@ export default function ActivityDetailSheet({ activity }: ActivityDetailSheetPro
         </View>
       )}
 
-      {activity.perceived_effort && RPE_DISPLAY[activity.perceived_effort] && (
+      {displayedEffort && RPE_DISPLAY[displayedEffort] ? (
         <View style={styles.rpeSection}>
-          <Text style={styles.rpeEmoji}>{RPE_DISPLAY[activity.perceived_effort].emoji}</Text>
+          <Text style={styles.rpeEmoji}>{RPE_DISPLAY[displayedEffort].emoji}</Text>
           <View>
             <Text style={styles.rpeLabel}>Perceived Effort</Text>
-            <Text style={styles.rpeValue}>{RPE_DISPLAY[activity.perceived_effort].label}</Text>
+            <Text style={styles.rpeValue}>{RPE_DISPLAY[displayedEffort].label}</Text>
           </View>
         </View>
-      )}
+      ) : needsFeedback ? (
+        <View style={styles.feedbackSection}>
+          <Text style={styles.feedbackTitle}>How hard was this ride?</Text>
+          <View style={styles.rpeRow}>
+            {Object.entries(RPE_DISPLAY).map(([val, { emoji, label }]) => {
+              const num = Number(val);
+              return (
+                <Pressable
+                  key={num}
+                  style={[styles.rpeBtn, selectedRpe === num && styles.rpeBtnSelected]}
+                  onPress={() => setSelectedRpe(num)}
+                >
+                  <Text style={styles.rpeBtnEmoji}>{emoji}</Text>
+                  <Text style={styles.rpeBtnLabel}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          {selectedRpe && (
+            <Pressable
+              style={[styles.saveBtn, savingRpe && styles.saveBtnDisabled]}
+              disabled={savingRpe}
+              onPress={async () => {
+                setSavingRpe(true);
+                try {
+                  await activityFeedbackService.acknowledge(activity.id, {
+                    perceived_effort: selectedRpe,
+                  });
+                  setFeedbackMap((prev) => ({ ...prev, [activity.id]: selectedRpe }));
+                  onFeedbackSaved?.(activity.id, selectedRpe);
+                } catch {
+                  // silently fail — user can try again
+                } finally {
+                  setSavingRpe(false);
+                }
+              }}
+            >
+              {savingRpe ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.saveBtnText}>Save</Text>
+              )}
+            </Pressable>
+          )}
+        </View>
+      ) : null}
 
       {activity.post_activity_notes ? (
         <View style={styles.notesSection}>
@@ -201,6 +261,47 @@ const styles = StyleSheet.create({
   rpeEmoji: { fontSize: 28 },
   rpeLabel: { fontSize: 11, color: '#64748b' },
   rpeValue: { fontSize: 15, fontWeight: '600', color: '#f1f5f9' },
+  feedbackSection: {
+    marginTop: 16,
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    padding: 14,
+    gap: 10,
+  },
+  feedbackTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#f1f5f9',
+  },
+  rpeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'space-between',
+  },
+  rpeBtn: {
+    flex: 1,
+    backgroundColor: '#1e293b',
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+    gap: 2,
+  },
+  rpeBtnSelected: {
+    borderColor: '#3b82f6',
+    backgroundColor: '#1e3a5f',
+  },
+  rpeBtnEmoji: { fontSize: 20 },
+  rpeBtnLabel: { fontSize: 9, color: '#94a3b8', textAlign: 'center' },
+  saveBtn: {
+    backgroundColor: '#3b82f6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  saveBtnDisabled: { opacity: 0.5 },
+  saveBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   notesSection: {
     marginTop: 12,
     backgroundColor: '#0f172a',

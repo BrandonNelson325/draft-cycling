@@ -725,7 +725,14 @@ export default function CalendarScreen() {
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
       >
-        <ActivityDetailSheet activity={selectedActivity} />
+        <ActivityDetailSheet
+          activity={selectedActivity}
+          onFeedbackSaved={(activityId, effort) => {
+            setSelectedActivity((prev) =>
+              prev && prev.id === activityId ? { ...prev, perceived_effort: effort } : prev
+            );
+          }}
+        />
       </BottomSheetModal>
     </SafeAreaView>
   );

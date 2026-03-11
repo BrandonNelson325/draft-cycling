@@ -43,6 +43,14 @@ export default function DashboardScreen() {
     activitySheetRef.current?.present();
   }, []);
 
+  const handleFeedbackSaved = useCallback((activityId: string, effort: number) => {
+    setSelectedActivity((prev) =>
+      prev && prev.id === activityId ? { ...prev, perceived_effort: effort } : prev
+    );
+    // Refresh activity list so re-opening shows saved RPE
+    setRefreshKey((k) => k + 1);
+  }, []);
+
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView
@@ -68,7 +76,7 @@ export default function DashboardScreen() {
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
       >
-        <ActivityDetailSheet activity={selectedActivity} />
+        <ActivityDetailSheet activity={selectedActivity} onFeedbackSaved={handleFeedbackSaved} />
       </BottomSheetModal>
     </SafeAreaView>
   );
