@@ -58,21 +58,7 @@ const PRICING = [
 
 function StravaLogo({ className }: { className?: string }) {
   return (
-    <svg
-      className={className}
-      viewBox="0 0 64 64"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M41.03 47.852l-5.572-10.976h-8.172L41.03 64l13.736-27.124h-8.18L41.03 47.852z"
-        fill="#F9B797"
-      />
-      <path
-        d="M27.898 36.876l-2.63-5.18L12.67 0h10.54l7.318 14.424 7.318-14.424h10.54L27.898 36.876z"
-        fill="#F05222"
-      />
-    </svg>
+    <img src="/strava-logo.png" alt="Strava" className={className} />
   );
 }
 
