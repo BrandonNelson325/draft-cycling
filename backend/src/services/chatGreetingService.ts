@@ -1,6 +1,7 @@
 import { anthropic, MODEL } from '../utils/anthropic';
 import { supabaseAdmin } from '../utils/supabase';
 import { trainingLoadService } from './trainingLoadService';
+import { todayInTimezone } from '../utils/timezone';
 
 export const chatGreetingService = {
   /**
@@ -14,8 +15,9 @@ export const chatGreetingService = {
       .eq('id', athleteId)
       .single();
 
-    // Get recent rides (last 2 days)
-    const twoDaysAgo = new Date();
+    // Get recent rides (last 2 days, using athlete timezone)
+    const tz = athlete?.timezone || 'America/Los_Angeles';
+    const twoDaysAgo = new Date(todayInTimezone(tz) + 'T12:00:00');
     twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
 
     const { data: recentRides } = await supabaseAdmin
@@ -29,8 +31,9 @@ export const chatGreetingService = {
     // Get training status
     const trainingStatus = await trainingLoadService.getTrainingStatus(athleteId);
 
+    const today = todayInTimezone(tz);
+
     // Get today's health data
-    const today = new Date().toISOString().split('T')[0];
     const { data: healthData } = await supabaseAdmin
       .from('health_data')
       .select('*')
@@ -43,7 +46,7 @@ export const chatGreetingService = {
       .from('calendar_entries')
       .select('*, workouts(*)')
       .eq('athlete_id', athleteId)
-      .gte('scheduled_date', new Date().toISOString().split('T')[0])
+      .gte('scheduled_date', today)
       .order('scheduled_date', { ascending: true })
       .limit(7);
 

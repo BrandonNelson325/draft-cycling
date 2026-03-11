@@ -2,6 +2,14 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { dailyReadinessService } from '../services/dailyReadinessService';
 import { logger } from '../utils/logger';
+import { supabaseAdmin } from '../utils/supabase';
+import { todayInTimezone } from '../utils/timezone';
+
+async function resolveLocalDate(athleteId: string, localDate?: string): Promise<string> {
+  if (localDate) return localDate;
+  const { data } = await supabaseAdmin.from('athletes').select('timezone').eq('id', athleteId).single();
+  return todayInTimezone(data?.timezone || 'America/Los_Angeles');
+}
 
 export const getDailyReadiness = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -10,7 +18,7 @@ export const getDailyReadiness = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
-    const localDate = (req.query.localDate as string) || new Date().toISOString().split('T')[0];
+    const localDate = await resolveLocalDate(req.user.id, req.query.localDate as string);
     const readiness = await dailyReadinessService.getDailyReadiness(req.user.id, localDate);
 
     res.json(readiness);
@@ -28,7 +36,7 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
     }
 
     const { sleepQuality, feeling, notes, localDate } = req.body;
-    const dateToUse = localDate || new Date().toISOString().split('T')[0];
+    const dateToUse = await resolveLocalDate(req.user.id, localDate);
 
     if (!sleepQuality || !feeling) {
       res.status(400).json({ error: 'Sleep quality and feeling are required' });
@@ -72,7 +80,7 @@ export const getTodayMetrics = async (req: AuthRequest, res: Response): Promise<
       return;
     }
 
-    const localDate = (req.query.localDate as string) || new Date().toISOString().split('T')[0];
+    const localDate = await resolveLocalDate(req.user.id, req.query.localDate as string);
     const metrics = await dailyReadinessService.getTodayMetrics(req.user.id, localDate);
 
     res.json({ metrics });

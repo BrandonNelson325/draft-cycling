@@ -246,7 +246,7 @@ export const dailyReadinessService = {
     },
     localDate?: string
   ): Promise<void> {
-    const today = localDate || new Date().toISOString().split('T')[0];
+    const today = localDate || todayInTimezone(await getAthleteTz(athleteId));
 
     // Convert quality to scores
     const sleepScoreMap = { poor: 3, good: 7, great: 10 };
@@ -286,7 +286,7 @@ export const dailyReadinessService = {
    * Get today's metrics (if checked in)
    */
   async getTodayMetrics(athleteId: string, localDate?: string) {
-    const today = localDate || new Date().toISOString().split('T')[0];
+    const today = localDate || todayInTimezone(await getAthleteTz(athleteId));
 
     const { data } = await supabaseAdmin
       .from('daily_metrics')
