@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, View, AppState } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import type { StravaActivity } from '../services/calendarService';
 
 import CoachCard from '../components/dashboard/CoachCard';
@@ -15,9 +15,13 @@ import ActivityDetailSheet from '../components/activity/ActivityDetailSheet';
 
 const SNAP_POINTS = ['60%', '85%'];
 
+const renderBackdrop = (props: any) => (
+  <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+);
+
 export default function DashboardScreen() {
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
-  const activitySheetRef = useRef<BottomSheet>(null);
+  const activitySheetRef = useRef<BottomSheetModal>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
   // Refresh when screen comes into focus (tab switch or app foreground)
@@ -36,7 +40,7 @@ export default function DashboardScreen() {
 
   const handleActivityPress = useCallback((activity: StravaActivity) => {
     setSelectedActivity(activity);
-    activitySheetRef.current?.snapToIndex(0);
+    activitySheetRef.current?.present();
   }, []);
 
   return (
@@ -56,19 +60,16 @@ export default function DashboardScreen() {
         <View style={styles.bottomPad} />
       </ScrollView>
 
-      <BottomSheet
+      <BottomSheetModal
         ref={activitySheetRef}
-        index={-1}
         snapPoints={SNAP_POINTS}
         enablePanDownToClose
-        backdropComponent={(props) => (
-          <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
-        )}
+        backdropComponent={renderBackdrop}
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
       >
         <ActivityDetailSheet activity={selectedActivity} />
-      </BottomSheet>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }

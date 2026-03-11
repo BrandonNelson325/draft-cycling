@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
 import Card from '../ui/Card';
 import { stravaService } from '../../services/stravaService';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -77,13 +77,13 @@ export default function RecentActivities({ onActivityPress }: RecentActivitiesPr
           );
 
           return onActivityPress ? (
-            <TouchableOpacity
+            <Pressable
               key={activity.id || i}
-              style={[styles.row, i > 0 && styles.rowBorder]}
+              style={({ pressed }) => [styles.row, i > 0 && styles.rowBorder, pressed && styles.rowPressed]}
               onPress={() => onActivityPress(activity)}
             >
               {content}
-            </TouchableOpacity>
+            </Pressable>
           ) : (
             <View key={activity.id || i} style={[styles.row, i > 0 && styles.rowBorder]}>
               {content}
@@ -136,6 +136,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#94a3b8',
+  },
+  rowPressed: {
+    opacity: 0.6,
   },
   empty: {
     color: '#64748b',

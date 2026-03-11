@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TouchableOpacity,
+  Pressable,
   StyleSheet,
   Alert,
   ActivityIndicator,
@@ -88,7 +88,7 @@ export default function WorkoutDetailSheet({ workout, onClose, onScheduled }: Wo
       )}
 
       <View style={styles.actions}>
-        <TouchableOpacity
+        <Pressable
           style={[styles.actionBtn, downloading === 'zwo' && styles.actionDisabled]}
           onPress={() => handleDownload('zwo')}
           disabled={!!downloading}
@@ -98,8 +98,8 @@ export default function WorkoutDetailSheet({ workout, onClose, onScheduled }: Wo
           ) : (
             <Text style={styles.actionBtnText}>Download ZWO</Text>
           )}
-        </TouchableOpacity>
-        <TouchableOpacity
+        </Pressable>
+        <Pressable
           style={[styles.actionBtn, downloading === 'fit' && styles.actionDisabled]}
           onPress={() => handleDownload('fit')}
           disabled={!!downloading}
@@ -109,7 +109,7 @@ export default function WorkoutDetailSheet({ workout, onClose, onScheduled }: Wo
           ) : (
             <Text style={styles.actionBtnText}>Download FIT</Text>
           )}
-        </TouchableOpacity>
+        </Pressable>
       </View>
     </BottomSheetScrollView>
   );
