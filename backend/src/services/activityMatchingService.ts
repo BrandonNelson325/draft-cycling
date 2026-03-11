@@ -48,15 +48,19 @@ export const activityMatchingService = {
       new Date(activityStartDate)
     );
 
-    const { data: entry } = await supabaseAdmin
+    // Include both completed and uncompleted entries — the activity may have been
+    // auto-completed by matchAndComplete() before the post-ride modal loads.
+    // Prefer uncompleted entries (athlete hasn't confirmed yet), fall back to completed.
+    const { data: entries } = await supabaseAdmin
       .from('calendar_entries')
       .select('id, workout_id, completed, workouts(id, name, workout_type, tss, duration_minutes, description)')
       .eq('athlete_id', athleteId)
       .eq('scheduled_date', localDate)
-      .eq('completed', false)
+      .order('completed', { ascending: true })
       .order('created_at', { ascending: true })
-      .limit(1)
-      .single();
+      .limit(1);
+
+    const entry = entries?.[0];
 
     if (!entry || !entry.workouts) return null;
 

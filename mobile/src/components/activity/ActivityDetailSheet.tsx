@@ -86,7 +86,7 @@ export default function ActivityDetailSheet({ activity }: ActivityDetailSheetPro
   }
 
   return (
-    <BottomSheetScrollView contentContainerStyle={styles.content}>
+    <BottomSheetScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <Text style={styles.name}>{activity.name || 'Ride'}</Text>
         <Badge

@@ -45,6 +45,7 @@ export default function DashboardScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <CoachCard key={`coach-${refreshKey}`} />
         <MetricsCard />

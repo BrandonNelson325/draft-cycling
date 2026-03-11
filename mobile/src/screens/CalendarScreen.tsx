@@ -498,7 +498,7 @@ export default function CalendarScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      <ScrollView>
+      <ScrollView keyboardShouldPersistTaps="handled">
       {/* Calendar header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={prevMonth} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -569,7 +569,7 @@ export default function CalendarScreen() {
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
       >
-        <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent} keyboardShouldPersistTaps="handled">
           {selectedDate && (
             <>
               <Text style={styles.sheetTitle}>

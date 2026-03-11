@@ -60,7 +60,7 @@ export default function WorkoutDetailSheet({ workout, onClose, onScheduled }: Wo
   };
 
   return (
-    <BottomSheetScrollView contentContainerStyle={styles.content}>
+    <BottomSheetScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
       <View style={styles.header}>
         <Text style={styles.name}>{workout.name}</Text>
         <Badge
