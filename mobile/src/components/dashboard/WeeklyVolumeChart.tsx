@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
-import { Canvas, Path, Circle } from '@shopify/react-native-skia';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator, Dimensions } from 'react-native';
+import { Canvas, Path, Circle, Line, vec } from '@shopify/react-native-skia';
 import Card from '../ui/Card';
 import { chartsService, type WeeklyData } from '../../services/chartsService';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -8,9 +8,8 @@ import { getConversionUtils } from '../../utils/units';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 64;
-const CHART_H = 160;
-// Extra top/bottom padding so value labels don't clip at the extremes
-const PAD = { top: 20, right: 12, bottom: 8, left: 12 };
+const CHART_H = 150;
+const PAD = { top: 16, right: 12, bottom: 8, left: 12 };
 const IW = CHART_W - PAD.left - PAD.right;
 const IH = CHART_H - PAD.top - PAD.bottom;
 
@@ -36,6 +35,7 @@ function buildPath(pts: { x: number; y: number }[]): string {
 export default function WeeklyVolumeChart() {
   const [data, setData] = useState<WeeklyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
 
@@ -44,6 +44,8 @@ export default function WeeklyVolumeChart() {
     setLoading(true);
     chartsService.getWeeklyData(8).then(d => {
       setData(d);
+      // Default to most recent week
+      if (d.length > 0) setSelectedIndex(d.length - 1);
       setLoading(false);
     }).catch((err) => {
       console.warn('[WeeklyVolumeChart] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
@@ -87,120 +89,157 @@ export default function WeeklyVolumeChart() {
   const tssPath = buildPath(tssPts);
   const gridYs = [0.25, 0.5, 0.75].map(p => PAD.top + (1 - p) * IH);
 
-  // Value label placement: distance label goes ABOVE its dot, TSS label goes BELOW its dot.
-  // Clamp so labels stay within [0, CHART_H].
-  const LABEL_H = 12; // approximate label height in px
-  const DOT_R = 4;
+  // Handle tap — find closest week based on X position
+  const handleTap = (evt: any) => {
+    const tapX = evt.nativeEvent.locationX;
+    let closest = 0;
+    let minDist = Infinity;
+    for (let i = 0; i < n; i++) {
+      const d = Math.abs(tapX - toX(i));
+      if (d < minDist) { minDist = d; closest = i; }
+    }
+    setSelectedIndex(closest);
+  };
+
+  const sel = selectedIndex ?? n - 1;
+  const selDist = Math.round(distances[sel]);
+  const selTss = Math.round(tssValues[sel]);
+  const selLabel = labels[sel]?.replace('-', '/');
 
   return (
     <Card>
-      <Text style={styles.title}>Weekly Volume</Text>
-      <View style={styles.legend}>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} />
-          <Text style={styles.legendText}>Distance ({units.distanceUnitShort})</Text>
-        </View>
-        <View style={styles.legendItem}>
-          <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
-          <Text style={styles.legendText}>Training Load</Text>
+      <View style={styles.headerRow}>
+        <Text style={styles.title}>Weekly Volume</Text>
+        <View style={styles.legend}>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#22c55e' }]} />
+            <Text style={styles.legendText}>{units.distanceUnitShort}</Text>
+          </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: '#3b82f6' }]} />
+            <Text style={styles.legendText}>Load</Text>
+          </View>
         </View>
       </View>
 
-      {/* Canvas + absolutely-positioned labels share this container */}
-      <View style={{ width: CHART_W, height: CHART_H + 18 }}>
-        <Canvas style={{ width: CHART_W, height: CHART_H }}>
-          {/* Grid lines */}
-          {gridYs.map((gy, i) => (
-            <Path
-              key={i}
-              path={`M ${PAD.left} ${gy.toFixed(1)} L ${(CHART_W - PAD.right).toFixed(1)} ${gy.toFixed(1)}`}
-              color="#1e3a5f"
-              style="stroke"
+      {/* Selected week summary */}
+      <View style={styles.summary}>
+        <View style={styles.summaryItem}>
+          <Text style={styles.summaryValue}>
+            {selDist.toLocaleString()}
+            <Text style={styles.summaryUnit}> {units.distanceUnitShort}</Text>
+          </Text>
+          <Text style={[styles.summaryLabel, { color: '#86efac' }]}>Distance</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: '#93c5fd' }]}>
+            {selTss.toLocaleString()}
+          </Text>
+          <Text style={[styles.summaryLabel, { color: '#93c5fd' }]}>Training Load</Text>
+        </View>
+        <View style={styles.summaryDivider} />
+        <View style={styles.summaryItem}>
+          <Text style={[styles.summaryValue, { color: '#94a3b8', fontSize: 14 }]}>
+            {selLabel}
+          </Text>
+          <Text style={[styles.summaryLabel, { color: '#64748b' }]}>Week of</Text>
+        </View>
+      </View>
+
+      {/* Chart with tap handling */}
+      <Pressable onPress={handleTap}>
+        <View style={{ width: CHART_W, height: CHART_H + 18 }}>
+          <Canvas style={{ width: CHART_W, height: CHART_H }}>
+            {/* Grid lines */}
+            {gridYs.map((gy, i) => (
+              <Path
+                key={i}
+                path={`M ${PAD.left} ${gy.toFixed(1)} L ${(CHART_W - PAD.right).toFixed(1)} ${gy.toFixed(1)}`}
+                color="#1e3a5f"
+                style="stroke"
+                strokeWidth={1}
+              />
+            ))}
+
+            {/* Selected week vertical indicator */}
+            <Line
+              p1={vec(toX(sel), PAD.top)}
+              p2={vec(toX(sel), PAD.top + IH)}
+              color="rgba(148, 163, 184, 0.2)"
               strokeWidth={1}
             />
-          ))}
-          {/* Distance line (green) */}
-          {distPath ? (
-            <Path path={distPath} color="#22c55e" style="stroke" strokeWidth={2.5} />
-          ) : null}
-          {/* TSS line (blue) */}
-          {tssPath ? (
-            <Path path={tssPath} color="#3b82f6" style="stroke" strokeWidth={2.5} />
-          ) : null}
-          {/* Distance dots */}
-          {distPts.map((p, i) => (
-            <Circle key={`d${i}`} cx={p.x} cy={p.y} r={DOT_R} color="#22c55e" />
-          ))}
-          {/* TSS dots */}
-          {tssPts.map((p, i) => (
-            <Circle key={`t${i}`} cx={p.x} cy={p.y} r={DOT_R} color="#3b82f6" />
-          ))}
-        </Canvas>
 
-        {/* Distance value labels — above each distance dot */}
-        {distPts.map((p, i) => (
-          <Text
-            key={`dv${i}`}
-            style={[
-              styles.valueLabel,
-              {
-                color: '#86efac',
-                left: toX(i) - 16,
-                top: Math.max(0, p.y - LABEL_H - DOT_R - 1),
-              },
-            ]}
-          >
-            {Math.round(distances[i])}{units.distanceUnitShort}
-          </Text>
-        ))}
+            {/* Distance line (green) */}
+            {distPath ? (
+              <Path path={distPath} color="#22c55e" style="stroke" strokeWidth={2.5} />
+            ) : null}
+            {/* TSS line (blue) */}
+            {tssPath ? (
+              <Path path={tssPath} color="#3b82f6" style="stroke" strokeWidth={2.5} />
+            ) : null}
 
-        {/* TSS value labels — below each TSS dot */}
-        {tssPts.map((p, i) => (
-          <Text
-            key={`tv${i}`}
-            style={[
-              styles.valueLabel,
-              {
-                color: '#93c5fd',
-                left: toX(i) - 14,
-                top: Math.min(CHART_H - LABEL_H, p.y + DOT_R + 1),
-              },
-            ]}
-          >
-            {Math.round(tssValues[i])}
-          </Text>
-        ))}
+            {/* Distance dots */}
+            {distPts.map((p, i) => (
+              <Circle
+                key={`d${i}`}
+                cx={p.x}
+                cy={p.y}
+                r={i === sel ? 6 : 3.5}
+                color="#22c55e"
+              />
+            ))}
+            {/* TSS dots */}
+            {tssPts.map((p, i) => (
+              <Circle
+                key={`t${i}`}
+                cx={p.x}
+                cy={p.y}
+                r={i === sel ? 6 : 3.5}
+                color="#3b82f6"
+              />
+            ))}
+          </Canvas>
 
-        {/* X-axis week labels — below the canvas */}
-        {labels.map((label, i) => (
-          <Text
-            key={`xl${i}`}
-            style={[styles.xLabel, { left: toX(i) - 16, top: CHART_H + 2 }]}
-          >
-            {label}
-          </Text>
-        ))}
-      </View>
+          {/* X-axis week labels */}
+          {labels.map((label, i) => (
+            <Text
+              key={`xl${i}`}
+              style={[
+                styles.xLabel,
+                { left: toX(i) - 16, top: CHART_H + 2 },
+                i === sel && styles.xLabelSelected,
+              ]}
+            >
+              {label}
+            </Text>
+          ))}
+        </View>
+      </Pressable>
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
   title: {
     fontSize: 16,
     fontWeight: '600',
     color: '#f1f5f9',
-    marginBottom: 10,
   },
   legend: {
     flexDirection: 'row',
-    gap: 16,
-    marginBottom: 10,
+    gap: 12,
   },
   legendItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 5,
   },
   legendDot: {
     width: 8,
@@ -211,12 +250,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94a3b8',
   },
-  valueLabel: {
-    position: 'absolute',
-    width: 32,
-    textAlign: 'center',
-    fontSize: 8,
-    fontWeight: '600',
+  summary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#0f172a',
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  summaryDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: '#1e293b',
+  },
+  summaryValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#86efac',
+  },
+  summaryUnit: {
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: '500',
   },
   xLabel: {
     position: 'absolute',
@@ -224,6 +288,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 9,
     color: '#64748b',
+  },
+  xLabelSelected: {
+    color: '#f1f5f9',
+    fontWeight: '600',
   },
   empty: {
     color: '#64748b',
