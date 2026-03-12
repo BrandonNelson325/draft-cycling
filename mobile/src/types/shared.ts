@@ -12,6 +12,9 @@ export interface Athlete {
   push_token?: string;
   push_notifications_enabled?: boolean;
   morning_checkin_time?: string;  // "HH:MM:SS"
+  max_hr?: number;
+  resting_hr?: number;
+  date_of_birth?: string;
   strava_athlete_id?: number;
   strava_access_token?: string;
   strava_refresh_token?: string;

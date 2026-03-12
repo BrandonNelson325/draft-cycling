@@ -99,9 +99,9 @@ export function TrainingStatusCard() {
             <div className="space-y-2.5">
               <p className="font-semibold text-foreground">How to read these numbers</p>
               <div className="space-y-1.5">
-                <p><span className="font-medium">Freshness</span> — Are you rested or carrying fatigue? Positive = fresh, negative = tired. The sweet spot for productive training is roughly −10 to +5.</p>
-                <p><span className="font-medium">Fitness</span> — Your long-term training base, built over ~6 weeks. Higher means you're fitter and can handle more work.</p>
-                <p><span className="font-medium">Fatigue</span> — How much stress your body absorbed in the last ~7 days. Goes up with hard training, drops with rest.</p>
+                <p><span className="font-medium">Freshness</span> — Based on your fatigue-to-fitness ratio. Status scales to your fitness level — fitter athletes can handle more load without overreaching.</p>
+                <p><span className="font-medium">Fitness (CTL)</span> — Your long-term training base, built over ~6 weeks. Higher means you're fitter and can handle more work.</p>
+                <p><span className="font-medium">Fatigue (ATL)</span> — How much stress your body absorbed in the last ~7 days. When fatigue exceeds 1.3× your fitness, you're overreaching.</p>
               </div>
             </div>
           } />
@@ -113,7 +113,7 @@ export function TrainingStatusCard() {
           {/* Freshness Gauge */}
           <div>
             <h4 className="text-xs font-semibold mb-2 text-center text-muted-foreground">Freshness</h4>
-            <FreshnessGauge tsb={status.tsb || 0} />
+            <FreshnessGauge tsb={status.tsb || 0} ctl={status.ctl || 0} atl={status.atl || 0} />
           </div>
 
           <div className="border-t border-gray-200 pt-3 space-y-2">

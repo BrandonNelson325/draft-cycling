@@ -47,6 +47,9 @@ export default function SettingsScreen({ navigation }: any) {
     const val = unitSystem === 'imperial' ? user.weight_kg * 2.20462 : user.weight_kg;
     return val.toFixed(1);
   });
+  const [maxHr, setMaxHr] = useState(String(user?.max_hr || ''));
+  const [restingHr, setRestingHr] = useState(String(user?.resting_hr || ''));
+  const [dateOfBirth, setDateOfBirth] = useState(user?.date_of_birth || '');
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(user?.display_mode || 'advanced');
   const [timezone, setTimezone] = useState(
     user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
@@ -88,6 +91,9 @@ export default function SettingsScreen({ navigation }: any) {
         unit_system: unitSystem,
         display_mode: displayMode,
         timezone,
+        max_hr: maxHr ? Number(maxHr) : undefined,
+        resting_hr: restingHr ? Number(restingHr) : undefined,
+        date_of_birth: dateOfBirth || undefined,
       });
       Alert.alert('Saved', 'Profile updated successfully.');
     } catch {
@@ -240,6 +246,35 @@ export default function SettingsScreen({ navigation }: any) {
             placeholder={unitSystem === 'imperial' ? '154' : '70'}
             placeholderTextColor="#475569"
             keyboardType="decimal-pad"
+          />
+
+          <Label>Max Heart Rate</Label>
+          <TextInput
+            style={styles.input}
+            value={maxHr}
+            onChangeText={setMaxHr}
+            placeholder="185"
+            placeholderTextColor="#475569"
+            keyboardType="numeric"
+          />
+
+          <Label>Resting Heart Rate</Label>
+          <TextInput
+            style={styles.input}
+            value={restingHr}
+            onChangeText={setRestingHr}
+            placeholder="55"
+            placeholderTextColor="#475569"
+            keyboardType="numeric"
+          />
+
+          <Label>Date of Birth (YYYY-MM-DD)</Label>
+          <TextInput
+            style={styles.input}
+            value={dateOfBirth}
+            onChangeText={setDateOfBirth}
+            placeholder="1990-01-15"
+            placeholderTextColor="#475569"
           />
 
           <Label>Unit System</Label>

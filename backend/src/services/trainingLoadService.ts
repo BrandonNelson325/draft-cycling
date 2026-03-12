@@ -153,38 +153,84 @@ export const trainingLoadService = {
   },
 
   /**
-   * Determine training status from TSB
+   * Determine training status using Acute:Chronic Workload Ratio (ACWR).
+   *
+   * ACWR = ATL / CTL — the standard sports-science metric used by coaches,
+   * TrainingPeaks, and research literature. It automatically scales to
+   * individual fitness: a TSB of -25 means very different things for
+   * CTL 80 (ACWR ~1.3, productive) vs CTL 30 (ACWR ~1.8, danger).
+   *
+   * Thresholds (from Gabbett 2016, Hulin et al. 2014):
+   *   ACWR < 0.8  → Detraining / very fresh
+   *   0.8–1.0     → Maintaining / balanced
+   *   1.0–1.3     → Productive sweet spot (building fitness)
+   *   1.3–1.5     → Functional overreaching (plan recovery)
+   *   > 1.5       → Overtraining risk
+   *
+   * For new athletes (CTL < 15), we use simplified messaging since
+   * the ratio is unreliable with a tiny denominator.
    */
-  determineStatus(tsb: number): TrainingStatus {
-    if (tsb > 15) {
+  determineStatus(ctl: number, atl: number, tsb: number): TrainingStatus {
+    // New athlete — not enough training history for meaningful ratios
+    if (ctl < 15) {
+      if (tsb > 10) {
+        return {
+          status: 'fresh',
+          description: 'Ready to train — build your base consistently',
+          recommendation: 'Focus on regular, moderate rides to build your training base',
+        };
+      } else if (tsb >= -10) {
+        return {
+          status: 'optimal',
+          description: 'Good balance of training and recovery',
+          recommendation: 'Keep building — consistency is more important than intensity right now',
+        };
+      } else {
+        return {
+          status: 'productive',
+          description: 'Building your training base — nice work',
+          recommendation: 'Make sure to take easy days between hard efforts as you build fitness',
+        };
+      }
+    }
+
+    const acwr = atl / ctl;
+
+    if (acwr > 1.5) {
       return {
-        status: 'fresh',
-        description: 'You are well-rested and ready for hard efforts or racing',
-        recommendation: 'Good time for high-intensity training, races, or FTP tests',
+        status: 'overtraining',
+        description: 'Training load is spiking — high injury/burnout risk',
+        recommendation: 'Plan 2-3 easy/rest days. Ramp training gradually (< 10% weekly increase)',
       };
-    } else if (tsb >= -5) {
-      return {
-        status: 'optimal',
-        description: 'You are balanced and in good form',
-        recommendation: 'Continue with planned training, mix of intensity and volume',
-      };
-    } else if (tsb >= -20) {
-      return {
-        status: 'productive',
-        description: 'You are in the optimal training zone — absorbing fitness gains',
-        recommendation: 'This is where fitness is built. Continue training as planned, ensure good recovery between hard days',
-      };
-    } else if (tsb >= -30) {
+    } else if (acwr > 1.3) {
       return {
         status: 'overreaching',
-        description: 'You are in a heavy training block with significant fatigue',
-        recommendation: 'Consider a recovery day soon. Ensure adequate sleep and nutrition',
+        description: 'Heavy training block — functional overreaching',
+        recommendation: 'Recovery day soon. This is fine short-term but don\'t sustain it for more than a week',
+      };
+    } else if (acwr > 1.0) {
+      return {
+        status: 'productive',
+        description: 'In the sweet spot — building fitness effectively',
+        recommendation: 'This is where gains happen. Continue training as planned, ensure good recovery between hard days',
+      };
+    } else if (acwr > 0.8) {
+      return {
+        status: 'optimal',
+        description: 'Balanced training and recovery',
+        recommendation: 'Good maintenance zone. Ready for harder efforts if you want to push',
+      };
+    } else if (ctl > 40 && acwr < 0.5) {
+      return {
+        status: 'fresh',
+        description: 'Extended rest — fitness may start to fade',
+        recommendation: 'Time to get back to structured training before losing gains',
       };
     } else {
       return {
-        status: 'overtraining',
-        description: 'Deep fatigue — risk of overtraining if sustained',
-        recommendation: 'Plan 2-3 easy/rest days to recover before resuming hard training',
+        status: 'fresh',
+        description: 'Well-rested and ready for hard efforts',
+        recommendation: 'Good time for high-intensity training, races, or FTP tests',
       };
     }
   },
@@ -234,8 +280,8 @@ export const trainingLoadService = {
       // Store metrics
       await this.storeMetrics(athleteId, new Date(), load);
 
-      // Get training status
-      const status = this.determineStatus(load.tsb);
+      // Get training status using ACWR (relative to individual fitness)
+      const status = this.determineStatus(load.ctl, load.atl, load.tsb);
 
       return {
         ctl: load.ctl,

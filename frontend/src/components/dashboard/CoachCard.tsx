@@ -61,7 +61,7 @@ export function CoachCard() {
         <h3 className="text-lg font-semibold">Training Status</h3>
 
         {/* Freshness Gauge — the visual hook */}
-        <FreshnessGauge tsb={tsb} />
+        <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} />
 
         {/* AI summary */}
         {s && (

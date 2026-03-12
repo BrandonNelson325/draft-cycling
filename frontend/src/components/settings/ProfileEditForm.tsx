@@ -25,6 +25,9 @@ export function ProfileEditForm() {
   const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>(
     user?.unit_system || 'metric'
   );
+  const [maxHr, setMaxHr] = useState(user?.max_hr?.toString() || '');
+  const [restingHr, setRestingHr] = useState(user?.resting_hr?.toString() || '');
+  const [dateOfBirth, setDateOfBirth] = useState(user?.date_of_birth || '');
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(
     user?.display_mode || 'advanced'
   );
@@ -77,6 +80,20 @@ export function ProfileEditForm() {
 
       if (timezone !== user?.timezone) {
         (updates as any).timezone = timezone;
+      }
+
+      const maxHrNum = parseInt(maxHr);
+      if (!isNaN(maxHrNum) && maxHrNum !== user?.max_hr) {
+        (updates as any).max_hr = maxHrNum;
+      }
+
+      const restingHrNum = parseInt(restingHr);
+      if (!isNaN(restingHrNum) && restingHrNum !== user?.resting_hr) {
+        (updates as any).resting_hr = restingHrNum;
+      }
+
+      if (dateOfBirth && dateOfBirth !== user?.date_of_birth) {
+        (updates as any).date_of_birth = dateOfBirth;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -139,6 +156,49 @@ export function ProfileEditForm() {
           placeholder="Enter your weight"
           min="0"
           step="0.1"
+        />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="maxHr" className="block text-sm font-medium mb-2">
+            Max Heart Rate
+          </label>
+          <Input
+            id="maxHr"
+            type="number"
+            value={maxHr}
+            onChange={(e) => setMaxHr(e.target.value)}
+            placeholder="185"
+            min="100"
+            max="250"
+          />
+        </div>
+        <div>
+          <label htmlFor="restingHr" className="block text-sm font-medium mb-2">
+            Resting Heart Rate
+          </label>
+          <Input
+            id="restingHr"
+            type="number"
+            value={restingHr}
+            onChange={(e) => setRestingHr(e.target.value)}
+            placeholder="55"
+            min="30"
+            max="120"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="dob" className="block text-sm font-medium mb-2">
+          Date of Birth
+        </label>
+        <Input
+          id="dob"
+          type="date"
+          value={dateOfBirth}
+          onChange={(e) => setDateOfBirth(e.target.value)}
         />
       </div>
 

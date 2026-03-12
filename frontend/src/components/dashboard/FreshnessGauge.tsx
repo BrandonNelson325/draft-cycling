@@ -1,5 +1,7 @@
 interface FreshnessGaugeProps {
   tsb: number;
+  ctl?: number;
+  atl?: number;
 }
 
 // HSL interpolation avoids the muddy brown of RGB red→green blending.
@@ -36,13 +38,39 @@ function textColorForBg(pct: number): string {
   return l > 50 ? '#000000' : '#ffffff';
 }
 
-function getStatus(tsb: number) {
-  if (tsb < -30) return { label: 'Overreaching', subtitle: 'Training load is too high — take a rest day' };
-  if (tsb < -20) return { label: 'Optimal', subtitle: 'Fitness is building — plan recovery soon' };
-  if (tsb < -5) return { label: 'Optimal', subtitle: 'On track and absorbing training well' };
-  if (tsb < 5) return { label: 'Balanced', subtitle: 'Fully recovered and ready to train' };
-  if (tsb < 25) return { label: 'Fresh', subtitle: 'Peak form — ideal for racing or hard efforts' };
-  return { label: 'Detrained', subtitle: 'Fitness is fading — time to start riding again' };
+/**
+ * Determine status using ACWR (Acute:Chronic Workload Ratio).
+ * Scales to individual fitness — high-CTL athletes can sustain larger loads.
+ * Falls back to simplified TSB thresholds for new athletes (CTL < 15).
+ */
+function getStatus(tsb: number, ctl = 0, atl = 0) {
+  if (ctl < 15) {
+    if (tsb > 10) return { label: 'Fresh', subtitle: 'Ready to train — build your base consistently' };
+    if (tsb >= -10) return { label: 'Balanced', subtitle: 'Good balance of training and recovery' };
+    return { label: 'Productive', subtitle: 'Building your training base — nice work' };
+  }
+
+  const acwr = atl / ctl;
+  if (acwr > 1.5) return { label: 'Overtraining', subtitle: 'Training load is spiking — rest and recover' };
+  if (acwr > 1.3) return { label: 'Overreaching', subtitle: 'Heavy block — plan a recovery day soon' };
+  if (acwr > 1.0) return { label: 'Productive', subtitle: 'In the sweet spot — building fitness effectively' };
+  if (acwr > 0.8) return { label: 'Balanced', subtitle: 'Maintained fitness — ready for harder efforts' };
+  if (ctl > 40 && acwr < 0.5) return { label: 'Detrained', subtitle: 'Fitness is fading — time to start riding again' };
+  return { label: 'Fresh', subtitle: 'Well-rested — ideal for racing or hard efforts' };
+}
+
+/**
+ * Map ACWR to gauge percentage. ACWR 1.5+ = 0% (tired/left),
+ * ACWR 0.5 = 100% (fresh/right). Falls back to TSB for new athletes.
+ */
+function acwrToGaugePct(ctl: number, atl: number, tsb: number): number {
+  if (ctl < 15) {
+    // New athlete: use TSB [-30, 30] → [0%, 100%]
+    return Math.max(0, Math.min(100, ((tsb + 30) / 60) * 100));
+  }
+  const acwr = atl / ctl;
+  // Map ACWR [1.5, 0.5] → [0%, 100%]
+  return Math.max(0, Math.min(100, ((1.5 - acwr) / 1.0) * 100));
 }
 
 // CSS gradient string matching the HSL stops
@@ -50,11 +78,11 @@ const GRADIENT_CSS = `linear-gradient(to right, ${HSL_STOPS.map(
   (s) => `hsl(${s.h}, ${s.s}%, ${s.l}%) ${s.pos * 100}%`
 ).join(', ')})`;
 
-export function FreshnessGauge({ tsb }: FreshnessGaugeProps) {
-  const status = getStatus(tsb);
+export function FreshnessGauge({ tsb, ctl = 0, atl = 0 }: FreshnessGaugeProps) {
+  const status = getStatus(tsb, ctl, atl);
 
-  // Map TSB from [-40, 40] to [0%, 100%]
-  const pct = Math.max(0, Math.min(100, ((tsb + 40) / 80) * 100));
+  // Use ACWR-based gauge position (scales to individual fitness)
+  const pct = acwrToGaugePct(ctl, atl, tsb);
   const bg = interpolateColor(pct);
   const textColor = textColorForBg(pct);
 

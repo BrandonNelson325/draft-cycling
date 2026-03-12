@@ -139,16 +139,23 @@ export function calculateTSB(ctl: number, atl: number): number {
 }
 
 /**
- * Get form status based on TSB
+ * Get form status using ACWR (Acute:Chronic Workload Ratio).
+ * Automatically scales to individual fitness level.
  */
-export function getFormStatus(tsb: number): string {
-  if (tsb < -30) return 'Overreaching - Consider Rest';
-  if (tsb < -20) return 'Optimal - Plan Recovery Soon';
-  if (tsb < -5) return 'Optimal - Right On Track';
-  if (tsb < 5) return 'Balanced / Maintaining';
-  if (tsb < 15) return 'Freshening - Good Form';
-  if (tsb < 25) return 'Fresh - Race Ready';
-  return 'Detrained - Time to Ride';
+export function getFormStatus(ctl: number, atl: number, tsb: number): string {
+  if (ctl < 15) {
+    if (tsb > 10) return 'Fresh - Ready to Train';
+    if (tsb >= -10) return 'Balanced / Maintaining';
+    return 'Building Base';
+  }
+
+  const acwr = atl / ctl;
+  if (acwr > 1.5) return 'Overtraining Risk - Rest Now';
+  if (acwr > 1.3) return 'Overreaching - Plan Recovery Soon';
+  if (acwr > 1.0) return 'Productive - Building Fitness';
+  if (acwr > 0.8) return 'Balanced / Maintaining';
+  if (ctl > 40 && acwr < 0.5) return 'Detrained - Time to Ride';
+  return 'Fresh - Race Ready';
 }
 
 /**
