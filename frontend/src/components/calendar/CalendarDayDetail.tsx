@@ -1,10 +1,12 @@
-import { X, Check, Trash2, Download, Clock, Zap, Activity } from 'lucide-react';
+import { useState } from 'react';
+import { X, Check, Trash2, Download, Clock, Zap, Activity, Pencil } from 'lucide-react';
 import type { CalendarEntry, StravaActivity } from '../../services/calendarService';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { IntervalVisualizer } from '../workout/IntervalVisualizer';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getConversionUtils } from '../../utils/units';
+import { activityFeedbackService } from '../../services/activityFeedbackService';
 
 const RPE_DISPLAY: Record<number, { emoji: string; label: string }> = {
   1: { emoji: '😴', label: 'Very Easy' },
@@ -23,6 +25,90 @@ interface CalendarDayDetailProps {
   onDelete?: (entry: CalendarEntry) => void;
   onDownloadZWO?: (entry: CalendarEntry) => void;
   onDownloadFIT?: (entry: CalendarEntry) => void;
+}
+
+function RpeEditor({ activity }: { activity: StravaActivity }) {
+  const [editing, setEditing] = useState(false);
+  const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
+  const [savedEffort, setSavedEffort] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const displayedEffort = savedEffort ?? activity.perceived_effort;
+  const showPicker = !displayedEffort || editing;
+
+  const handleSave = async (effort: number) => {
+    setSaving(true);
+    try {
+      await activityFeedbackService.acknowledge(activity.id, { perceived_effort: effort });
+      setSavedEffort(effort);
+      setEditing(false);
+      setSelectedRpe(null);
+    } catch {
+      // user can try again
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (showPicker) {
+    return (
+      <div className="p-3 bg-muted/50 rounded-lg space-y-3">
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-medium">{editing ? 'Update effort' : 'How hard was this ride?'}</p>
+          {editing && (
+            <button className="text-xs text-muted-foreground hover:text-foreground" onClick={() => { setEditing(false); setSelectedRpe(null); }}>
+              Cancel
+            </button>
+          )}
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {Object.entries(RPE_DISPLAY).map(([val, { emoji, label }]) => {
+            const num = Number(val);
+            const isSelected = selectedRpe === num || (editing && !selectedRpe && displayedEffort === num);
+            return (
+              <button
+                key={num}
+                className={`flex flex-col items-center gap-1 p-2 rounded-lg border-2 transition-colors ${
+                  isSelected ? 'border-blue-500 bg-blue-500/10' : 'border-transparent bg-muted hover:bg-muted/80'
+                }`}
+                onClick={() => setSelectedRpe(num)}
+              >
+                <span className="text-xl">{emoji}</span>
+                <span className="text-[10px] text-muted-foreground">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {selectedRpe && (!editing || selectedRpe !== displayedEffort) && (
+          <button
+            className="w-full py-2 rounded-lg bg-blue-600 text-white text-sm font-medium disabled:opacity-50"
+            disabled={saving}
+            onClick={() => handleSave(selectedRpe)}
+          >
+            {saving ? 'Saving...' : 'Save'}
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (displayedEffort && RPE_DISPLAY[displayedEffort]) {
+    return (
+      <div
+        className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg cursor-pointer hover:bg-muted/70 transition-colors group"
+        onClick={() => { setEditing(true); setSelectedRpe(null); }}
+      >
+        <span className="text-2xl">{RPE_DISPLAY[displayedEffort].emoji}</span>
+        <div className="flex-1">
+          <p className="text-xs text-muted-foreground">Perceived Effort</p>
+          <p className="font-semibold">{RPE_DISPLAY[displayedEffort].label}</p>
+        </div>
+        <Pencil className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    );
+  }
+
+  return null;
 }
 
 const formatDate = (date: Date): string => {
@@ -299,15 +385,7 @@ export function CalendarDayDetail({
                       )}
 
                       {/* RPE */}
-                      {activity.perceived_effort && RPE_DISPLAY[activity.perceived_effort] && (
-                        <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg">
-                          <span className="text-2xl">{RPE_DISPLAY[activity.perceived_effort].emoji}</span>
-                          <div>
-                            <p className="text-xs text-muted-foreground">Perceived Effort</p>
-                            <p className="font-semibold">{RPE_DISPLAY[activity.perceived_effort].label}</p>
-                          </div>
-                        </div>
-                      )}
+                      <RpeEditor activity={activity} />
 
                       {/* Notes */}
                       {activity.post_activity_notes && (

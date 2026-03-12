@@ -37,19 +37,22 @@ export default function ActivityDetailSheet({ activity, onFeedbackSaved }: Activ
   const units = getConversionUtils(user);
   const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
   const [savingRpe, setSavingRpe] = useState(false);
+  const [editing, setEditing] = useState(false);
   // Track saved feedback per activity ID so it persists across re-opens
   const [feedbackMap, setFeedbackMap] = useState<Record<string, number>>({});
 
-  // Reset RPE selection when switching to a different activity
+  // Reset state when switching to a different activity
   useEffect(() => {
     setSelectedRpe(null);
     setSavingRpe(false);
+    setEditing(false);
   }, [activity?.id]);
 
   if (!activity) return null;
 
   const displayedEffort = feedbackMap[activity.id] ?? activity.perceived_effort;
   const needsFeedback = !displayedEffort;
+  const showPicker = needsFeedback || editing;
 
   const duration = activity.moving_time_seconds
     ? `${Math.floor(activity.moving_time_seconds / 3600)}h ${Math.round((activity.moving_time_seconds % 3600) / 60)}m`
@@ -138,24 +141,29 @@ export default function ActivityDetailSheet({ activity, onFeedbackSaved }: Activ
         </View>
       )}
 
-      {displayedEffort && RPE_DISPLAY[displayedEffort] ? (
-        <View style={styles.rpeSection}>
-          <Text style={styles.rpeEmoji}>{RPE_DISPLAY[displayedEffort].emoji}</Text>
-          <View>
-            <Text style={styles.rpeLabel}>Perceived Effort</Text>
-            <Text style={styles.rpeValue}>{RPE_DISPLAY[displayedEffort].label}</Text>
-          </View>
-        </View>
-      ) : needsFeedback ? (
+      {showPicker ? (
         <View style={styles.feedbackSection}>
-          <Text style={styles.feedbackTitle}>How hard was this ride?</Text>
+          <View style={styles.feedbackHeader}>
+            <Text style={styles.feedbackTitle}>
+              {editing ? 'Update effort' : 'How hard was this ride?'}
+            </Text>
+            {editing && (
+              <Pressable onPress={() => { setEditing(false); setSelectedRpe(null); }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            )}
+          </View>
           <View style={styles.rpeRow}>
             {Object.entries(RPE_DISPLAY).map(([val, { emoji, label }]) => {
               const num = Number(val);
+              const isCurrentSaved = !editing && displayedEffort === num;
               return (
                 <Pressable
                   key={num}
-                  style={[styles.rpeBtn, selectedRpe === num && styles.rpeBtnSelected]}
+                  style={[
+                    styles.rpeBtn,
+                    (selectedRpe === num || (editing && displayedEffort === num && !selectedRpe)) && styles.rpeBtnSelected,
+                  ]}
                   onPress={() => setSelectedRpe(num)}
                 >
                   <Text style={styles.rpeBtnEmoji}>{emoji}</Text>
@@ -164,7 +172,7 @@ export default function ActivityDetailSheet({ activity, onFeedbackSaved }: Activ
               );
             })}
           </View>
-          {selectedRpe && (
+          {(selectedRpe && (!editing || selectedRpe !== displayedEffort)) ? (
             <Pressable
               style={[styles.saveBtn, savingRpe && styles.saveBtnDisabled]}
               disabled={savingRpe}
@@ -176,6 +184,7 @@ export default function ActivityDetailSheet({ activity, onFeedbackSaved }: Activ
                   });
                   setFeedbackMap((prev) => ({ ...prev, [activity.id]: selectedRpe }));
                   onFeedbackSaved?.(activity.id, selectedRpe);
+                  setEditing(false);
                 } catch {
                   // silently fail — user can try again
                 } finally {
@@ -189,8 +198,17 @@ export default function ActivityDetailSheet({ activity, onFeedbackSaved }: Activ
                 <Text style={styles.saveBtnText}>Save</Text>
               )}
             </Pressable>
-          )}
+          ) : null}
         </View>
+      ) : displayedEffort && RPE_DISPLAY[displayedEffort] ? (
+        <Pressable style={styles.rpeSection} onPress={() => { setEditing(true); setSelectedRpe(null); }}>
+          <Text style={styles.rpeEmoji}>{RPE_DISPLAY[displayedEffort].emoji}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rpeLabel}>Perceived Effort</Text>
+            <Text style={styles.rpeValue}>{RPE_DISPLAY[displayedEffort].label}</Text>
+          </View>
+          <Text style={styles.editText}>Edit</Text>
+        </Pressable>
       ) : null}
 
       {activity.post_activity_notes ? (
@@ -261,6 +279,11 @@ const styles = StyleSheet.create({
   rpeEmoji: { fontSize: 28 },
   rpeLabel: { fontSize: 11, color: '#64748b' },
   rpeValue: { fontSize: 15, fontWeight: '600', color: '#f1f5f9' },
+  editText: {
+    fontSize: 13,
+    color: '#3b82f6',
+    fontWeight: '500',
+  },
   feedbackSection: {
     marginTop: 16,
     backgroundColor: '#0f172a',
@@ -268,10 +291,19 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
   },
+  feedbackHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   feedbackTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#f1f5f9',
+  },
+  cancelText: {
+    fontSize: 13,
+    color: '#64748b',
   },
   rpeRow: {
     flexDirection: 'row',
