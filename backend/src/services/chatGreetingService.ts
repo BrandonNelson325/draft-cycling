@@ -26,12 +26,16 @@ export const chatGreetingService = {
       .eq('athlete_id', athleteId)
       .gte('start_date', twoDaysAgo.toISOString())
       .order('start_date', { ascending: false })
-      .limit(3);
+      .limit(5);
 
     // Get training status
     const trainingStatus = await trainingLoadService.getTrainingStatus(athleteId);
 
     const today = todayInTimezone(tz);
+    const todayStart = new Date(today + 'T00:00:00');
+    const tomorrow = new Date(todayStart);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
 
     // Get today's health data
     const { data: healthData } = await supabaseAdmin
@@ -40,6 +44,13 @@ export const chatGreetingService = {
       .eq('athlete_id', athleteId)
       .eq('date', today)
       .single();
+
+    // Check if athlete already rode today
+    const todaysRides = (recentRides || []).filter((r: any) => {
+      const rideDate = r.start_date?.slice(0, 10);
+      return rideDate === today;
+    });
+    const alreadyRodeToday = todaysRides.length > 0;
 
     // Get upcoming workouts (next 7 days)
     const { data: upcomingWorkouts } = await supabaseAdmin
@@ -50,8 +61,9 @@ export const chatGreetingService = {
       .order('scheduled_date', { ascending: true })
       .limit(7);
 
-    // Get today's workout
+    // Get today's workout and tomorrow's workout
     const todaysWorkout = upcomingWorkouts?.find((w) => w.scheduled_date === today);
+    const tomorrowsWorkout = upcomingWorkouts?.find((w) => w.scheduled_date === tomorrowStr);
 
     // Check if they have a training plan (multiple workouts scheduled)
     const hasTrainingPlan = (upcomingWorkouts?.length || 0) >= 3;
@@ -63,7 +75,10 @@ export const chatGreetingService = {
       trainingStatus,
       todaysWorkout,
       hasTrainingPlan,
-      healthData
+      healthData,
+      alreadyRodeToday,
+      todaysRides,
+      tomorrowsWorkout
     );
 
     // Generate greeting with AI
@@ -81,9 +96,23 @@ export const chatGreetingService = {
     trainingStatus: any,
     todaysWorkout: any,
     hasTrainingPlan: boolean,
-    healthData: any
+    healthData: any,
+    alreadyRodeToday: boolean = false,
+    todaysRides: any[] = [],
+    tomorrowsWorkout: any = null
   ): string {
     const timeOfDay = this.getTimeOfDay(athlete?.timezone);
+
+    const todaysRideSummary = todaysRides.length > 0
+      ? todaysRides
+          .map(
+            (r: any) =>
+              `- ${r.name}: ${Math.round(r.moving_time_seconds / 60)}min, ${r.tss || 0} TSS, ${
+                r.average_watts || 0
+              }W avg`
+          )
+          .join('\n')
+      : '';
 
     return `You are an AI cycling coach starting a coaching session with an athlete who just opened the chat.
 
@@ -95,12 +124,15 @@ ATHLETE INFO:
 - Name: ${athlete.full_name || 'there'}
 - FTP: ${athlete.ftp || 'Not set'}W
 
+ALREADY RODE TODAY: ${alreadyRodeToday ? 'YES' : 'NO'}
+${alreadyRodeToday ? `TODAY'S COMPLETED RIDE(S):\n${todaysRideSummary}` : ''}
+
 RECENT TRAINING (Last 2 days):
 ${
   recentRides.length > 0
     ? recentRides
         .map(
-          (r) =>
+          (r: any) =>
             `- ${r.name}: ${Math.round(r.moving_time_seconds / 60)}min, ${r.tss || 0} TSS, ${
               r.average_watts || 0
             }W avg`
@@ -139,69 +171,41 @@ ${
     : '- No workout scheduled for today'
 }
 
+TOMORROW'S SCHEDULED WORKOUT:
+${
+  tomorrowsWorkout
+    ? `- ${tomorrowsWorkout.workouts.name} (${tomorrowsWorkout.workouts.workout_type}, ${tomorrowsWorkout.workouts.duration_minutes}min, ${tomorrowsWorkout.workouts.tss} TSS)`
+    : '- No workout scheduled for tomorrow'
+}
+
 TRAINING PLAN:
 ${hasTrainingPlan ? '✅ Has structured plan in place' : '❌ No structured training plan'}
 
 YOUR TASK:
-Give them a comprehensive daily briefing that covers:
+Give a quick daily check-in covering these 4 things in order:
 
-**ALWAYS include these 4 sections in order:**
+1. **Greeting + how they're looking** — one warm sentence with their name, one sentence on recovery/fatigue in plain language. Acknowledge a recent ride briefly if relevant.
+2. **Sleep/recovery** — if health data exists, one quick comment. If not, ask how they slept (one sentence).
+3. **Training** — if they already rode today: acknowledge it, preview tomorrow's workout. If they haven't: tell them what's on the schedule and one coaching cue. If nothing scheduled: one sentence on what to do or that it's a rest day.
+4. **Check-in** — one casual question ("How are the legs?"). Do NOT ask "what would you like to do?"
 
-1. **Greeting & Readiness Check**
-   - Warm greeting (use time of day)
-   - Tell them how recovered they are in PLAIN LANGUAGE (e.g., "you're well-rested", "you're carrying some fatigue from this week")
-   - NEVER say TSB, CTL, or ATL to the athlete — translate the numbers into what they mean
-   - Acknowledge recent training if any
+CRITICAL: If ALREADY RODE TODAY = YES, do NOT tell them to do today's scheduled workout. Training is done. Look ahead to tomorrow.
 
-2. **Sleep & Recovery Check**
-   - If health data is available: comment on their sleep quality, HRV, resting HR
-   - If health data is missing: ask "How did you sleep last night?" or "How are you feeling today?"
-   - Make it conversational, not clinical
-   - If they have Body Battery or Readiness scores, reference those
+TONE & LENGTH:
+- Like a coach texting you — short, direct, friendly
+- Use their name once
+- NO bold headers — just flowing paragraphs
+- NO jargon: never say TSB, CTL, ATL, TSS. Say freshness, fitness, fatigue, training load.
+- Reference specific numbers (power, duration) but keep it brief
+- TOTAL LENGTH: 4-6 SHORT sentences. Aim for under 100 words. This is a quick check-in, not a report.
 
-3. **Today's Training**
-   - Show what's on their calendar for today (if anything)
-   - If they have a workout: briefly describe it and tell them what to focus on
-   - If no workout AND they're fatigued (TSB < -10 or big recent training): tell them it's a rest day and explain why rest is important ("Your body adapts during recovery, not during the ride")
-   - If no workout AND they're fresh: suggest what they should do today based on their training status — YOU decide, don't ask what they want
+EXAMPLE (already rode):
 
-4. **Open-Ended Check-In**
-   - Invite them to share how they're feeling or ask questions
-   - Examples: "How are the legs feeling?", "Any questions about your training?", "Let me know if anything needs adjusting."
-   - Do NOT ask "what would you like to do today?" — you're the coach, you already told them what to do above
+"Good evening ${athlete.full_name || 'there'}! Nice work today — 75 minutes at 190W is solid. You're carrying some fatigue this week so good timing on the endurance effort. How'd you sleep last night? Tomorrow you've got threshold intervals on deck, so fuel up and rest well tonight. How are the legs feeling?"
 
-TONE & STYLE:
-- Conversational and warm (like texting a coach friend)
-- Use their name
-- Use PLAIN LANGUAGE — never say "TSB", "CTL", "ATL", or "TSS" to the athlete. Say "freshness", "fitness", "fatigue", "training load" instead.
-- Reference specific rides and numbers (power, duration, distance) but avoid jargon
-- Don't be overly formal
-- Keep it natural - this is a daily check-in, not a report
-- 4-6 sentences total
+EXAMPLE (hasn't ridden):
 
-EXAMPLE OUTPUT (with health data):
-
-"Good morning ${athlete.full_name || 'there'}! Let's check in on where you're at today.
-
-**How you're looking:** You're well-recovered and ready for quality work. Yesterday's tempo ride (65min, 180W avg) was solid — good effort.
-
-**Sleep & Recovery:** You logged 7.5 hours with good quality — nice! HRV and resting heart rate both look solid.
-
-**Today's Plan:** You've got a hard interval session scheduled — 4x8min at threshold, 75 minutes total.
-
-How are the legs feeling? Let me know if anything needs adjusting."
-
-EXAMPLE OUTPUT (without health data):
-
-"Good morning ${athlete.full_name || 'there'}! Let's check in on where you're at today.
-
-**How you're looking:** You're well-recovered and ready for quality work. Yesterday's tempo ride (65min, 180W avg) was solid — good effort.
-
-**Sleep & Recovery:** How did you sleep last night?
-
-**Today's Plan:** You've got a hard interval session scheduled — 4x8min at threshold, 75 minutes total.
-
-How are the legs feeling? Let me know if anything needs adjusting."
+"Good morning ${athlete.full_name || 'there'}! You're well-recovered after yesterday's tempo ride — ready for quality work. How'd you sleep? You've got 4x8min threshold intervals today, 75 minutes total — stay relaxed and focus on holding steady power. Let me know if anything needs adjusting."
 
 Generate the greeting now:`;
   },
@@ -213,7 +217,7 @@ Generate the greeting now:`;
     try {
       const response = await anthropic.messages.create({
         model: MODEL,
-        max_tokens: 500,
+        max_tokens: 300,
         messages: [
           {
             role: 'user',
