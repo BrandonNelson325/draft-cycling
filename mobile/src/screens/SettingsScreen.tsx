@@ -12,7 +12,9 @@ import {
   Modal,
   FlatList,
   Image,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as WebBrowser from 'expo-web-browser';
@@ -70,6 +72,8 @@ export default function SettingsScreen({ navigation }: any) {
     user?.morning_checkin_time ? user.morning_checkin_time.slice(0, 5) : '07:00'
   );
   const [savingNotifications, setSavingNotifications] = useState(false);
+
+  const [showDobPicker, setShowDobPicker] = useState(false);
 
   // App Guide
   const [showGuide, setShowGuide] = useState(false);
@@ -268,14 +272,40 @@ export default function SettingsScreen({ navigation }: any) {
             keyboardType="numeric"
           />
 
-          <Label>Date of Birth (YYYY-MM-DD)</Label>
-          <TextInput
+          <Label>Date of Birth</Label>
+          <TouchableOpacity
             style={styles.input}
-            value={dateOfBirth}
-            onChangeText={setDateOfBirth}
-            placeholder="1990-01-15"
-            placeholderTextColor="#475569"
-          />
+            onPress={() => setShowDobPicker(true)}
+          >
+            <Text style={{ color: dateOfBirth ? '#f1f5f9' : '#475569', fontSize: 15 }}>
+              {dateOfBirth || 'Select date of birth'}
+            </Text>
+          </TouchableOpacity>
+          {showDobPicker && (
+            <DateTimePicker
+              value={dateOfBirth ? new Date(dateOfBirth + 'T12:00:00') : new Date(1990, 0, 1)}
+              mode="date"
+              display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+              maximumDate={new Date()}
+              minimumDate={new Date(1920, 0, 1)}
+              onChange={(event, selectedDate) => {
+                if (Platform.OS === 'android') setShowDobPicker(false);
+                if (event.type === 'dismissed') return;
+                if (selectedDate) {
+                  const y = selectedDate.getFullYear();
+                  const m = String(selectedDate.getMonth() + 1).padStart(2, '0');
+                  const d = String(selectedDate.getDate()).padStart(2, '0');
+                  setDateOfBirth(`${y}-${m}-${d}`);
+                }
+              }}
+              themeVariant="dark"
+            />
+          )}
+          {showDobPicker && Platform.OS === 'ios' && (
+            <TouchableOpacity onPress={() => setShowDobPicker(false)}>
+              <Text style={{ color: '#60a5fa', fontSize: 14, fontWeight: '600', textAlign: 'right', paddingVertical: 4 }}>Done</Text>
+            </TouchableOpacity>
+          )}
 
           <Label>Unit System</Label>
           <View style={styles.segmented}>
