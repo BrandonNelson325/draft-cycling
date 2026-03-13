@@ -9,14 +9,14 @@ interface FreshnessGaugeProps {
   showDetails?: boolean;
 }
 
-// Gradient: Blue (fresh/left) → Green (productive/center-right) → Orange → Red (overtraining/right)
-// Reads like an effort meter: more right = more training load
+// Gradient: Blue (fresh/left) → Green (center) → Red (overtraining/right)
+// Exact mirror of the original gradient, just reversed direction
 const HSL_STOPS = [
   { pos: 0, h: 220, s: 90, l: 60 },      // blue (fresh)
-  { pos: 0.3, h: 190, s: 75, l: 50 },     // teal-cyan
-  { pos: 0.55, h: 145, s: 70, l: 45 },    // green (productive sweet spot)
-  { pos: 0.8, h: 45, s: 90, l: 50 },      // orange-yellow
-  { pos: 1, h: 0, s: 85, l: 55 },         // red (overtraining)
+  { pos: 0.25, h: 190, s: 75, l: 50 },   // teal-cyan
+  { pos: 0.5, h: 145, s: 70, l: 45 },    // green (productive)
+  { pos: 0.75, h: 45, s: 90, l: 50 },    // orange-yellow
+  { pos: 1, h: 0, s: 85, l: 55 },        // red (overtraining)
 ];
 
 function hslToRgb(h: number, s: number, l: number): string {
