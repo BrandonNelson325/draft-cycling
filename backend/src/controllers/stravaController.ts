@@ -20,21 +20,9 @@ export const getAuthUrl = async (req: AuthRequest, res: Response): Promise<void>
     // Embed mobile flag in state so callback knows which redirect to use
     const state = crypto.randomBytes(16).toString('hex') + (isMobile ? ':mobile' : '');
 
-    let authUrl: string;
-    if (isMobile && process.env.STRAVA_MOBILE_REDIRECT_URI) {
-      // Build auth URL using mobile redirect URI
-      const params = new URLSearchParams({
-        client_id: process.env.STRAVA_CLIENT_ID || '',
-        redirect_uri: process.env.STRAVA_MOBILE_REDIRECT_URI,
-        response_type: 'code',
-        approval_prompt: 'auto',
-        scope: 'read,activity:read_all,profile:read_all',
-        state,
-      });
-      authUrl = `https://www.strava.com/oauth/authorize?${params.toString()}`;
-    } else {
-      authUrl = stravaClient.getAuthorizationUrl(state);
-    }
+    // Always use the backend callback as redirect_uri (Strava sends code there).
+    // The :mobile flag in state tells the callback to redirect to the app deep link.
+    const authUrl = stravaClient.getAuthorizationUrl(state);
 
     res.json({ auth_url: authUrl, state });
   } catch (error) {
@@ -74,8 +62,10 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       `expires_at=${tokenData.expires_at}&` +
       `athlete_id=${tokenData.athlete.id}`;
 
-    if (isMobile && process.env.STRAVA_MOBILE_REDIRECT_URI) {
-      res.redirect(`${process.env.STRAVA_MOBILE_REDIRECT_URI}?${redirectParams}`);
+    if (isMobile) {
+      // Redirect to mobile deep link — WebBrowser.openAuthSessionAsync picks this up
+      const mobileRedirect = process.env.STRAVA_MOBILE_REDIRECT_URI || 'cyclingcoach://strava/callback';
+      res.redirect(`${mobileRedirect}?${redirectParams}`);
     } else {
       res.redirect(`${process.env.FRONTEND_URL}/strava/callback?${redirectParams}`);
     }
