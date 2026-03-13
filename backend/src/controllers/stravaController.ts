@@ -109,17 +109,18 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    // Start initial sync in background
+    // Start initial sync in background — skip power analysis to avoid Strava rate limits
+    // Power curves will be analyzed incrementally via webhook/cron syncs
     stravaService
       .syncActivities(req.user.id, {
-        // Sync last 180 days so CTL has enough history to converge
         after: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
+        skipPowerAnalysis: true,
       })
       .then(async (result) => {
         logger.debug(`Initial Strava sync for ${req.user!.id}: ${result.synced} activities`);
 
-        // Auto-update FTP after sync
-        if (result.analyzed > 0) {
+        // Auto-update FTP from synced data (uses average_watts, no extra API calls)
+        if (result.synced > 0) {
           await ftpEstimationService.autoUpdateFTP(req.user!.id);
         }
       })

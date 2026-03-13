@@ -102,32 +102,53 @@ class StravaClient {
     return response.json();
   }
 
+  /**
+   * Fetch activities with automatic pagination.
+   * Strava caps per_page at 200 and returns up to that many per request.
+   * This loops until a partial page is returned (indicating the last page).
+   */
   async getActivities(
     accessToken: string,
     options: {
       before?: number; // epoch seconds
       after?: number; // epoch seconds
-      page?: number;
       per_page?: number;
     } = {}
   ): Promise<StravaActivity[]> {
-    const params = new URLSearchParams({
-      page: (options.page || 1).toString(),
-      per_page: (options.per_page || 30).toString(),
-    });
+    const perPage = options.per_page || 200;
+    let page = 1;
+    const allActivities: StravaActivity[] = [];
 
-    if (options.before) params.set('before', options.before.toString());
-    if (options.after) params.set('after', options.after.toString());
+    while (true) {
+      const params = new URLSearchParams({
+        page: page.toString(),
+        per_page: perPage.toString(),
+      });
 
-    const response = await fetch(`${this.baseUrl}/athlete/activities?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    });
+      if (options.before) params.set('before', options.before.toString());
+      if (options.after) params.set('after', options.after.toString());
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch activities');
+      const response = await fetch(`${this.baseUrl}/athlete/activities?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch activities');
+      }
+
+      const batch = await response.json() as StravaActivity[];
+      allActivities.push(...batch);
+
+      // If we got fewer than per_page, we've hit the last page
+      if (batch.length < perPage) break;
+
+      page++;
+
+      // Safety cap: don't fetch more than 10 pages (2000 activities)
+      if (page > 10) break;
     }
 
-    return response.json() as Promise<StravaActivity[]>;
+    return allActivities;
   }
 
   async getActivity(accessToken: string, activityId: number) {

@@ -41,7 +41,7 @@ export const stravaService = {
     return athlete.strava_access_token!;
   },
 
-  async syncActivities(athleteId: string, options: { after?: Date; before?: Date } = {}) {
+  async syncActivities(athleteId: string, options: { after?: Date; before?: Date; skipPowerAnalysis?: boolean } = {}) {
     const accessToken = await this.ensureValidToken(athleteId);
 
     // Get athlete's FTP for TSS calculation
@@ -66,9 +66,13 @@ export const stravaService = {
 
     logger.debug(`Received ${activities.length} activities from Strava`);
 
-    // Filter for rides only
+    // Filter for all cycling types (Strava uses both type and sport_type fields)
+    const cyclingTypes = new Set([
+      'Ride', 'VirtualRide', 'EBikeRide', 'GravelRide', 'MountainBikRide',
+      'Velomobile', 'Handcycle',
+    ]);
     const rides = activities.filter(
-      (a) => a.sport_type === 'Ride' || a.type === 'Ride' || a.type === 'VirtualRide'
+      (a) => cyclingTypes.has(a.sport_type) || cyclingTypes.has(a.type)
     );
 
     logger.debug(`Filtered to ${rides.length} rides`);
@@ -147,7 +151,8 @@ export const stravaService = {
         logger.debug(`✅ Stored activity: ${activity.name} (${activity.id})${!existingSet.has(activity.id) ? ' [NEW]' : ' [updated]'}`);
 
         // Analyze power curve if activity has power data
-        if (activity.device_watts || activity.average_watts) {
+        // Skip during bulk sync (initial connect) to avoid Strava rate limits
+        if (!options.skipPowerAnalysis && (activity.device_watts || activity.average_watts)) {
           try {
             logger.debug(`Analyzing power for activity ${activity.id}...`);
             const powerCurve = await powerAnalysisService.analyzePowerCurve(
