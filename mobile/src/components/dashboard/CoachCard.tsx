@@ -60,7 +60,7 @@ export default function CoachCard() {
       <Text style={styles.title}>Training Status</Text>
 
       {/* Freshness Gauge — compact, no CTL/ATL details */}
-      <FreshnessGauge tsb={tsb} showDetails={false} />
+      <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} />
 
       {/* Workout blocks + recommendation */}
       {s && (
