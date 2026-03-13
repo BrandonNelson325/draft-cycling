@@ -4,14 +4,14 @@ interface FreshnessGaugeProps {
   atl?: number;
 }
 
-// HSL interpolation avoids the muddy brown of RGB red→green blending.
-// Gradient: Red (hue 0) → Yellow (45) → Green (145) → Cyan (190) → Blue (220)
+// Gradient: Blue (fresh/left) → Green (productive/center-right) → Orange → Red (overtraining/right)
+// Reads like an effort meter: more right = more training load
 const HSL_STOPS = [
-  { pos: 0, h: 0, s: 85, l: 55 },       // red
-  { pos: 0.25, h: 45, s: 90, l: 50 },    // orange-yellow
-  { pos: 0.5, h: 145, s: 70, l: 45 },    // green
-  { pos: 0.75, h: 190, s: 75, l: 50 },   // teal-cyan
-  { pos: 1, h: 220, s: 90, l: 60 },      // blue
+  { pos: 0, h: 220, s: 90, l: 60 },      // blue (fresh)
+  { pos: 0.3, h: 190, s: 75, l: 50 },     // teal-cyan
+  { pos: 0.55, h: 145, s: 70, l: 45 },    // green (productive sweet spot)
+  { pos: 0.8, h: 45, s: 90, l: 50 },      // orange-yellow
+  { pos: 1, h: 0, s: 85, l: 55 },         // red (overtraining)
 ];
 
 function interpolateHsl(pct: number): { h: number; s: number; l: number } {
@@ -60,17 +60,18 @@ function getStatus(tsb: number, ctl = 0, atl = 0) {
 }
 
 /**
- * Map ACWR to gauge percentage. ACWR 1.5+ = 0% (tired/left),
- * ACWR 0.5 = 100% (fresh/right). Falls back to TSB for new athletes.
+ * Map ACWR to gauge percentage.
+ * Left (0%) = fresh/rested, Right (100%) = overtraining.
+ * Productive (ACWR 1.0-1.3) lands around 50-80% — in the green zone.
  */
 function acwrToGaugePct(ctl: number, atl: number, tsb: number): number {
   if (ctl < 15) {
-    // New athlete: use TSB [-30, 30] → [0%, 100%]
-    return Math.max(0, Math.min(100, ((tsb + 30) / 60) * 100));
+    // New athlete: use TSB [30, -30] → [0%, 100%] (flipped: fresh=left)
+    return Math.max(0, Math.min(100, ((30 - tsb) / 60) * 100));
   }
   const acwr = atl / ctl;
-  // Map ACWR [1.5, 0.5] → [0%, 100%]
-  return Math.max(0, Math.min(100, ((1.5 - acwr) / 1.0) * 100));
+  // Map ACWR [0.5, 1.5] → [0%, 100%]
+  return Math.max(0, Math.min(100, ((acwr - 0.5) / 1.0) * 100));
 }
 
 // CSS gradient string matching the HSL stops
@@ -107,9 +108,9 @@ export function FreshnessGauge({ tsb, ctl = 0, atl = 0 }: FreshnessGaugeProps) {
 
       {/* Labels */}
       <div className="flex justify-between text-[10px] text-muted-foreground">
-        <span>Tired</span>
-        <span>Optimal</span>
         <span>Fresh</span>
+        <span>Productive</span>
+        <span>Overreaching</span>
       </div>
 
       {/* Status Badge — background matches gradient position */}

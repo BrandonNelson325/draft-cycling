@@ -188,7 +188,7 @@ export const syncActivities = async (req: AuthRequest, res: Response): Promise<v
     logger.debug(`Starting Strava sync for athlete ${req.user.id}...`);
 
     const result = await stravaService.syncActivities(req.user.id, {
-      after: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000), // Last 30 days
+      after: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // Last 90 days
       before: new Date(Date.now() + 24 * 60 * 60 * 1000), // Include today + tomorrow to catch recent activities
     });
 
