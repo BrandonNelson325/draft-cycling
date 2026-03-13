@@ -87,12 +87,12 @@ export const trainingLoadService = {
   /**
    * Calculate CTL, ATL, TSB for a given date using per-day EMA.
    * Iterates every calendar day (including rest days) so decay is applied correctly.
-   * Uses 90-day lookback to let the 42-day CTL EMA seed properly.
+   * Uses 180-day lookback so the 42-day CTL EMA fully converges (~3 time constants).
    */
   async calculateTrainingLoad(athleteId: string, date: Date = new Date()): Promise<TrainingLoad | null> {
     try {
-      // 90-day lookback lets the 42-day EMA seed properly
-      const lookbackDays = 90;
+      // 180-day lookback: 42-day EMA needs ~126 days (3×τ) to reach 95% convergence
+      const lookbackDays = 180;
       const startDate = new Date(date);
       startDate.setDate(startDate.getDate() - lookbackDays);
 

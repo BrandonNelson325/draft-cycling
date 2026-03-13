@@ -122,8 +122,8 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
     // Start initial sync in background
     stravaService
       .syncActivities(req.user.id, {
-        // Sync last 6 weeks
-        after: new Date(Date.now() - 6 * 7 * 24 * 60 * 60 * 1000),
+        // Sync last 180 days so CTL has enough history to converge
+        after: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000),
       })
       .then(async (result) => {
         logger.debug(`Initial Strava sync for ${req.user!.id}: ${result.synced} activities`);
@@ -188,7 +188,7 @@ export const syncActivities = async (req: AuthRequest, res: Response): Promise<v
     logger.debug(`Starting Strava sync for athlete ${req.user.id}...`);
 
     const result = await stravaService.syncActivities(req.user.id, {
-      after: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000), // Last 90 days
+      after: new Date(Date.now() - 180 * 24 * 60 * 60 * 1000), // Last 180 days — CTL needs ~126 days to converge
       before: new Date(Date.now() + 24 * 60 * 60 * 1000), // Include today + tomorrow to catch recent activities
     });
 
