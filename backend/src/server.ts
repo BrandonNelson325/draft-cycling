@@ -37,16 +37,26 @@ app.use(helmet({
   crossOriginEmbedderPolicy: config.nodeEnv === 'production',
 }));
 
-// Rate Limiting
-const limiter = rateLimit({
+// Rate Limiting — generous for normal usage, strict for auth to prevent brute force
+const generalLimiter = rateLimit({
   windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // Limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.',
+  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 500, // 500 requests per 15 min per IP
+  message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-app.use('/api/', limiter);
+// Auth endpoints: stricter limit to prevent brute force, but enough for normal usage
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30, // 30 auth requests per 15 min per IP (login, register, refresh)
+  message: { error: 'Too many auth requests, please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/auth/', authLimiter);
+app.use('/api/', generalLimiter);
 
 // Stripe webhook needs raw body for signature verification — must come before CORS/json parser
 app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req, _res, next) => {

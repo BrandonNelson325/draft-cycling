@@ -45,9 +45,10 @@ export async function refreshAccessToken(): Promise<string | null> {
   isRefreshing = true;
 
   try {
-    // Retry once for transient failures
+    // Retry with backoff for transient failures
     let lastError: any;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    let wasRateLimited = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         const response = await axios.post(`${API_URL}/api/auth/refresh`, {
           refresh_token: refreshToken,
@@ -62,14 +63,28 @@ export async function refreshAccessToken(): Promise<string | null> {
         const status = err?.response?.status;
         // 401/403 = token permanently invalid, stop retrying
         if (status === 401 || status === 403) break;
-        // Transient — wait briefly then retry
-        if (attempt === 0) {
+        // 429 = rate limited — back off and retry, NEVER logout for rate limits
+        if (status === 429) {
+          wasRateLimited = true;
+          await new Promise((r) => setTimeout(r, (attempt + 1) * 5000));
+          continue;
+        }
+        // Other transient errors — wait briefly then retry
+        if (attempt < 2) {
           await new Promise((r) => setTimeout(r, 1000));
         }
       }
     }
 
-    // Permanent failure
+    // Rate limit is transient — do NOT logout, just fail silently
+    // The token is still valid, just couldn't refresh right now
+    if (wasRateLimited) {
+      console.warn('[TokenRefresh] Rate limited, will retry later (NOT logging out)');
+      drainQueue(lastError, null);
+      return null;
+    }
+
+    // Only logout for permanent auth failures (401/403)
     console.warn('[TokenRefresh] Refresh failed, logging out:', lastError?.response?.status || lastError?.message);
     logout();
     drainQueue(lastError, null);
