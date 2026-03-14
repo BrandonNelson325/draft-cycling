@@ -454,6 +454,18 @@ USE THIS PROFILE TO:
         }
         prompt += '\n';
       });
+
+      // Detect if athlete already rode today
+      const todaysRides = recentRides.filter((ride) => {
+        const rideDate = new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date(ride.start_date));
+        return rideDate === isoDate;
+      });
+      if (todaysRides.length > 0) {
+        prompt += `\n⚠️ ALREADY RODE TODAY: YES — The athlete has completed ${todaysRides.length} ride(s) today (see rides marked "TODAY" above).
+DO NOT suggest or discuss today's scheduled workout as if it still needs to be done. Training for today is DONE. Look ahead to tomorrow or answer their question.\n`;
+      } else {
+        prompt += `\nALREADY RODE TODAY: NO — The athlete has not ridden yet today.\n`;
+      }
       prompt += '\n';
     }
 
@@ -470,13 +482,26 @@ USE THIS PROFILE TO:
 `;
     }
 
-    // Add upcoming workouts
+    // Add upcoming workouts — mark today's as done if athlete already rode
     if (context.upcomingWorkouts && context.upcomingWorkouts.length > 0) {
+      // Check if athlete already rode today (reuse the check from recent rides)
+      const alreadyRodeToday = (recentRides || []).some((ride) => {
+        const rideDate = new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date(ride.start_date));
+        return rideDate === isoDate;
+      });
+
       prompt += `UPCOMING SCHEDULED WORKOUTS:\n`;
       context.upcomingWorkouts.slice(0, 7).forEach((entry: any) => {
+        const isToday = entry.scheduled_date === isoDate;
         const date = new Date(entry.scheduled_date + 'T12:00:00').toLocaleDateString();
         if (entry.workouts && entry.workouts.name) {
-          prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS)\n`;
+          if (isToday && alreadyRodeToday) {
+            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ← TODAY — ALREADY COMPLETED (do not suggest this)\n`;
+          } else if (isToday) {
+            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ← TODAY\n`;
+          } else {
+            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS)\n`;
+          }
         }
       });
       prompt += '\n';
@@ -553,16 +578,18 @@ You can discuss training, analyze their rides, suggest workouts, answer question
 
 RESPONSE STYLE: ${athlete.display_mode === 'simple' ? 'simple' : 'advanced'}
 ${athlete.display_mode === 'simple'
-  ? `**SIMPLE MODE BEHAVIOR:**
-- Keep responses to 2-4 sentences max unless more detail is genuinely needed.
+  ? `**SIMPLE MODE — THIS IS A HARD CONSTRAINT ON RESPONSE LENGTH:**
+- MAXIMUM 2-4 sentences per response. This is NOT a suggestion — it is a strict limit. Count your sentences. If you have more than 4, delete the extras.
+- Think of yourself as a coach sending a quick text, not writing an email.
 - NEVER use acronyms: no CTL, ATL, TSB, TSS, NP, IF, or FTP. Instead say: fitness, fatigue, freshness, training load, normalized power, intensity, threshold power.
 - No power zone jargon — instead of "Zone 4 threshold intervals" say "hard intervals near your limit".
-- Use plain, conversational language that any cyclist can understand, regardless of experience level.
-- For single workout requests: analyze context silently, pick the best workout, create and schedule it, confirm in 1-2 sentences. Skip "here's my reasoning."
+- Use plain, conversational language that any cyclist can understand.
+- For single workout requests: analyze context silently, pick the best workout, create and schedule it, confirm in 1-2 sentences. NO reasoning, NO explanation unless asked.
 - For plans: still confirm, but ask max 2-3 questions. When offering plan templates, list names and durations only.
 - Confirmation for single workouts: NO confirmation needed — just do it and report what you did.
 - Confirmation for multi-week plans: ALWAYS confirm before building.
-- Move/delete: Do it immediately if the request is clear.`
+- Move/delete: Do it immediately if the request is clear.
+- If the athlete asks "why" or wants more detail, THEN you can elaborate. Not before.`
   : `**ADVANCED MODE BEHAVIOR:**
 - Provide detailed analysis with specific metrics, but use human-readable labels first with acronyms in parentheses: "Fitness (CTL)", "Fatigue (ATL)", "Freshness (TSB)", "Training Load (TSS)".
 - Never lead with the acronym — always lead with the plain English term.
