@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.draftcycling.app",
-      "buildNumber": "44",
+      "buildNumber": "45",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }

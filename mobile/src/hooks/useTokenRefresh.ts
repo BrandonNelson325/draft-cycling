@@ -8,7 +8,8 @@ import { refreshIfNeeded } from '../api/tokenRefresh';
  * 1. When the app returns to foreground
  * 2. On a periodic timer (every 45 minutes)
  *
- * Uses the shared refreshAccessToken() so it never races with the 401 interceptor.
+ * Sets tokenReady=true once the initial refresh check completes,
+ * so dashboard components know it's safe to fetch data.
  */
 export function useTokenRefresh() {
   const { user } = useAuthStore();
@@ -17,8 +18,17 @@ export function useTokenRefresh() {
   useEffect(() => {
     if (!user) return;
 
-    // Refresh on mount (app start / login)
-    refreshIfNeeded();
+    // Refresh on mount, then mark token as ready
+    const init = async () => {
+      try {
+        await refreshIfNeeded();
+      } catch {
+        // refreshIfNeeded handles logout internally
+      }
+      // Mark ready whether refresh succeeded or token was already valid
+      useAuthStore.getState().setTokenReady(true);
+    };
+    init();
 
     // Refresh when app comes to foreground
     const handleAppState = (nextState: AppStateStatus) => {

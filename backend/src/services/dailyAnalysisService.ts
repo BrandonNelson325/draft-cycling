@@ -48,6 +48,66 @@ export interface TodaySuggestion {
 const suggestionCache = new Map<string, TodaySuggestion>();
 
 /**
+ * Build the ACWR-based training status block for AI prompts.
+ * This MUST match the logic in FreshnessGauge so the text and gauge agree.
+ */
+function buildTrainingStatusBlock(trainingStatus: any): string {
+  const ctl = trainingStatus?.ctl ?? 0;
+  const atl = trainingStatus?.atl ?? 0;
+  const tsb = trainingStatus?.tsb ?? 0;
+
+  let statusLabel: string;
+  let statusDescription: string;
+
+  if (ctl < 15) {
+    // New athlete — not enough data for ACWR
+    if (tsb > 10) {
+      statusLabel = 'Fresh';
+      statusDescription = 'New athlete, ready to train';
+    } else if (tsb >= -10) {
+      statusLabel = 'Balanced';
+      statusDescription = 'New athlete, good balance of training and recovery';
+    } else {
+      statusLabel = 'Building';
+      statusDescription = 'New athlete, building training base';
+    }
+  } else {
+    const acwr = atl / ctl;
+    if (acwr > 1.5) {
+      statusLabel = 'Overtraining';
+      statusDescription = `Training load is spiking dangerously (ACWR ${acwr.toFixed(2)}). High injury/burnout risk.`;
+    } else if (acwr > 1.3) {
+      statusLabel = 'Overreaching';
+      statusDescription = `Heavy training block (ACWR ${acwr.toFixed(2)}). Functional overreaching — plan recovery soon.`;
+    } else if (acwr > 1.0) {
+      statusLabel = 'Productive';
+      statusDescription = `In the sweet spot (ACWR ${acwr.toFixed(2)}). Building fitness effectively.`;
+    } else if (acwr > 0.8) {
+      statusLabel = 'Balanced';
+      statusDescription = `Maintained fitness (ACWR ${acwr.toFixed(2)}). Ready for harder efforts.`;
+    } else if (ctl > 40 && acwr < 0.5) {
+      statusLabel = 'Detraining';
+      statusDescription = `Very low recent training (ACWR ${acwr.toFixed(2)}). Fitness is fading.`;
+    } else {
+      statusLabel = 'Fresh';
+      statusDescription = `Well-rested (ACWR ${acwr.toFixed(2)}). Ideal for racing or hard efforts.`;
+    }
+  }
+
+  return `CURRENT TRAINING STATUS:
+- Status: ${statusLabel} — ${statusDescription}
+- CTL (Fitness): ${ctl.toFixed(1)} (42-day chronic load)
+- ATL (Fatigue): ${atl.toFixed(1)} (7-day acute load)
+- TSB (Form): ${tsb.toFixed(1)} (CTL minus ATL)
+${ctl >= 15 ? `- ACWR: ${(atl / ctl).toFixed(2)} (Acute:Chronic ratio — the primary metric)` : '- ACWR: N/A (not enough training history)'}
+
+IMPORTANT: Your assessment MUST align with the "${statusLabel}" status shown above. The ACWR (not TSB alone) determines training status.
+- Do NOT say the athlete is "fresh" or has "low fatigue" if the status is Productive, Overreaching, or Overtraining.
+- Do NOT say the athlete is "fatigued" or "overtrained" if the status is Fresh or Balanced.
+- Base your description of the training week on the ACTUAL ride data below, not assumptions.`;
+}
+
+/**
  * Clear cached suggestions for an athlete (call after new activity synced)
  */
 export function clearSuggestionCache(athleteId: string): void {
@@ -132,13 +192,22 @@ export const dailyAnalysisService = {
 
     const yesterdayTotalTSS = yesterdayRides.reduce((sum, r) => sum + r.tss, 0);
 
-    // Determine status based on TSB
-    let status: DailyAnalysisResult['status'];
+    // Determine status using ACWR (must match FreshnessGauge logic)
     const tsb = trainingStatus?.tsb || 0;
-    if (tsb > 10) status = 'fresh';
-    else if (tsb > -5) status = 'well-recovered';
-    else if (tsb > -25) status = 'slightly-tired';
-    else status = 'fatigued';
+    const statusCtl = trainingStatus?.ctl || 0;
+    const statusAtl = trainingStatus?.atl || 0;
+    let status: DailyAnalysisResult['status'];
+    if (statusCtl < 15) {
+      if (tsb > 10) status = 'fresh';
+      else if (tsb > -5) status = 'well-recovered';
+      else status = 'slightly-tired';
+    } else {
+      const acwr = statusAtl / statusCtl;
+      if (acwr > 1.3) status = 'fatigued';
+      else if (acwr > 1.0) status = 'slightly-tired';
+      else if (acwr > 0.8) status = 'well-recovered';
+      else status = 'fresh';
+    }
 
     return {
       date: todayStr,
@@ -174,6 +243,10 @@ export const dailyAnalysisService = {
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
 
+    const recentRideList = recentActivities
+      .map((a: any) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`)
+      .join('\n');
+
     return `You are analyzing an athlete's training status for today.
 
 YESTERDAY'S TRAINING:
@@ -191,26 +264,10 @@ ${
 }
 Total TSS: ${yesterdayTSS}
 
-CURRENT FITNESS STATUS:
-- TSB (Form): ${trainingStatus.tsb.toFixed(1)}
-- CTL (Fitness): ${trainingStatus.ctl.toFixed(1)}
-- ATL (Fatigue): ${trainingStatus.atl.toFixed(1)}
+${buildTrainingStatusBlock(trainingStatus)}
 
-INTERPRETATION:
-${
-  trainingStatus.tsb > 5
-    ? '✅ Very fresh - ready for hard training'
-    : trainingStatus.tsb > -10
-    ? '✅ Well recovered - good for normal training'
-    : trainingStatus.tsb > -20
-    ? '⚠️ Slightly tired - may need easier session'
-    : '❌ Fatigued - consider rest or very easy'
-}
-
-LAST 7 DAYS PATTERN:
-- Total rides: ${recentActivities.length}
-- Total TSS: ${recentTotalTSS}
-- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}
+LAST 7 DAYS (${recentActivities.length} rides, ${recentTotalTSS} total TSS, ${(recentTotalTSS / 7).toFixed(1)} avg TSS/day):
+${recentRideList || '  (no rides)'}
 
 TODAY'S SCHEDULED WORKOUT:
 ${
@@ -223,11 +280,11 @@ ${
 }
 
 YOUR TASK:
-Give a direct, no-fluff daily assessment. No greetings or filler.
+Give a direct, no-fluff daily assessment that MATCHES the training status above. Base your description on the ACTUAL ride data. No greetings or filler.
 
 Format as JSON:
 {
-  "summary": "1 sentence: current state + why (e.g. 'Well recovered after a rest day, fitness trending up.')",
+  "summary": "1 sentence: current state referencing actual data (e.g. 'Accumulated 350 TSS over 4 rides this week — productive overload.')",
   "recommendation": "1 sentence: what to do today (e.g. 'Hit your intervals hard — you can handle it.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
@@ -449,13 +506,23 @@ Format as JSON:
     // Get AI suggestion
     const aiResult = await this.getSuggestionAIAnalysis(context, riddenToday ? true : hasPlannedWorkout);
 
-    // Determine status
+    // Determine status using ACWR (must match FreshnessGauge logic)
     const tsb = trainingStatus?.tsb || 0;
+    const ctl = trainingStatus?.ctl || 0;
+    const atl = trainingStatus?.atl || 0;
     let status: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['status'];
-    if (tsb > 5) status = 'fresh';
-    else if (tsb > -10) status = 'well-recovered';
-    else if (tsb > -20) status = 'slightly-tired';
-    else status = 'fatigued';
+    if (ctl < 15) {
+      // New athlete fallback
+      if (tsb > 5) status = 'fresh';
+      else if (tsb > -10) status = 'well-recovered';
+      else status = 'slightly-tired';
+    } else {
+      const acwr = atl / ctl;
+      if (acwr > 1.3) status = 'fatigued';
+      else if (acwr > 1.0) status = 'slightly-tired';
+      else if (acwr > 0.8) status = 'well-recovered';
+      else status = 'fresh';
+    }
 
     const todaysRides = todayActivities.map((a: any) => ({
       name: a.name || 'Ride',
@@ -512,6 +579,10 @@ Format as JSON:
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
 
+    const recentRideList = recentActivities
+      .map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`)
+      .join('\n');
+
     const base = `You are a cycling coach assessing an athlete's readiness for today.
 
 YESTERDAY'S TRAINING:
@@ -529,15 +600,10 @@ ${
 }
 Total TSS: ${yesterdayTSS}
 
-CURRENT FITNESS STATUS:
-- TSB (Form): ${trainingStatus?.tsb?.toFixed(1) ?? '0.0'}
-- CTL (Fitness): ${trainingStatus?.ctl?.toFixed(1) ?? '0.0'}
-- ATL (Fatigue): ${trainingStatus?.atl?.toFixed(1) ?? '0.0'}
+${buildTrainingStatusBlock(trainingStatus)}
 
-LAST 7 DAYS:
-- Total rides: ${recentActivities.length}
-- Total TSS: ${recentTotalTSS}
-- Average TSS/day: ${(recentTotalTSS / 7).toFixed(1)}
+LAST 7 DAYS (${recentActivities.length} rides, ${recentTotalTSS} total TSS, ${(recentTotalTSS / 7).toFixed(1)} avg TSS/day):
+${recentRideList || '  (no rides)'}
 
 ${fatigueProfileService.formatForPrompt(fatigueProfile)}`;
 
@@ -551,11 +617,12 @@ TODAY'S SCHEDULED WORKOUT:
 - TSS: ${todayEntry.workouts.tss}
 
 YOUR TASK:
-Give a direct, no-fluff assessment. If the athlete is significantly fatigued (TSB < -20) or overtrained, don't be afraid to recommend skipping the workout entirely and taking a rest day — use "add-rest". No greetings or filler.
+Give a direct, no-fluff assessment that MATCHES the training status above. If Overreaching/Overtraining, recommend rest or easier sessions. If Fresh/Balanced, the athlete can push harder. No greetings or filler.
+Base your description on the ACTUAL ride data — don't guess or assume what the week looked like.
 
 Format as JSON:
 {
-  "summary": "1 sentence: current state (e.g. 'Carrying some fatigue from yesterday's 90 TSS effort.' or 'Deeply fatigued after a huge training week.')",
+  "summary": "1 sentence: current state referencing actual training data (e.g. 'Carrying fatigue from 5 rides totaling 400 TSS this week.' or 'Well-rested after 2 easy days.')",
   "recommendation": "1 sentence: what to do (e.g. 'Proceed as planned — you're ready for it.' or 'I'd suggest skipping today's workout and resting — your body will benefit more from recovery right now.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
 }`;
@@ -566,12 +633,14 @@ Format as JSON:
 No workout is scheduled for today.
 
 YOUR TASK:
-Suggest what the athlete should do today — this could be a workout OR a rest day. If the athlete is significantly fatigued (TSB < -20), overtrained, or has had multiple hard days in a row, prescribe a rest day. Rest is a real prescription. Be direct, no filler.
+Suggest what the athlete should do today — this could be a workout OR a rest day. Your suggestion MUST match the training status above.
+If Overreaching/Overtraining: prescribe rest or very easy recovery. If Productive: moderate training is fine. If Fresh/Balanced: can push harder.
+Base your description on the ACTUAL ride data — don't guess or assume what the week looked like. Be direct, no filler.
 
 Format as JSON:
 {
-  "summary": "1 sentence: current state (e.g. 'Fresh after 2 rest days with good fitness.' or 'Carrying heavy fatigue after a big training week.')",
-  "recommendation": "1 sentence: why this choice (e.g. 'Good day for tempo work to build on your base.' or 'With the fatigue you're carrying, I'd suggest a full rest day to let your body recover.')",
+  "summary": "1 sentence: current state referencing actual training data (e.g. 'Accumulated 450 TSS across 5 rides this week — legs are heavy.' or 'Only 1 easy ride in 7 days — well-rested.')",
+  "recommendation": "1 sentence: why this choice (e.g. 'Good day for tempo work to build on your base.' or 'With the load you've built up, take a full rest day.')",
   "suggestedAction": "suggested-workout",
   "suggestedWorkout": {
     "name": "Workout Name (or 'Rest Day')",
@@ -610,21 +679,24 @@ Format as JSON:
         + '- Duration: ' + tomorrowEntry.workouts.duration_minutes + ' minutes\n'
         + '- TSS: ' + tomorrowEntry.workouts.tss + '\n\n'
         + 'YOUR TASK:\n'
-        + 'Summarize today\'s training effort, preview tomorrow\'s workout, and assess recovery outlook. Be direct, no filler.\n\n'
+        + 'Summarize today\'s training effort, preview tomorrow\'s workout, and assess recovery outlook. Your assessment MUST match the training status above. Be direct, no filler.\n'
+        + 'Base your description on the ACTUAL ride data — don\'t guess or assume what the week looked like.\n\n'
         + 'Format as JSON:\n'
         + '{\n'
-        + '  "summary": "1 sentence: today\'s ride recap (e.g. \'Solid 75 TSS endurance ride, right on target for a recovery day.\')",\n'
+        + '  "summary": "1 sentence: today\'s ride recap referencing actual data (e.g. \'Solid 75 TSS endurance ride on top of a 400 TSS week.\')",\n'
         + '  "recommendation": "1 sentence: recovery outlook + tomorrow preview (e.g. \'Get good rest tonight — tomorrow\'s threshold intervals will need fresh legs.\')",\n'
         + '  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"\n'
         + '}';
     } else {
       tomorrowSection = '- No workout scheduled\n\n'
         + 'YOUR TASK:\n'
-        + 'Summarize today\'s training effort and suggest what to do tomorrow — this could be a workout OR a rest day. If the athlete is significantly fatigued (TSB < -20), overtrained, or has had multiple hard days in a row, prescribe rest. Rest is a real prescription. Be direct, no filler.\n\n'
+        + 'Summarize today\'s training effort and suggest what to do tomorrow — this could be a workout OR a rest day. Your suggestion MUST match the training status above.\n'
+        + 'If Overreaching/Overtraining: prescribe rest or very easy recovery. If Productive: moderate training is fine. If Fresh/Balanced: can push harder.\n'
+        + 'Base your description on the ACTUAL ride data — don\'t guess or assume what the week looked like. Be direct, no filler.\n\n'
         + 'Format as JSON:\n'
         + '{\n'
-        + '  "summary": "1 sentence: today\'s ride recap (e.g. \'Solid 75 TSS endurance ride, right on target.\')",\n'
-        + '  "recommendation": "1 sentence: why this choice (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\' or \'With the load you\'ve built up, I\'d suggest taking tomorrow off to let your body recover.\')",\n'
+        + '  "summary": "1 sentence: today\'s ride recap referencing actual data (e.g. \'Big 136 TSS effort on top of a demanding week.\')",\n'
+        + '  "recommendation": "1 sentence: why this choice (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\' or \'With the load you\'ve built up, take tomorrow off.\')",\n'
         + '  "suggestedAction": "proceed-as-planned",\n'
         + '  "suggestedWorkout": {\n'
         + '    "name": "Workout Name (or \'Rest Day\')",\n'
@@ -635,18 +707,17 @@ Format as JSON:
         + '}';
     }
 
+    const recentRideList = recentActivities
+      .map((a) => '  - ' + new Date(a.start_date).toLocaleDateString() + ': ' + a.name + ' — ' + Math.round(a.moving_time_seconds / 60) + 'min, ' + (a.tss || 0) + ' TSS')
+      .join('\n');
+
     return 'You are a cycling coach reviewing an athlete\'s completed training for today and previewing tomorrow.\n\n'
       + 'TODAY\'S COMPLETED RIDES:\n'
       + ridesText + '\n'
       + 'Total TSS today: ' + todayTSS + '\n\n'
-      + 'CURRENT FITNESS STATUS:\n'
-      + '- TSB (Form): ' + (trainingStatus?.tsb?.toFixed(1) ?? '0.0') + '\n'
-      + '- CTL (Fitness): ' + (trainingStatus?.ctl?.toFixed(1) ?? '0.0') + '\n'
-      + '- ATL (Fatigue): ' + (trainingStatus?.atl?.toFixed(1) ?? '0.0') + '\n\n'
-      + 'LAST 7 DAYS:\n'
-      + '- Total rides: ' + recentActivities.length + '\n'
-      + '- Total TSS: ' + recentTotalTSS + '\n'
-      + '- Average TSS/day: ' + (recentTotalTSS / 7).toFixed(1) + '\n\n'
+      + buildTrainingStatusBlock(trainingStatus) + '\n\n'
+      + 'LAST 7 DAYS (' + recentActivities.length + ' rides, ' + recentTotalTSS + ' total TSS, ' + (recentTotalTSS / 7).toFixed(1) + ' avg TSS/day):\n'
+      + (recentRideList || '  (no rides)') + '\n\n'
       + fatigueProfileService.formatForPrompt(fatigueProfile) + '\n\n'
       + 'TOMORROW\'S SCHEDULED WORKOUT:\n'
       + tomorrowSection;

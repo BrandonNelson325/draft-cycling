@@ -45,9 +45,9 @@ export const chatGreetingService = {
       .eq('date', today)
       .single();
 
-    // Check if athlete already rode today
+    // Check if athlete already rode today (using athlete's timezone, not UTC)
     const todaysRides = (recentRides || []).filter((r: any) => {
-      const rideDate = r.start_date?.slice(0, 10);
+      const rideDate = new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(r.start_date));
       return rideDate === today;
     });
     const alreadyRodeToday = todaysRides.length > 0;
@@ -102,6 +102,8 @@ export const chatGreetingService = {
     tomorrowsWorkout: any = null
   ): string {
     const timeOfDay = this.getTimeOfDay(athlete?.timezone);
+    const greetingTz = athlete?.timezone || 'America/Los_Angeles';
+    const greetingToday = new Intl.DateTimeFormat('en-CA', { timeZone: greetingTz }).format(new Date());
 
     const todaysRideSummary = todaysRides.length > 0
       ? todaysRides
@@ -132,28 +134,36 @@ ${
   recentRides.length > 0
     ? recentRides
         .map(
-          (r: any) =>
-            `- ${r.name}: ${Math.round(r.moving_time_seconds / 60)}min, ${r.tss || 0} TSS, ${
+          (r: any) => {
+            const rideLocalDate = new Intl.DateTimeFormat('en-CA', { timeZone: greetingTz }).format(new Date(r.start_date));
+            const label = rideLocalDate === greetingToday ? 'TODAY' : 'YESTERDAY';
+            return `- [${label}] ${r.name}: ${Math.round(r.moving_time_seconds / 60)}min, ${r.tss || 0} TSS, ${
               r.average_watts || 0
-            }W avg`
+            }W avg`;
+          }
         )
         .join('\n')
     : '- No recent rides'
 }
 
 FATIGUE & TRAINING READINESS:
-- Freshness: ${trainingStatus?.tsb?.toFixed(1) || 'Unknown'} (positive = rested, negative = carrying fatigue)
 - Fitness level: ${trainingStatus?.ctl?.toFixed(1) || 'Unknown'} (long-term training base)
 - Recent fatigue: ${trainingStatus?.atl?.toFixed(1) || 'Unknown'} (last ~7 days of training stress)
-- Recovery Status: ${
-      trainingStatus?.tsb > 5
-        ? 'Very fresh - ready for hard training'
-        : trainingStatus?.tsb > -10
-        ? 'Well recovered - good to train'
-        : trainingStatus?.tsb > -20
-        ? 'Slightly tired - recovery or easy day recommended'
-        : 'Fatigued - need rest'
-    }
+- Freshness: ${trainingStatus?.tsb?.toFixed(1) || 'Unknown'} (fitness minus fatigue)
+${(() => {
+      const ctl = trainingStatus?.ctl || 0;
+      const atl = trainingStatus?.atl || 0;
+      const tsb = trainingStatus?.tsb || 0;
+      if (ctl < 15) {
+        return tsb > 5 ? '- Recovery Status: Fresh - ready to train' : tsb > -10 ? '- Recovery Status: Balanced' : '- Recovery Status: Building fitness';
+      }
+      const acwr = atl / ctl;
+      if (acwr > 1.5) return `- Recovery Status: Overtraining risk (ACWR ${acwr.toFixed(2)}) - need rest urgently`;
+      if (acwr > 1.3) return `- Recovery Status: Overreaching (ACWR ${acwr.toFixed(2)}) - recovery day recommended`;
+      if (acwr > 1.0) return `- Recovery Status: Productive (ACWR ${acwr.toFixed(2)}) - building fitness, training on track`;
+      if (acwr > 0.8) return `- Recovery Status: Balanced (ACWR ${acwr.toFixed(2)}) - maintained fitness, ready for harder efforts`;
+      return `- Recovery Status: Fresh (ACWR ${acwr.toFixed(2)}) - well-rested, ideal for hard training`;
+    })()}
 
 HEALTH DATA (Today):
 ${

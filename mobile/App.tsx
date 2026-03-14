@@ -29,7 +29,6 @@ const linking = {
 
 function AppModals() {
   const { user } = useAuthStore();
-  useTokenRefresh();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
   usePushNotifications(newActivities.refetch, dailyMorning.forceShow);
@@ -90,6 +89,11 @@ function AppModals() {
   );
 }
 
+function TokenRefreshGate() {
+  useTokenRefresh();
+  return null;
+}
+
 export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
@@ -97,6 +101,7 @@ export default function App() {
         <BottomSheetModalProvider>
           <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="light" />
+            <TokenRefreshGate />
             <RootNavigator />
             <AppModals />
           </NavigationContainer>

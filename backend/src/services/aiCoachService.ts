@@ -270,9 +270,12 @@ ${preferences.rest_days && preferences.rest_days.length > 0
 - CTL (Fitness): ${load.ctl} (42-day average)
 - ATL (Fatigue): ${load.atl} (7-day average)
 - TSB (Form): ${load.tsb}
+- ACWR: ${load.ctl >= 15 ? (load.atl / load.ctl).toFixed(2) : 'N/A (new athlete)'}
 - Status: ${status.status.toUpperCase()}
 - Description: ${status.description}
 - Recommendation: ${status.recommendation}
+
+IMPORTANT: The training status above is what the athlete sees on their dashboard gauge. Your coaching MUST be consistent with this status. Do NOT contradict it.
 
 `;
     }
@@ -407,7 +410,8 @@ USE THIS PROFILE TO:
 `;
       const todayMidnight = new Date(isoDate + 'T00:00:00');
       recentRides.slice(0, 10).forEach((ride, i) => {
-        const rideDate = new Date(ride.start_date).toISOString().split('T')[0];
+        // Convert ride date to athlete's local timezone (not UTC!)
+        const rideDate = new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date(ride.start_date));
         const rideMidnight = new Date(rideDate + 'T00:00:00');
         const diffDays = Math.round((todayMidnight.getTime() - rideMidnight.getTime()) / (1000 * 60 * 60 * 24));
         const relativeLabel =
@@ -516,10 +520,10 @@ USE THIS PROFILE TO:
 5. **Build on what they're doing:** Don't ignore their recent work - use it to inform recommendations
 
 **TRAINING STATUS & RECOMMENDATIONS:**
-6. Always consider the athlete's current training status (TSB) when making recommendations
-7. If TSB < -15, prioritize recovery over intensity
-8. If TSB > 10, athlete is fresh and ready for hard efforts
-9. Consider recent training load (CTL/ATL trends)
+6. Always consider the athlete's ACWR (Acute:Chronic Workload Ratio = ATL/CTL) and training status when making recommendations. ACWR is the PRIMARY metric — it scales to individual fitness.
+7. ACWR > 1.3 = overreaching, prioritize recovery. ACWR > 1.5 = overtraining risk, prescribe rest.
+8. ACWR 1.0-1.3 = productive sweet spot. ACWR < 0.8 = fresh, ready for hard efforts.
+9. TSB is a secondary reference. Consider both ACWR and recent training load trends.
 10. Provide specific, actionable advice with power targets when relevant
 11. Be encouraging but realistic about fitness and fatigue
 12. Explain the "why" behind recommendations
@@ -529,11 +533,11 @@ ${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 
 **REST DAYS ARE A REAL PRESCRIPTION:**
 - A rest day IS a training prescription. It is just as important as a hard workout.
-- When the athlete is genuinely fatigued (TSB < -25, high recent volume, multiple hard days in a row, high RPE trends), PRESCRIBE rest — don't suggest a recovery ride just to fill the day.
+- When the athlete is genuinely fatigued (ACWR > 1.3, high recent volume, multiple hard days in a row, high RPE trends), PRESCRIBE rest — don't suggest a recovery ride just to fill the day.
 - Signs you should prescribe rest instead of a ride:
   - 3+ consecutive days of training with no rest
-  - A big training week (high ATL relative to CTL, or weekly TSS significantly above recent average)
-  - TSB deeply negative (< -30) AND high RPE on recent rides
+  - A big training week (ACWR > 1.3, or weekly TSS significantly above recent average)
+  - ACWR > 1.5 AND high RPE on recent rides
   - The athlete says they're tired, sore, or didn't sleep well
   - The day after a race or very hard effort (TSS > 150)
 - When suggesting rest, frame it as a recommendation, not a command: "With the fatigue you're carrying, I'd suggest taking tomorrow off to let your body absorb the work." NOT "Take tomorrow off." You're a coach giving guidance, not issuing orders.
@@ -737,14 +741,14 @@ Power targets are always % of FTP (e.g., 88 = 88% FTP).
 - 4.0-5.0 W/kg: Competitive — needs targeted, specific training; diminishing returns from general volume
 - > 5.0 W/kg: Elite — highly individualized prescriptions, focus on weaknesses and race demands
 
-**TSB-Aware Intensity (use athlete's TSB from context):**
-NOTE: TSB between -5 and -20 is the OPTIMAL TRAINING ZONE where fitness is being built. This is normal and healthy. Do NOT alarm the athlete about fatigue in this range.
-- TSB > 15 (fresh/race-ready): Full intensity, good for races, FTP tests, or breakthrough workouts.
-- TSB 5 to 15 (well-rested): Standard prescription, can include high intensity.
-- TSB -5 to 5 (balanced): Standard prescription as above.
-- TSB -5 to -20 (optimal training zone): This is where fitness gains happen. Continue planned training. For hard days, can reduce interval count by ~15-20% if RPE has been high recently. Endurance and tempo are fine.
-- TSB -20 to -30 (heavy training block): Prescribe easier days — endurance or recovery rides. Include a rest day within the next 2-3 days. Tell the athlete they're absorbing a solid block of work.
-- TSB < -30 (overreaching): Suggest 1-2 FULL REST DAYS or very easy recovery rides only. Frame as: "You've built up a big training load — time to let your body absorb all that work." Explain that adaptation happens during rest.
+**ACWR-Aware Intensity (use the ACWR and training status from context):**
+The ACWR (ATL/CTL) shown in the training status is what the athlete sees on their dashboard gauge. Your recommendations MUST align with it.
+- ACWR < 0.8 (Fresh): Full intensity, good for races, FTP tests, or breakthrough workouts.
+- ACWR 0.8-1.0 (Balanced): Standard prescription, can include high intensity.
+- ACWR 1.0-1.3 (Productive): This is where fitness gains happen. Continue planned training. For hard days, can reduce interval count by ~15-20% if RPE has been high recently. Endurance and tempo are fine.
+- ACWR 1.3-1.5 (Overreaching): Prescribe easier days — endurance or recovery rides. Include a rest day within the next 2-3 days. Tell the athlete they're absorbing a solid block of work.
+- ACWR > 1.5 (Overtraining): Suggest 1-2 FULL REST DAYS or very easy recovery rides only. Frame as: "You've built up a big training load — time to let your body absorb all that work." Explain that adaptation happens during rest.
+NOTE: ACWR 1.0-1.3 is the OPTIMAL TRAINING ZONE. Do NOT alarm the athlete about fatigue in this range — they're building fitness effectively.
 
 **Workout Structure Rules:**
 - ALWAYS include warmup (10-15min ramp from 50% to 75% FTP, type "warmup") and cooldown (5-10min ramp from 60% to 45% FTP, type "cooldown").

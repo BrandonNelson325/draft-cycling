@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../utils/supabase';
 import { stravaClient } from '../utils/strava';
 import { stravaService } from '../services/stravaService';
 import { ftpEstimationService } from '../services/ftpEstimationService';
+import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 
@@ -189,6 +190,9 @@ export const syncActivities = async (req: AuthRequest, res: Response): Promise<v
     if (result.analyzed > 0) {
       await ftpEstimationService.autoUpdateFTP(req.user.id);
     }
+
+    // Invalidate cached suggestion so dashboard shows fresh data
+    clearSuggestionCache(req.user.id);
 
     res.json(result);
   } catch (error: any) {

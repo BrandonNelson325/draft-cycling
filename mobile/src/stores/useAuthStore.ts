@@ -10,12 +10,14 @@ interface AuthState {
   loading: boolean;
   error: string | null;
   hydrated: boolean;
+  tokenReady: boolean; // true once token has been validated/refreshed on app open
 
   setUser: (user: Athlete | null) => void;
   setTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
   clearError: () => void;
   setHydrated: () => void;
+  setTokenReady: (ready: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -27,11 +29,12 @@ export const useAuthStore = create<AuthState>()(
       loading: false,
       error: null,
       hydrated: false,
+      tokenReady: false,
 
       setUser: (user) => set({ user }),
 
       setTokens: (accessToken, refreshToken) =>
-        set({ accessToken, refreshToken }),
+        set({ accessToken, refreshToken, tokenReady: true }),
 
       logout: () =>
         set({
@@ -39,11 +42,14 @@ export const useAuthStore = create<AuthState>()(
           accessToken: null,
           refreshToken: null,
           error: null,
+          tokenReady: false,
         }),
 
       clearError: () => set({ error: null }),
 
       setHydrated: () => set({ hydrated: true }),
+
+      setTokenReady: (ready) => set({ tokenReady: ready }),
     }),
     {
       name: 'auth-storage',

@@ -26,9 +26,20 @@ function AuthStack() {
 export default function RootNavigator() {
   const user = useAuthStore((s) => s.user);
   const hydrated = useAuthStore((s) => s.hydrated);
+  const tokenReady = useAuthStore((s) => s.tokenReady);
 
   // Wait for SecureStore to rehydrate before rendering
   if (!hydrated) {
+    return (
+      <View style={styles.splash}>
+        <ActivityIndicator size="large" color="#3b82f6" />
+      </View>
+    );
+  }
+
+  // If user exists but token hasn't been validated/refreshed yet, keep showing splash.
+  // This prevents dashboard components from firing API calls with stale tokens.
+  if (user && !tokenReady) {
     return (
       <View style={styles.splash}>
         <ActivityIndicator size="large" color="#3b82f6" />
