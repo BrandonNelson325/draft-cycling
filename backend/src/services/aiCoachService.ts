@@ -32,6 +32,7 @@ interface AthleteContext {
   rpeHistory: any[];
   fatigueProfile: FatigueProfile | null;
   planDeviations: PlanDeviation[];
+  activePlan: any | null;
 }
 
 export const aiCoachService = {
@@ -94,6 +95,7 @@ export const aiCoachService = {
       { data: dailyCheckIn },
       { data: rpeHistory },
       fatigueProfile,
+      { data: activePlan },
     ] = await Promise.all([
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
@@ -124,6 +126,14 @@ export const aiCoachService = {
         .gte('start_date', thirtyDaysAgo.toISOString())
         .order('start_date', { ascending: false }),
       fatigueProfileService.getFatigueProfile(athleteId),
+      supabaseAdmin
+        .from('training_plans')
+        .select('id, goal_event, event_date, start_date, weeks, total_weeks, total_tss, status')
+        .eq('athlete_id', athleteId)
+        .eq('status', 'active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
     ]);
 
     // Find plan deviations: missed workouts (past, not completed) and different rides
@@ -186,7 +196,64 @@ export const aiCoachService = {
       rpeHistory: rpeHistory || [],
       fatigueProfile,
       planDeviations,
+      activePlan: activePlan || null,
     };
+  },
+
+  /**
+   * Build the active training plan section for the system prompt.
+   * This gives the AI coach full awareness of the athlete's current plan,
+   * goal event, what phase they're in, and what's coming up.
+   */
+  buildActivePlanSection(activePlan: any | null, todayIso: string): string {
+    if (!activePlan) return '';
+
+    const today = new Date(todayIso + 'T12:00:00');
+    const startDate = new Date(activePlan.start_date + 'T12:00:00');
+    const eventDate = new Date(activePlan.event_date + 'T12:00:00');
+    const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+    const currentWeekNum = Math.max(1, Math.ceil(daysSinceStart / 7));
+    const daysUntilEvent = Math.floor((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const weeksUntilEvent = Math.ceil(daysUntilEvent / 7);
+
+    let section = `ACTIVE TRAINING PLAN:
+- Goal Event: ${activePlan.goal_event}
+- Event Date: ${activePlan.event_date} (${daysUntilEvent > 0 ? `${daysUntilEvent} days / ~${weeksUntilEvent} weeks away` : 'PAST'})
+- Plan Start: ${activePlan.start_date}
+- Total Weeks: ${activePlan.total_weeks || (activePlan.weeks?.length ?? '?')}
+- Current Week: ${currentWeekNum}
+`;
+
+    // Show current week's phase and details
+    const weeks = activePlan.weeks || [];
+    const currentWeek = weeks.find((w: any) => w.week_number === currentWeekNum);
+    const nextWeek = weeks.find((w: any) => w.week_number === currentWeekNum + 1);
+
+    if (currentWeek) {
+      section += `- Current Phase: ${currentWeek.phase.toUpperCase()}${currentWeek.notes ? ` (${currentWeek.notes})` : ''}
+- This Week's TSS Target: ${currentWeek.tss}
+- This Week's Workouts: ${currentWeek.workouts?.map((w: any) => w.name).join(', ') || 'None'}
+`;
+    }
+
+    if (nextWeek) {
+      section += `- Next Week: ${nextWeek.phase.toUpperCase()}${nextWeek.notes ? ` (${nextWeek.notes})` : ''}
+`;
+    }
+
+    // Show phase overview
+    const phaseMap: Record<string, number[]> = {};
+    for (const week of weeks) {
+      const phase = week.phase || 'unknown';
+      if (!phaseMap[phase]) phaseMap[phase] = [];
+      phaseMap[phase].push(week.week_number);
+    }
+    section += `- Phase Overview: ${Object.entries(phaseMap).map(([phase, wks]) => `${phase} (wk ${wks[0]}-${wks[wks.length - 1]})`).join(', ')}
+
+**IMPORTANT:** The athlete ALREADY HAS a training plan for "${activePlan.goal_event}" on ${activePlan.event_date}. You know their goal — do NOT ask about it. If they want changes to the plan, modify the existing plan rather than starting from scratch unless they explicitly ask for a new plan.
+
+`;
+    return section;
   },
 
   /**
@@ -232,6 +299,7 @@ ${athlete.ftp && athlete.weight_kg ? `- Power-to-Weight: ${(athlete.ftp / athlet
 TRAINING GOALS:
 ${athlete.training_goal || 'Not set - Ask the athlete about their goals (event, target date, what they want to improve)'}
 
+${this.buildActivePlanSection(context.activePlan, isoDate)}
 ${athletePreferencesService.formatForContext(preferences)}
 
 **REST DAYS & TRAINING SCHEDULE:**

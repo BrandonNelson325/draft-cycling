@@ -37,11 +37,12 @@ function enforceMinDuration(workout: WorkoutTemplate, minDuration: number): Work
  * Scale workout durations so the week's total hours match the target weekly hours.
  * Preserves relative proportions (long ride stays longest, recovery stays shortest).
  */
-function scaleToWeeklyHours(workouts: WorkoutTemplate[], targetHours: number, minDuration: number, isRecoveryWeek: boolean): WorkoutTemplate[] {
+function scaleToWeeklyHours(workouts: WorkoutTemplate[], targetHours: number, minDuration: number, isRecoveryWeek: boolean, loadingMultiplier: number = 1.0): WorkoutTemplate[] {
   if (workouts.length === 0) return workouts;
 
-  // Recovery weeks: target 60-70% of normal volume
-  const effectiveTarget = isRecoveryWeek ? targetHours * 0.65 : targetHours;
+  // Recovery weeks: 60-65% of normal volume (easy)
+  // Loading weeks: scaled by loadingMultiplier for progressive overload (hard)
+  const effectiveTarget = isRecoveryWeek ? targetHours * 0.65 : targetHours * loadingMultiplier;
   const targetMinutes = effectiveTarget * 60;
   const currentTotal = workouts.reduce((sum, w) => sum + w.duration_minutes, 0);
 
@@ -225,19 +226,23 @@ export const trainingPlanService = {
     let weekNumber = 1;
     const minDuration = getMinDuration(config.weekly_hours);
 
-    // Base phase
+    // Base phase — 4-week blocks: 3 loading + 1 recovery
+    // Loading weeks progressively ramp: 100% → 107% → 115% of target hours
     for (let i = 0; i < phases.base; i++) {
       const isRecoveryWeek = (i + 1) % 4 === 0;
-      const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * 7;
+      const positionInBlock = i % 4; // 0, 1, 2 = loading; 3 = recovery
+      // Progressive overload: each loading week in the block gets harder
+      const loadingMultiplier = isRecoveryWeek ? 1.0 : 1.0 + positionInBlock * 0.07; // 1.0, 1.07, 1.14
+      const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * (7 + positionInBlock * 0.5); // 7, 7.5, 8
       const rawWorkouts = this.generateBasePhaseWorkouts(ftp, weeklyTSS, config, restDays);
-      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, isRecoveryWeek);
+      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, isRecoveryWeek, loadingMultiplier);
 
       weeks.push({
         week_number: weekNumber++,
         phase: 'base',
         tss: Math.round(weeklyTSS),
         workouts,
-        notes: isRecoveryWeek ? 'Recovery week - reduce volume' : undefined,
+        notes: isRecoveryWeek ? 'Recovery week - reduce volume' : (positionInBlock === 2 ? 'Hard week - peak loading before recovery' : undefined),
       });
 
       if (!isRecoveryWeek) {
@@ -245,19 +250,23 @@ export const trainingPlanService = {
       }
     }
 
-    // Build phase
+    // Build phase — 3-week blocks: 2 loading + 1 recovery
+    // Loading weeks ramp harder: 105% → 115% of target hours
     for (let i = 0; i < phases.build; i++) {
       const isRecoveryWeek = (i + 1) % 3 === 0;
-      const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * 7;
+      const positionInBlock = i % 3; // 0, 1 = loading; 2 = recovery
+      // Build phase pushes harder than base: starts at 105%, peaks at 115%
+      const loadingMultiplier = isRecoveryWeek ? 1.0 : 1.05 + positionInBlock * 0.10; // 1.05, 1.15
+      const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * (7.5 + positionInBlock * 0.5); // 7.5, 8.0
       const rawWorkouts = this.generateBuildPhaseWorkouts(ftp, weeklyTSS, config, restDays);
-      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, isRecoveryWeek);
+      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, isRecoveryWeek, loadingMultiplier);
 
       weeks.push({
         week_number: weekNumber++,
         phase: 'build',
         tss: Math.round(weeklyTSS),
         workouts,
-        notes: isRecoveryWeek ? 'Recovery week - maintain intensity, reduce volume' : undefined,
+        notes: isRecoveryWeek ? 'Recovery week - maintain intensity, reduce volume' : (positionInBlock === 1 ? 'Hard week - peak loading before recovery' : undefined),
       });
 
       if (!isRecoveryWeek) {
@@ -265,17 +274,19 @@ export const trainingPlanService = {
       }
     }
 
-    // Peak phase
+    // Peak phase — high intensity, volume at 105-110% to push limits
     for (let i = 0; i < phases.peak; i++) {
-      const rawWorkouts = this.generatePeakPhaseWorkouts(ftp, currentCTL * 7, config, restDays);
-      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, false);
+      const loadingMultiplier = 1.05 + (i / Math.max(phases.peak - 1, 1)) * 0.05; // 1.05 → 1.10
+      const weeklyTSS = currentCTL * 7.5;
+      const rawWorkouts = this.generatePeakPhaseWorkouts(ftp, weeklyTSS, config, restDays);
+      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, false, loadingMultiplier);
 
       weeks.push({
         week_number: weekNumber++,
         phase: 'peak',
-        tss: Math.round(currentCTL * 7),
+        tss: Math.round(weeklyTSS),
         workouts,
-        notes: 'High intensity work - maintain freshness',
+        notes: 'High intensity work - pushing limits',
       });
     }
 
