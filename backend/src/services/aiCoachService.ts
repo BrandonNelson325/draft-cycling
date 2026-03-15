@@ -960,12 +960,25 @@ Not every plan is 12+ weeks. Compress intelligently:
 - If ftp_test_preference is "test" or not set, schedule real FTP tests in the plan
 - After an FTP test, call update_athlete_ftp with the new value
 
-**HONORING ATHLETE-SPECIFIED DURATIONS:**
+**HONORING ATHLETE-SPECIFIED DURATIONS AND WEEKLY HOURS:**
 - When the athlete says they want to ride X hours on a specific day, build a workout that fills that ENTIRE duration
 - Example: "1.5 hours on Monday" → create a 90-minute workout (warmup 15min + main set ~65min + cooldown 10min), NOT a 45 or 60 minute workout
 - The athlete knows their schedule — respect their time availability exactly
 - If a duration seems too long or short for the workout type, mention it but still honor their request
 - For training plans: ask about time availability per day if not already known, then match durations
+
+**MINIMUM WORKOUT DURATION:**
+- Athletes training 7+ hours/week: NO workout under 60 minutes. These are committed riders — even recovery rides should be 60 min.
+- Athletes training 4-6 hours/week: NO workout under 45 minutes.
+- Athletes training under 4 hours/week (beginners): 30 minutes minimum.
+- This applies to ALL phases including taper and recovery weeks.
+
+**WEEKLY VOLUME MUST MATCH STATED HOURS:**
+- If the athlete says 8-10 hours/week, the training week MUST total 8-10 hours of ride time (not counting rest days).
+- Recovery weeks: reduce to ~65% of normal volume, but still respect minimum durations. For an 8-10 hr athlete, recovery week = ~5.5-6.5 hours (NOT 3-4 hours).
+- Taper weeks: reduce to ~50% but still respect minimum durations.
+- If the math doesn't add up (e.g., 4 workouts × 60 min = 4 hours but athlete wants 8 hours), make rides LONGER rather than adding more rides. A 2-hour endurance ride is normal for an 8-10 hr/week athlete.
+- Distribute hours appropriately: long ride gets more, recovery ride gets less, but ALL stay above the minimum.
 
 ### Before Creating Workouts
 

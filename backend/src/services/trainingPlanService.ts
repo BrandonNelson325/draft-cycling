@@ -13,6 +13,50 @@ import {
   FitnessLevel,
 } from '../types/trainingPlan';
 
+/**
+ * Minimum workout duration based on weekly hours target.
+ * Athletes committing 8+ hours/week are not beginners — they won't ride < 60 min.
+ * Athletes at 4-6 hours/week may accept shorter rides.
+ * True beginners (< 4 hours) can have shorter rides.
+ */
+function getMinDuration(weeklyHours: number): number {
+  if (weeklyHours >= 7) return 60;   // Committed riders: 60 min minimum
+  if (weeklyHours >= 4) return 45;   // Developing riders: 45 min minimum
+  return 30;                          // Beginners: 30 min minimum
+}
+
+/**
+ * Enforce minimum duration on a workout and scale intervals proportionally.
+ */
+function enforceMinDuration(workout: WorkoutTemplate, minDuration: number): WorkoutTemplate {
+  if (workout.duration_minutes >= minDuration) return workout;
+  return { ...workout, duration_minutes: minDuration };
+}
+
+/**
+ * Scale workout durations so the week's total hours match the target weekly hours.
+ * Preserves relative proportions (long ride stays longest, recovery stays shortest).
+ */
+function scaleToWeeklyHours(workouts: WorkoutTemplate[], targetHours: number, minDuration: number, isRecoveryWeek: boolean): WorkoutTemplate[] {
+  if (workouts.length === 0) return workouts;
+
+  // Recovery weeks: target 60-70% of normal volume
+  const effectiveTarget = isRecoveryWeek ? targetHours * 0.65 : targetHours;
+  const targetMinutes = effectiveTarget * 60;
+  const currentTotal = workouts.reduce((sum, w) => sum + w.duration_minutes, 0);
+
+  if (currentTotal === 0) return workouts;
+
+  const scale = targetMinutes / currentTotal;
+
+  return workouts.map(w => {
+    const scaled = Math.round(w.duration_minutes * scale);
+    // Round to nearest 5 minutes for clean durations
+    const rounded = Math.round(Math.max(scaled, minDuration) / 5) * 5;
+    return enforceMinDuration({ ...w, duration_minutes: rounded }, minDuration);
+  });
+}
+
 export const trainingPlanService = {
   /**
    * Generate a complete training plan
@@ -179,22 +223,25 @@ export const trainingPlanService = {
     const weeks: TrainingWeek[] = [];
     let currentCTL = startingCTL;
     let weekNumber = 1;
+    const minDuration = getMinDuration(config.weekly_hours);
 
     // Base phase
     for (let i = 0; i < phases.base; i++) {
       const isRecoveryWeek = (i + 1) % 4 === 0;
-      const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * 7; // 5-7 days of current CTL
+      const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * 7;
+      const rawWorkouts = this.generateBasePhaseWorkouts(ftp, weeklyTSS, config, restDays);
+      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, isRecoveryWeek);
 
       weeks.push({
         week_number: weekNumber++,
         phase: 'base',
         tss: Math.round(weeklyTSS),
-        workouts: this.generateBasePhaseWorkouts(ftp, weeklyTSS, config, restDays),
+        workouts,
         notes: isRecoveryWeek ? 'Recovery week - reduce volume' : undefined,
       });
 
       if (!isRecoveryWeek) {
-        currentCTL *= 1.05; // 5% increase per week
+        currentCTL *= 1.05;
       }
     }
 
@@ -202,41 +249,50 @@ export const trainingPlanService = {
     for (let i = 0; i < phases.build; i++) {
       const isRecoveryWeek = (i + 1) % 3 === 0;
       const weeklyTSS = isRecoveryWeek ? currentCTL * 5 : currentCTL * 7;
+      const rawWorkouts = this.generateBuildPhaseWorkouts(ftp, weeklyTSS, config, restDays);
+      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, isRecoveryWeek);
 
       weeks.push({
         week_number: weekNumber++,
         phase: 'build',
         tss: Math.round(weeklyTSS),
-        workouts: this.generateBuildPhaseWorkouts(ftp, weeklyTSS, config, restDays),
+        workouts,
         notes: isRecoveryWeek ? 'Recovery week - maintain intensity, reduce volume' : undefined,
       });
 
       if (!isRecoveryWeek) {
-        currentCTL *= 1.08; // 8% increase per week in build
+        currentCTL *= 1.08;
       }
     }
 
     // Peak phase
     for (let i = 0; i < phases.peak; i++) {
+      const rawWorkouts = this.generatePeakPhaseWorkouts(ftp, currentCTL * 7, config, restDays);
+      const workouts = scaleToWeeklyHours(rawWorkouts, config.weekly_hours, minDuration, false);
+
       weeks.push({
         week_number: weekNumber++,
         phase: 'peak',
         tss: Math.round(currentCTL * 7),
-        workouts: this.generatePeakPhaseWorkouts(ftp, currentCTL * 7, config, restDays),
+        workouts,
         notes: 'High intensity work - maintain freshness',
       });
     }
 
-    // Taper phase
+    // Taper phase — intentionally lower volume (50-60% of normal)
     for (let i = 0; i < phases.taper; i++) {
       const taperFactor = 0.5 - i * 0.1; // 50%, 40%, 30%...
       const weeklyTSS = currentCTL * 7 * taperFactor;
+      const rawWorkouts = this.generateTaperPhaseWorkouts(ftp, weeklyTSS, config, restDays);
+      // Taper uses reduced hours by design, but still enforce min duration
+      const taperHours = config.weekly_hours * Math.max(taperFactor, 0.3);
+      const workouts = scaleToWeeklyHours(rawWorkouts, taperHours, minDuration, false);
 
       weeks.push({
         week_number: weekNumber++,
         phase: 'taper',
         tss: Math.round(weeklyTSS),
-        workouts: this.generateTaperPhaseWorkouts(ftp, weeklyTSS, config, restDays),
+        workouts,
         notes: 'Taper week - maintain intensity, reduce volume significantly',
       });
     }
@@ -333,9 +389,9 @@ export const trainingPlanService = {
         name: 'Easy Recovery',
         description: 'Low intensity recovery ride',
         workout_type: 'recovery',
-        duration_minutes: 45,
+        duration_minutes: 60,
         day_of_week: availableDays[dayIndex++],
-        intervals: [{ duration: 2700, power: 55, type: 'work' }],
+        intervals: [{ duration: 3600, power: 55, type: 'work' }],
       });
     }
 
@@ -569,7 +625,7 @@ export const trainingPlanService = {
       name: 'Race Openers',
       description: 'Short high-intensity efforts to stay sharp',
       workout_type: 'vo2max',
-      duration_minutes: 45,
+      duration_minutes: 60,
       day_of_week: availableDays[dayIndex++],
       intervals: [
         { duration: 600, power: 65, type: 'warmup' },
@@ -586,9 +642,9 @@ export const trainingPlanService = {
         name: 'Easy Spin',
         description: 'Very easy recovery',
         workout_type: 'recovery',
-        duration_minutes: 30,
+        duration_minutes: 60,
         day_of_week: availableDays[dayIndex++],
-        intervals: [{ duration: 1800, power: 55, type: 'work' }],
+        intervals: [{ duration: 3600, power: 55, type: 'work' }],
       });
     }
 
@@ -598,7 +654,7 @@ export const trainingPlanService = {
         name: 'Pre-Race Activation',
         description: 'Final tune-up before race',
         workout_type: 'custom',
-        duration_minutes: 30,
+        duration_minutes: 60,
         day_of_week: availableDays[dayIndex++],
         intervals: [
         { duration: 600, power: 60, type: 'warmup' },
