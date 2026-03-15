@@ -295,12 +295,13 @@ export const startConversation = async (req: AuthRequest, res: Response): Promis
     // Generate contextual greeting
     const greeting = await chatGreetingService.generateGreeting(req.user.id);
 
-    // Create new conversation
+    // Create new conversation with date-based title (will be updated after first real message)
+    const today = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     const { data: conversation, error: convError } = await supabaseAdmin
       .from('chat_conversations')
       .insert({
         athlete_id: req.user.id,
-        title: 'New Chat',
+        title: `Chat ${today}`,
         last_message_at: new Date().toISOString(),
       })
       .select()

@@ -1,4 +1,4 @@
-import { anthropic, MODEL, SONNET, selectModel } from '../utils/anthropic';
+import { anthropic, MODEL, HAIKU, SONNET, selectModel } from '../utils/anthropic';
 import { supabaseAdmin } from '../utils/supabase';
 import { trainingLoadService } from './trainingLoadService';
 import { powerAnalysisService } from './powerAnalysisService';
@@ -1495,8 +1495,13 @@ Format it clearly so I can follow it during my ride.`;
           (block: any) => block.type === 'tool_use'
         ) as any[];
 
-        // Execute tools
-        const toolResults = await aiToolExecutor.executeTools(athleteId, toolCalls as any);
+        // Execute tools with timeout
+        const toolResults = await Promise.race([
+          aiToolExecutor.executeTools(athleteId, toolCalls as any),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Tool execution timed out after 60s')), 60000)
+          ),
+        ]);
 
         // Add assistant message with tool_use
         conversationMessages.push({
@@ -1510,14 +1515,19 @@ Format it clearly so I can follow it during my ride.`;
           content: toolResults,
         });
 
-        // Continue conversation with Sonnet - tool use requires stronger reasoning
-        finalResponse = await anthropic.messages.create({
-          model: SONNET,
-          max_tokens: 4000,
-          system: cachedSystem as any,
-          messages: conversationMessages,
-          tools: AI_TOOLS,
-        });
+        // Continue conversation with Sonnet (timeout 45s)
+        finalResponse = await Promise.race([
+          anthropic.messages.create({
+            model: SONNET,
+            max_tokens: 4000,
+            system: cachedSystem as any,
+            messages: conversationMessages,
+            tools: AI_TOOLS,
+          }),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('AI response timed out after 45s')), 45000)
+          ),
+        ]);
       }
 
       // If we still have tool use after max iterations, execute remaining tools and request final text response
@@ -1563,28 +1573,13 @@ Format it clearly so I can follow it during my ride.`;
       const textContent = finalResponse.content.filter((block: any) => block.type === 'text');
       const aiResponse = textContent.length > 0 ? textContent.map((block: any) => block.text).join('\n') : 'I completed your request but encountered an issue generating a response. Please check your calendar.';
 
-      // Store user message
-      await supabaseAdmin.from('chat_messages').insert({
-        conversation_id: convId,
-        athlete_id: athleteId,
-        role: 'user',
-        content: message,
-      });
+      // Store messages and update timestamp
+      await this.persistMessages(convId, athleteId, message, aiResponse);
 
-      // Store assistant message (text only, no tool calls to avoid history corruption)
-      await supabaseAdmin.from('chat_messages').insert({
-        conversation_id: convId,
-        athlete_id: athleteId,
-        role: 'assistant',
-        content: aiResponse,
-        tool_calls: null,
-      });
-
-      // Update conversation timestamp
-      await supabaseAdmin
-        .from('chat_conversations')
-        .update({ last_message_at: new Date().toISOString() })
-        .eq('id', convId);
+      // Generate a better title after the first user message in the conversation
+      this.maybeGenerateTitle(convId, message, aiResponse).catch((err) =>
+        logger.error('Title generation failed (non-blocking):', err)
+      );
 
       return {
         response: aiResponse,
@@ -1622,6 +1617,51 @@ Format it clearly so I can follow it during my ride.`;
       .from('chat_conversations')
       .update({ last_message_at: new Date().toISOString() })
       .eq('id', convId);
+  },
+
+  /**
+   * Generate a short, descriptive title for a conversation.
+   * Runs in the background (fire-and-forget) so it doesn't block the response.
+   * Only generates a title on the first user message (when title is still "New Chat" or truncated).
+   */
+  async maybeGenerateTitle(convId: string, userMessage: string, aiResponse: string): Promise<void> {
+    // Check current title — only generate if it's the default or first-message truncation
+    const { data: conv } = await supabaseAdmin
+      .from('chat_conversations')
+      .select('title')
+      .eq('id', convId)
+      .single();
+
+    if (!conv) return;
+
+    // Only generate title if it's "New Chat" or looks like a truncated first message
+    const currentTitle = conv.title || '';
+    if (currentTitle !== 'New Chat' && currentTitle !== userMessage.slice(0, 50)) return;
+
+    const titleResponse = await anthropic.messages.create({
+      model: HAIKU,
+      max_tokens: 30,
+      messages: [
+        {
+          role: 'user',
+          content: `Generate a short title (3-6 words, no quotes) summarizing this cycling coach conversation:\n\nUser: ${userMessage.slice(0, 200)}\nCoach: ${aiResponse.slice(0, 200)}`,
+        },
+      ],
+    });
+
+    const title = titleResponse.content
+      .filter((b: any) => b.type === 'text')
+      .map((b: any) => b.text)
+      .join('')
+      .trim()
+      .slice(0, 80);
+
+    if (title) {
+      await supabaseAdmin
+        .from('chat_conversations')
+        .update({ title })
+        .eq('id', convId);
+    }
   },
 
   /**
@@ -1704,34 +1744,59 @@ Format it clearly so I can follow it during my ride.`;
       if (!hasTools) {
         // Pure text response — already streamed above
         await this.persistMessages(convId, athleteId, message, streamedText);
+        this.maybeGenerateTitle(convId, message, streamedText).catch((err) =>
+          logger.error('Title generation failed (non-blocking):', err)
+        );
         onEvent({ type: 'done' });
         return;
       }
 
       // Tool loop (blocking) — always notify the frontend so it can show a status indicator
-      onEvent({ type: 'progress', message: 'Building your plan...' });
+      onEvent({ type: 'progress', message: 'Working on it...' });
+
+      // Send keepalive pings every 10s to prevent SSE connection from timing out
+      const keepalive = setInterval(() => {
+        onEvent({ type: 'progress', message: 'Still working...' });
+      }, 10000);
 
       let conversationMessages = [...messages];
       let finalResponse: any = firstMessage;
 
-      for (let i = 0; i < 5 && this.hasToolUse(finalResponse); i++) {
-        logger.debug(`[stream] Tool calling iteration ${i + 1}`);
+      try {
+        for (let i = 0; i < 5 && this.hasToolUse(finalResponse); i++) {
+          logger.debug(`[stream] Tool calling iteration ${i + 1}`);
 
-        const toolCalls = finalResponse.content.filter(
-          (b: any) => b.type === 'tool_use'
-        ) as any[];
-        const toolResults = await aiToolExecutor.executeTools(athleteId, toolCalls);
+          const toolCalls = finalResponse.content.filter(
+            (b: any) => b.type === 'tool_use'
+          ) as any[];
 
-        conversationMessages.push({ role: 'assistant', content: finalResponse.content });
-        conversationMessages.push({ role: 'user', content: toolResults });
+          // Timeout each tool execution at 60s to prevent infinite hangs
+          const toolResults = await Promise.race([
+            aiToolExecutor.executeTools(athleteId, toolCalls),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Tool execution timed out after 60s')), 60000)
+            ),
+          ]);
 
-        finalResponse = await anthropic.messages.create({
-          model: SONNET,
-          max_tokens: 4000,
-          system: cachedSystem as any,
-          messages: conversationMessages,
-          tools: AI_TOOLS,
-        });
+          conversationMessages.push({ role: 'assistant', content: finalResponse.content });
+          conversationMessages.push({ role: 'user', content: toolResults });
+
+          // Timeout Claude API calls at 45s
+          finalResponse = await Promise.race([
+            anthropic.messages.create({
+              model: SONNET,
+              max_tokens: 4000,
+              system: cachedSystem as any,
+              messages: conversationMessages,
+              tools: AI_TOOLS,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('AI response timed out after 45s')), 45000)
+            ),
+          ]);
+        }
+      } finally {
+        clearInterval(keepalive);
       }
 
       // Build final message context
@@ -1777,6 +1842,9 @@ Format it clearly so I can follow it during my ride.`;
       }
 
       await this.persistMessages(convId, athleteId, message, finalText);
+      this.maybeGenerateTitle(convId, message, finalText).catch((err) =>
+        logger.error('Title generation failed (non-blocking):', err)
+      );
       onEvent({ type: 'done' });
     } catch (error: any) {
       logger.error('Error in chatStream:', error);
