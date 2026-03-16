@@ -68,7 +68,7 @@ export function DroppableCalendarDay({
       ref={drop as any}
       onClick={onClick}
       className={cn(
-        'min-h-[60px] md:min-h-[120px] p-1 md:p-2 border rounded-lg transition-all',
+        'h-[60px] md:h-[120px] p-1 md:p-2 border rounded-lg transition-all overflow-hidden',
         phase && 'border-l-4',
         phase && phaseBorderColors[phase],
         isCurrentMonth ? 'bg-card' : 'bg-muted/50',

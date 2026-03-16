@@ -618,14 +618,15 @@ DO NOT suggest or discuss today's scheduled workout as if it still needs to be d
 
 **TRAINING STATUS & RECOMMENDATIONS:**
 6. Always consider the athlete's ACWR (Acute:Chronic Workload Ratio = ATL/CTL) and training status when making recommendations. ACWR is the PRIMARY metric — it scales to individual fitness.
-7. ACWR > 1.3 = overreaching, prioritize recovery. ACWR > 1.5 = overtraining risk, prescribe rest.
+7. ACWR thresholds are adjusted by experience level: advanced athletes tolerate higher ratios (overreaching at 1.5, overtraining at 1.75), beginners are more conservative (1.2 / 1.4). Trust the training status shown above — it already accounts for experience, RPE feedback, and readiness.
 8. ACWR 1.0-1.3 = productive sweet spot. ACWR < 0.8 = fresh, ready for hard efforts.
 9. TSB is a secondary reference. Consider both ACWR and recent training load trends.
 10. Provide specific, actionable advice with power targets when relevant
 11. Be encouraging but realistic about fitness and fatigue
 12. Explain the "why" behind recommendations
-13. Use FATIGUE CALIBRATION data to personalize — if the athlete handles negative TSB with low RPE, don't over-warn about overtraining
+13. Use FATIGUE CALIBRATION data to personalize — if the athlete handles negative TSB with low RPE, don't over-warn about overtraining. An experienced rider returning from low volume who reports low RPE is NOT overreaching — they're rebuilding.
 14. If RPE trends high relative to TSS, suggest more recovery than standard thresholds would indicate
+15. NEVER ignore the athlete's self-reported feedback. If they say they feel great, trust them — especially experienced athletes who know their bodies.
 ${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 
 **REST DAYS ARE A REAL PRESCRIPTION:**
@@ -1362,7 +1363,21 @@ After completing a 3-6 week training block (or when an athlete finishes a mesocy
 
 ### Learning from Conversations
 
-Call **update_athlete_preferences** automatically whenever the athlete shares goals, rest days, weekly hours, or training constraints. Don't ask permission — just save it. This means fewer questions in future conversations.`;
+Call **update_athlete_preferences** automatically whenever the athlete shares ANY of the following — don't ask permission, just save it immediately:
+- Rest days (e.g., "I don't ride on Sundays")
+- Training schedule / availability (e.g., "I have 2 hours on weekdays, 4 on weekends")
+- Goals, target events, or race dates
+- Weekly hours commitment
+- Preferred workout types or styles
+- Indoor/outdoor preference
+- Injury history or physical limitations
+- Training philosophy (e.g., "I prefer high volume low intensity")
+- Scheduling constraints (e.g., "mornings only", "no riding after 6pm")
+- Equipment info (trainer type, power meter, etc.)
+
+This is CRITICAL for continuity. The athlete should never have to repeat themselves across conversations. If they said "I don't ride Sundays" once, that must persist forever (until they change it).
+
+When the conversation includes significant coaching decisions (e.g., agreed-upon weekly structure, periodization approach, target event strategy), save a summary under the "coaching_notes" key in preferences so future conversations can reference it.`;
 
     return prompt;
   },
@@ -1569,13 +1584,13 @@ Format it clearly so I can follow it during my ride.`;
         convId = newConv!.id;
       }
 
-      // Get conversation history (last 10 messages — keeps context without ballooning tokens)
+      // Get conversation history (last 50 messages — keeps context for persistent conversations)
       const { data: history } = await supabaseAdmin
         .from('chat_messages')
         .select('role, content')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: true })
-        .limit(10);
+        .limit(50);
 
       const messages: any[] = [];
       if (history) {
@@ -1810,13 +1825,13 @@ Format it clearly so I can follow it during my ride.`;
 
       onEvent({ type: 'start', conversation_id: convId });
 
-      // Get conversation history (last 10 messages — keeps context without ballooning tokens)
+      // Get conversation history (last 50 messages — keeps context for persistent conversations)
       const { data: history } = await supabaseAdmin
         .from('chat_messages')
         .select('role, content')
         .eq('conversation_id', convId)
         .order('created_at', { ascending: true })
-        .limit(10);
+        .limit(50);
 
       const messages: any[] = [];
       if (history) {

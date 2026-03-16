@@ -33,12 +33,6 @@ function ChatPageContent() {
     deleteConversation,
   } = useChatStore();
 
-  // Load conversations on mount
-  useEffect(() => {
-    loadConversations();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Select conversation from URL param
   useEffect(() => {
     if (conversationId) {
@@ -46,16 +40,30 @@ function ChatPageContent() {
     }
   }, [conversationId, selectConversation]);
 
-  // Auto-start conversation with AI greeting when no active conversation
-  // Skip if there's an initialMessage — user will send that manually
+  // Load conversations on mount and resume the most recent
   useEffect(() => {
-    if (!conversationId && !activeConversationId && !initialMessage && !startingConversation.current) {
+    const init = async () => {
+      if (startingConversation.current) return;
       startingConversation.current = true;
-      startConversation().finally(() => {
+      try {
+        await loadConversations();
+        const { conversations, activeConversationId } = useChatStore.getState();
+        // If already viewing a specific conversation or have an active one, skip
+        if (conversationId || activeConversationId) return;
+        // If there's an initialMessage, user will send it manually (creates new convo)
+        if (initialMessage) return;
+        // Resume most recent conversation, or start fresh if none exist
+        if (conversations.length > 0) {
+          await selectConversation(conversations[0].id);
+        } else {
+          await startConversation();
+        }
+      } finally {
         startingConversation.current = false;
-      });
-    }
-  }, [conversationId, activeConversationId, startConversation]);
+      }
+    };
+    init();
+  }, []);
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 

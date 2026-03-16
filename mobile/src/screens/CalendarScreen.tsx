@@ -548,8 +548,9 @@ export default function CalendarScreen() {
                   {day}
                 </Text>
                 <View style={styles.dots}>
-                  {hasWorkouts && <View style={[styles.dot, { backgroundColor: '#3b82f6' }]} />}
-                  {hasActivities && <View style={[styles.dot, { backgroundColor: '#f97316' }]} />}
+                  {hasWorkouts ? <View style={[styles.dot, { backgroundColor: '#3b82f6' }]} /> : null}
+                  {hasActivities ? <View style={[styles.dot, { backgroundColor: '#f97316' }]} /> : null}
+                  {!hasWorkouts && !hasActivities && <View style={[styles.dot, { backgroundColor: 'transparent' }]} />}
                 </View>
               </TouchableOpacity>
             );

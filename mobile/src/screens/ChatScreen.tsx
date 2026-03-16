@@ -44,20 +44,26 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
 
+  // Load conversations on mount and resume the most recent
   useEffect(() => {
-    loadConversations();
-  }, []);
-
-  // Auto-start conversation with AI greeting when no active conversation
-  // Skip if there's an initialMessage — that will create its own conversation
-  useEffect(() => {
-    if (!activeConversationId && !startingConversation.current && !route.params?.initialMessage) {
+    const init = async () => {
+      if (startingConversation.current) return;
       startingConversation.current = true;
-      startConversation().finally(() => {
+      try {
+        await loadConversations();
+        const { conversations, activeConversationId } = useChatStore.getState();
+        if (activeConversationId || route.params?.initialMessage) return;
+        if (conversations.length > 0) {
+          await selectConversation(conversations[0].id);
+        } else {
+          await startConversation();
+        }
+      } finally {
         startingConversation.current = false;
-      });
-    }
-  }, [activeConversationId]);
+      }
+    };
+    init();
+  }, []);
 
   // Handle initialMessage param from navigation
   useEffect(() => {

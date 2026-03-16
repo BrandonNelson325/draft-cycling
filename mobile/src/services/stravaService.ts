@@ -24,7 +24,7 @@ export const stravaService = {
   },
 
   async syncActivities() {
-    const { data } = await apiClient.post('/api/strava/sync', {});
+    const { data } = await apiClient.post('/api/strava/sync', {}, { timeout: 120000 });
     return data;
   },
 

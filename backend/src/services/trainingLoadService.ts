@@ -13,6 +13,12 @@ interface TrainingStatus {
   recommendation: string;
 }
 
+interface StatusContext {
+  experienceLevel?: 'beginner' | 'intermediate' | 'advanced' | null;
+  recentRPE?: { avgRPE: number; count: number } | null;
+  readiness?: { sleepScore: number; feelingScore: number } | null;
+}
+
 export const trainingLoadService = {
   /**
    * Calculate TSS (Training Stress Score) for a ride
@@ -170,9 +176,17 @@ export const trainingLoadService = {
    * For new athletes (CTL < 15), we use simplified messaging since
    * the ratio is unreliable with a tiny denominator.
    */
-  determineStatus(ctl: number, atl: number, tsb: number): TrainingStatus {
-    // New athlete — not enough training history for meaningful ratios
-    if (ctl < 15) {
+  determineStatus(ctl: number, atl: number, tsb: number, context?: StatusContext): TrainingStatus {
+    const experienceLevel = context?.experienceLevel || 'intermediate';
+
+    // Determine CTL threshold for "new/low-volume" athlete
+    // Advanced riders returning from low volume shouldn't be flagged by unreliable ACWR
+    const lowCTLThreshold = experienceLevel === 'advanced' ? 40
+                          : experienceLevel === 'intermediate' ? 25
+                          : 15;
+
+    // Low-volume path: use TSB-based logic (ACWR unreliable with small denominator)
+    if (ctl < lowCTLThreshold) {
       if (tsb > 10) {
         return {
           status: 'fresh',
@@ -194,45 +208,111 @@ export const trainingLoadService = {
       }
     }
 
+    // ACWR-based status with experience-adjusted thresholds
     const acwr = atl / ctl;
 
-    if (acwr > 1.5) {
-      return {
+    const thresholds = {
+      overtraining: experienceLevel === 'advanced' ? 1.75 : experienceLevel === 'beginner' ? 1.4 : 1.5,
+      overreaching: experienceLevel === 'advanced' ? 1.5 : experienceLevel === 'beginner' ? 1.2 : 1.3,
+    };
+
+    let result: TrainingStatus;
+
+    if (acwr > thresholds.overtraining) {
+      result = {
         status: 'overtraining',
         description: 'Training load is spiking — high injury/burnout risk',
         recommendation: 'Plan 2-3 easy/rest days. Ramp training gradually (< 10% weekly increase)',
       };
-    } else if (acwr > 1.3) {
-      return {
+    } else if (acwr > thresholds.overreaching) {
+      result = {
         status: 'overreaching',
         description: 'Heavy training block — functional overreaching',
         recommendation: 'Recovery day soon. This is fine short-term but don\'t sustain it for more than a week',
       };
     } else if (acwr > 1.0) {
-      return {
+      result = {
         status: 'productive',
         description: 'In the sweet spot — building fitness effectively',
         recommendation: 'This is where gains happen. Continue training as planned, ensure good recovery between hard days',
       };
     } else if (acwr > 0.8) {
-      return {
+      result = {
         status: 'optimal',
         description: 'Balanced training and recovery',
         recommendation: 'Good maintenance zone. Ready for harder efforts if you want to push',
       };
     } else if (ctl > 40 && acwr < 0.5) {
-      return {
+      result = {
         status: 'fresh',
         description: 'Extended rest — fitness may start to fade',
         recommendation: 'Time to get back to structured training before losing gains',
       };
     } else {
-      return {
+      result = {
         status: 'fresh',
         description: 'Well-rested and ready for hard efforts',
         recommendation: 'Good time for high-intensity training, races, or FTP tests',
       };
     }
+
+    // RPE override: subjective feedback trumps pure math
+    if (context?.recentRPE && context.recentRPE.count >= 3) {
+      const { avgRPE } = context.recentRPE;
+
+      if (avgRPE <= 2.5 && (result.status === 'overtraining' || result.status === 'overreaching')) {
+        // Athlete handling it well — downgrade severity
+        if (result.status === 'overtraining') {
+          result = {
+            status: 'overreaching',
+            description: 'Training load is elevated but you\'re responding well',
+            recommendation: 'Keep monitoring how you feel. A recovery day this week would be smart insurance',
+          };
+        } else {
+          result = {
+            status: 'productive',
+            description: 'Heavy week but you\'re handling it well based on your feedback',
+            recommendation: 'Your body is adapting. Continue as planned but don\'t ignore early signs of fatigue',
+          };
+        }
+      } else if (avgRPE >= 4.0 && (result.status === 'productive' || result.status === 'optimal')) {
+        // Athlete struggling more than numbers suggest — upgrade severity
+        if (result.status === 'productive') {
+          result = {
+            status: 'overreaching',
+            description: 'Your effort ratings suggest you\'re working harder than the numbers show',
+            recommendation: 'Consider an extra recovery day. High perceived effort with moderate load can signal accumulated fatigue',
+          };
+        } else {
+          result = {
+            status: 'productive',
+            description: 'Training load is moderate but your effort ratings are running high',
+            recommendation: 'Pay attention to recovery quality. If this trend continues, scale back intensity',
+          };
+        }
+      }
+    }
+
+    // Readiness modifier: sleep + feeling check-in
+    if (context?.readiness) {
+      const { sleepScore, feelingScore } = context.readiness;
+
+      if (sleepScore >= 7 && feelingScore >= 7 && result.status === 'overreaching') {
+        result = {
+          status: 'productive',
+          description: result.description + ' — well-rested so this load is manageable',
+          recommendation: 'You\'re sleeping well and feeling good. Your body can handle this training block',
+        };
+      } else if (sleepScore <= 4 && feelingScore <= 4 && result.status === 'productive') {
+        result = {
+          status: 'overreaching',
+          description: result.description + ' — poor sleep and fatigue suggest more recovery needed',
+          recommendation: 'Despite moderate training load, your body signals need rest. Prioritize sleep and consider an easy day',
+        };
+      }
+    }
+
+    return result;
   },
 
   /**
@@ -280,14 +360,50 @@ export const trainingLoadService = {
       // Store metrics
       await this.storeMetrics(athleteId, new Date(), load);
 
-      // Get training status using ACWR (relative to individual fitness)
-      const status = this.determineStatus(load.ctl, load.atl, load.tsb);
+      // Fetch context for smarter status determination
+      const [athleteResult, rpeResult, checkInResult] = await Promise.all([
+        supabaseAdmin
+          .from('athletes')
+          .select('experience_level')
+          .eq('id', athleteId)
+          .single(),
+        supabaseAdmin
+          .from('strava_activities')
+          .select('perceived_effort')
+          .eq('athlete_id', athleteId)
+          .not('perceived_effort', 'is', null)
+          .order('start_date', { ascending: false })
+          .limit(10),
+        supabaseAdmin
+          .from('daily_metrics')
+          .select('sleep_score, feeling_score')
+          .eq('athlete_id', athleteId)
+          .order('date', { ascending: false })
+          .limit(1),
+      ]);
+
+      const experienceLevel = athleteResult.data?.experience_level || null;
+
+      const rpeData = rpeResult.data;
+      const recentRPE = rpeData && rpeData.length >= 3
+        ? { avgRPE: rpeData.reduce((sum: number, r: any) => sum + r.perceived_effort, 0) / rpeData.length, count: rpeData.length }
+        : null;
+
+      const checkIn = checkInResult.data?.[0];
+      const readiness = checkIn?.sleep_score && checkIn?.feeling_score
+        ? { sleepScore: checkIn.sleep_score, feelingScore: checkIn.feeling_score }
+        : null;
+
+      // Get training status using ACWR (relative to individual fitness) with context
+      const status = this.determineStatus(load.ctl, load.atl, load.tsb, { experienceLevel, recentRPE, readiness });
 
       return {
         ctl: load.ctl,
         atl: load.atl,
         tsb: load.tsb,
+        status: status.status,
         form_status: status.description,
+        recommendation: status.recommendation,
         last_updated: new Date().toISOString(),
       };
     } catch (error) {
