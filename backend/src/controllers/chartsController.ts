@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { weeklyMetricsService } from '../services/weeklyMetricsService';
+import { supabaseAdmin } from '../utils/supabase';
 
 export const chartsController = {
   async getWeeklyData(req: AuthRequest, res: Response) {
@@ -11,7 +12,16 @@ export const chartsController = {
       }
 
       const weeks = parseInt(req.query.weeks as string) || 6;
-      const data = await weeklyMetricsService.getWeeklyData(athleteId, weeks);
+
+      // Fetch athlete timezone
+      const { data: athlete } = await supabaseAdmin
+        .from('athletes')
+        .select('timezone')
+        .eq('id', athleteId)
+        .single();
+
+      const tz = athlete?.timezone || 'America/Los_Angeles';
+      const data = await weeklyMetricsService.getWeeklyData(athleteId, weeks, tz);
 
       res.json(data);
     } catch (error) {

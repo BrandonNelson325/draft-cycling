@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { supabaseAdmin } from '../utils/supabase';
+import { weekStartInTimezone, monthStartInTimezone, localDayToUTCRange, todayInTimezone } from '../utils/timezone';
 
 export const getMetrics = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -10,39 +11,58 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     const period = (req.query.period as string) || 'week'; // week, month, year, all
-    const now = new Date();
-    let startDate: Date;
+
+    // Fetch athlete timezone
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('timezone')
+      .eq('id', req.user.id)
+      .single();
+
+    const tz = athlete?.timezone || 'America/Los_Angeles';
+
+    let startDateISO: string;
 
     switch (period) {
       case 'week': {
-        // Current week: Monday to Sunday
-        const day = now.getDay(); // 0=Sun, 1=Mon, ...
-        const diffToMonday = day === 0 ? 6 : day - 1;
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - diffToMonday);
-        startDate.setHours(0, 0, 0, 0);
+        const mondayLocal = weekStartInTimezone(tz);
+        const { start } = localDayToUTCRange(mondayLocal, tz);
+        startDateISO = start;
         break;
       }
       case 'month': {
-        // Current calendar month: 1st of the month
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        const monthStart = monthStartInTimezone(tz);
+        const { start } = localDayToUTCRange(monthStart, tz);
+        startDateISO = start;
         break;
       }
-      case '8weeks':
-        startDate = new Date(now.getTime() - 56 * 24 * 60 * 60 * 1000);
+      case '8weeks': {
+        const today = todayInTimezone(tz);
+        const [y, m, d] = today.split('-').map(Number);
+        const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+        date.setUTCDate(date.getUTCDate() - 56);
+        const dateStr = date.toISOString().split('T')[0];
+        const { start } = localDayToUTCRange(dateStr, tz);
+        startDateISO = start;
         break;
-      case 'year':
-        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      }
+      case 'year': {
+        const today = todayInTimezone(tz);
+        const [y, m, d] = today.split('-').map(Number);
+        const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+        date.setUTCDate(date.getUTCDate() - 365);
+        const dateStr = date.toISOString().split('T')[0];
+        const { start } = localDayToUTCRange(dateStr, tz);
+        startDateISO = start;
         break;
+      }
       case 'all':
-        startDate = new Date(0); // Beginning of time
+        startDateISO = new Date(0).toISOString();
         break;
       default: {
-        const defaultDay = now.getDay();
-        const defaultDiff = defaultDay === 0 ? 6 : defaultDay - 1;
-        startDate = new Date(now);
-        startDate.setDate(now.getDate() - defaultDiff);
-        startDate.setHours(0, 0, 0, 0);
+        const mondayLocal = weekStartInTimezone(tz);
+        const { start } = localDayToUTCRange(mondayLocal, tz);
+        startDateISO = start;
       }
     }
 
@@ -51,7 +71,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', req.user.id)
-      .gte('start_date', startDate.toISOString())
+      .gte('start_date', startDateISO)
       .order('start_date', { ascending: false });
 
     if (error) {
@@ -95,7 +115,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
       .from('power_curves')
       .select('*')
       .eq('athlete_id', req.user.id)
-      .gte('created_at', startDate.toISOString())
+      .gte('created_at', startDateISO)
       .order('power_5sec', { ascending: false })
       .limit(1);
 
@@ -114,7 +134,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
         .from('power_curves')
         .select('power_5sec, power_1min, power_3min, power_5min, power_10min, power_20min')
         .eq('athlete_id', req.user.id)
-        .gte('created_at', startDate.toISOString());
+        .gte('created_at', startDateISO);
 
       if (allCurves) {
         powerPRs = {

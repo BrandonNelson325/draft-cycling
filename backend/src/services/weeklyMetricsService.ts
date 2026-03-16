@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../utils/supabase';
+import { utcToLocalDate, mondayOfWeek } from '../utils/timezone';
 
 interface WeeklyData {
   week_start: string;
@@ -16,7 +17,7 @@ interface DailyFitnessData {
 }
 
 export const weeklyMetricsService = {
-  async getWeeklyData(athleteId: string, weeks: number = 6): Promise<WeeklyData[]> {
+  async getWeeklyData(athleteId: string, weeks: number = 6, tz: string = 'America/Los_Angeles'): Promise<WeeklyData[]> {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - (weeks * 7));
 
@@ -31,16 +32,12 @@ export const weeklyMetricsService = {
       throw new Error(`Failed to fetch weekly data: ${error.message}`);
     }
 
-    // Group by week
+    // Group by week using athlete's local timezone
     const weeklyMap = new Map<string, WeeklyData>();
 
     data.forEach((activity: any) => {
-      const date = new Date(activity.start_date);
-      const weekStart = new Date(date);
-      const day = date.getDay(); // 0=Sun, 1=Mon, ...
-      const diffToMonday = day === 0 ? 6 : day - 1;
-      weekStart.setDate(date.getDate() - diffToMonday); // Start of week (Monday)
-      const weekKey = weekStart.toISOString().split('T')[0];
+      const localDate = utcToLocalDate(activity.start_date, tz);
+      const weekKey = mondayOfWeek(localDate);
 
       if (!weeklyMap.has(weekKey)) {
         weeklyMap.set(weekKey, {

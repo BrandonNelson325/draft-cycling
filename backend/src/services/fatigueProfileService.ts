@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
+import { utcToLocalDate, mondayOfWeek, todayInTimezone } from '../utils/timezone';
 
 export interface RampRate {
   percentage: number;
@@ -32,37 +33,29 @@ export interface FatigueProfile {
   hardEasyPattern: HardEasyPattern | null;
 }
 
-function getISOWeekKey(date: Date): string {
-  // Get Monday-based ISO week key as "YYYY-WXX"
-  const d = new Date(date);
-  d.setHours(0, 0, 0, 0);
-  // Adjust to Monday (ISO week starts Monday)
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  d.setDate(diff);
-  const year = d.getFullYear();
-  const jan1 = new Date(year, 0, 1);
-  const weekNum = Math.ceil(((d.getTime() - jan1.getTime()) / 86400000 + jan1.getDay() + 1) / 7);
-  return `${year}-W${String(weekNum).padStart(2, '0')}`;
+function getWeekKey(utcDateStr: string, tz: string): string {
+  // Use athlete's local date to determine which Monday-based week this falls in
+  const localDate = utcToLocalDate(utcDateStr, tz);
+  return mondayOfWeek(localDate); // Returns "YYYY-MM-DD" of Monday
 }
 
-function getCurrentWeekKey(): string {
-  return getISOWeekKey(new Date());
+function getCurrentWeekKey(tz: string): string {
+  const today = todayInTimezone(tz);
+  return mondayOfWeek(today);
 }
 
-function computeRampRate(activities: any[]): RampRate | null {
-  // Group by ISO week
+function computeRampRate(activities: any[], tz: string): RampRate | null {
+  // Group by week using athlete's local timezone
   const weeklyTSS = new Map<string, number>();
   for (const a of activities) {
-    const date = new Date(a.start_date);
-    const weekKey = getISOWeekKey(date);
+    const weekKey = getWeekKey(a.start_date, tz);
     weeklyTSS.set(weekKey, (weeklyTSS.get(weekKey) || 0) + (a.tss || 0));
   }
 
   // Sort weeks chronologically
   const sortedWeeks = Array.from(weeklyTSS.entries()).sort((a, b) => a[0].localeCompare(b[0]));
 
-  const currentWeekKey = getCurrentWeekKey();
+  const currentWeekKey = getCurrentWeekKey(tz);
   // Separate current partial week from complete weeks
   const completeWeeks = sortedWeeks.filter(([key]) => key !== currentWeekKey);
   const currentPartialWeekTSS = weeklyTSS.get(currentWeekKey) || 0;
@@ -96,7 +89,7 @@ function computeRampRate(activities: any[]): RampRate | null {
   };
 }
 
-function computeVolumeProfile(activities: any[]): VolumeProfile | null {
+function computeVolumeProfile(activities: any[], tz: string = 'America/Los_Angeles'): VolumeProfile | null {
   if (activities.length === 0) return null;
 
   // Use last 6 weeks of data
@@ -110,13 +103,13 @@ function computeVolumeProfile(activities: any[]): VolumeProfile | null {
 
   if (recentActivities.length === 0) return null;
 
-  // Count unique ride days
+  // Count unique ride days (using athlete's local timezone)
   const rideDays = new Set<string>();
   let totalHours = 0;
   let totalTSS = 0;
 
   for (const a of recentActivities) {
-    const dateStr = (a.start_date).split('T')[0];
+    const dateStr = utcToLocalDate(a.start_date, tz);
     rideDays.add(dateStr);
     totalHours += (a.moving_time_seconds || 0) / 3600;
     totalTSS += a.tss || 0;
@@ -142,17 +135,19 @@ function computeVolumeProfile(activities: any[]): VolumeProfile | null {
   return { avgRideDaysPerWeek, avgHoursPerWeek, avgTSSPerWeek, avgTSSPerRide, pattern, description };
 }
 
-function computeHardEasyPattern(activities: any[], ftp: number | null): HardEasyPattern | null {
+function computeHardEasyPattern(activities: any[], ftp: number | null, tz: string): HardEasyPattern | null {
   if (!ftp || ftp === 0) return null;
 
   // Build a day-by-day map for the last 14 days
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const todayStr = todayInTimezone(tz);
+  const [ty, tm, td] = todayStr.split('-').map(Number);
+  const today = new Date(Date.UTC(ty, tm - 1, td, 12, 0, 0));
   const dayMap = new Map<string, { tss: number; avgWatts: number }>();
 
   for (const a of activities) {
-    const dateStr = (a.start_date).split('T')[0];
-    const date = new Date(dateStr + 'T12:00:00');
+    const dateStr = utcToLocalDate(a.start_date, tz);
+    const [dy, dm, dd] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(dy, dm - 1, dd, 12, 0, 0));
     const daysAgo = Math.round((today.getTime() - date.getTime()) / 86400000);
     if (daysAgo < 0 || daysAgo > 13) continue;
 
@@ -177,7 +172,7 @@ function computeHardEasyPattern(activities: any[], ftp: number | null): HardEasy
 
   for (let i = 13; i >= 0; i--) {
     const d = new Date(today);
-    d.setDate(d.getDate() - i);
+    d.setUTCDate(d.getUTCDate() - i);
     const dateStr = d.toISOString().split('T')[0];
     const dayData = dayMap.get(dateStr);
 
@@ -234,7 +229,7 @@ export const fatigueProfileService = {
       eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
 
       const [{ data: athlete }, { data: activities }] = await Promise.all([
-        supabaseAdmin.from('athletes').select('ftp').eq('id', athleteId).single(),
+        supabaseAdmin.from('athletes').select('ftp, timezone').eq('id', athleteId).single(),
         supabaseAdmin
           .from('strava_activities')
           .select('start_date, moving_time_seconds, average_watts, tss')
@@ -246,11 +241,12 @@ export const fatigueProfileService = {
       if (!activities || activities.length === 0) return null;
 
       const ftp = athlete?.ftp || null;
+      const tz = athlete?.timezone || 'America/Los_Angeles';
 
       return {
-        rampRate: computeRampRate(activities),
-        volumeProfile: computeVolumeProfile(activities),
-        hardEasyPattern: computeHardEasyPattern(activities, ftp),
+        rampRate: computeRampRate(activities, tz),
+        volumeProfile: computeVolumeProfile(activities, tz),
+        hardEasyPattern: computeHardEasyPattern(activities, ftp, tz),
       };
     } catch (error) {
       logger.error('Error computing fatigue profile:', error);

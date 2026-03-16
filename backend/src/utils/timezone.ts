@@ -10,6 +10,48 @@ export function todayInTimezone(tz: string): string {
 }
 
 /**
+ * Convert a UTC ISO date string to a local YYYY-MM-DD in the given timezone.
+ * Useful for grouping UTC-stored activities by their local calendar day.
+ */
+export function utcToLocalDate(utcDateStr: string, tz: string): string {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date(utcDateStr));
+  } catch {
+    return new Date(utcDateStr).toISOString().split('T')[0];
+  }
+}
+
+/**
+ * Get the Monday (week start) for a local YYYY-MM-DD date string.
+ * Returns YYYY-MM-DD of the Monday for that week (Mon–Sun).
+ */
+export function mondayOfWeek(localDateStr: string): string {
+  // Parse as local noon to avoid DST issues
+  const [y, m, d] = localDateStr.split('-').map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d, 12, 0, 0));
+  const day = date.getUTCDay(); // 0=Sun, 1=Mon, ...
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  date.setUTCDate(date.getUTCDate() - diffToMonday);
+  return date.toISOString().split('T')[0];
+}
+
+/**
+ * Get the Monday of the current week in the athlete's timezone.
+ */
+export function weekStartInTimezone(tz: string): string {
+  const today = todayInTimezone(tz);
+  return mondayOfWeek(today);
+}
+
+/**
+ * Get the 1st of the current month in the athlete's timezone.
+ */
+export function monthStartInTimezone(tz: string): string {
+  const today = todayInTimezone(tz);
+  return today.substring(0, 8) + '01';
+}
+
+/**
  * Convert a local date (YYYY-MM-DD) + timezone into a UTC start/end range.
  *
  * Example: localDayToUTCRange('2026-03-04', 'America/Denver')
