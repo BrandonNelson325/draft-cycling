@@ -251,7 +251,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { full_name, ftp, weight_kg, unit_system, display_mode, push_notifications_enabled, morning_checkin_time, timezone, max_hr, resting_hr, date_of_birth } = req.body;
+    const { full_name, ftp, weight_kg, unit_system, display_mode, push_notifications_enabled, morning_checkin_time, timezone, max_hr, resting_hr, date_of_birth, experience_level, weekly_training_hours } = req.body;
 
     const updateData: any = { updated_at: new Date().toISOString() };
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -265,6 +265,8 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     if (max_hr !== undefined) updateData.max_hr = max_hr;
     if (resting_hr !== undefined) updateData.resting_hr = resting_hr;
     if (date_of_birth !== undefined) updateData.date_of_birth = date_of_birth;
+    if (experience_level !== undefined) updateData.experience_level = experience_level;
+    if (weekly_training_hours !== undefined) updateData.weekly_training_hours = weekly_training_hours;
 
     const { data: athlete, error } = await supabaseAdmin
       .from('athletes')

@@ -31,6 +31,12 @@ export function ProfileEditForm() {
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(
     user?.display_mode || 'advanced'
   );
+  const [experienceLevel, setExperienceLevel] = useState<'beginner' | 'intermediate' | 'advanced'>(
+    user?.experience_level || 'intermediate'
+  );
+  const [weeklyHours, setWeeklyHours] = useState(
+    user?.weekly_training_hours?.toString() || ''
+  );
   const [timezone, setTimezone] = useState(
     user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
   );
@@ -50,7 +56,7 @@ export function ProfileEditForm() {
     setMessage(null);
 
     try {
-      const updates: { full_name?: string; ftp?: number; weight_kg?: number; unit_system?: 'metric' | 'imperial'; display_mode?: 'simple' | 'advanced' } = {};
+      const updates: Record<string, any> = {};
 
       if (fullName !== user?.full_name) {
         updates.full_name = fullName;
@@ -76,6 +82,15 @@ export function ProfileEditForm() {
 
       if (displayMode !== user?.display_mode) {
         updates.display_mode = displayMode;
+      }
+
+      if (experienceLevel !== user?.experience_level) {
+        updates.experience_level = experienceLevel;
+      }
+
+      const weeklyHoursNum = parseFloat(weeklyHours);
+      if (!isNaN(weeklyHoursNum) && weeklyHoursNum !== user?.weekly_training_hours) {
+        updates.weekly_training_hours = weeklyHoursNum;
       }
 
       if (timezone !== user?.timezone) {
@@ -256,6 +271,59 @@ export function ProfileEditForm() {
             <span className="text-sm">Advanced — full details</span>
           </label>
         </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Experience Level</label>
+        <p className="text-xs text-muted-foreground mb-2">
+          How long you've been cycling with structured training
+        </p>
+        <div className="flex gap-2">
+          {([
+            { value: 'beginner', label: 'Beginner', desc: '0-2 years' },
+            { value: 'intermediate', label: 'Intermediate', desc: '2-5 years' },
+            { value: 'advanced', label: 'Advanced', desc: '5+ years' },
+          ] as const).map((opt) => (
+            <label
+              key={opt.value}
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-md border cursor-pointer transition-colors ${
+                experienceLevel === opt.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-input hover:border-muted-foreground'
+              }`}
+            >
+              <input
+                type="radio"
+                name="experienceLevel"
+                value={opt.value}
+                checked={experienceLevel === opt.value}
+                onChange={(e) => setExperienceLevel(e.target.value as 'beginner' | 'intermediate' | 'advanced')}
+                className="sr-only"
+              />
+              <span className="text-sm font-medium">{opt.label}</span>
+              <span className="text-xs text-muted-foreground">{opt.desc}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="weeklyHours" className="block text-sm font-medium mb-2">
+          Weekly Training Hours
+        </label>
+        <p className="text-xs text-muted-foreground mb-2">
+          How many hours per week you can commit to riding
+        </p>
+        <Input
+          id="weeklyHours"
+          type="number"
+          value={weeklyHours}
+          onChange={(e) => setWeeklyHours(e.target.value)}
+          placeholder="e.g. 8"
+          min="1"
+          max="30"
+          step="0.5"
+        />
       </div>
 
       <div>

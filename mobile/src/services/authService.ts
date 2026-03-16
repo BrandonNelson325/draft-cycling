@@ -66,6 +66,8 @@ export const authService = {
     weight_kg?: number;
     unit_system?: 'metric' | 'imperial';
     display_mode?: 'simple' | 'advanced';
+    experience_level?: 'beginner' | 'intermediate' | 'advanced';
+    weekly_training_hours?: number;
     push_notifications_enabled?: boolean;
     morning_checkin_time?: string;
     timezone?: string;

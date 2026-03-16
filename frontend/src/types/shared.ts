@@ -8,6 +8,8 @@ export interface Athlete {
   weight_kg?: number;
   unit_system?: 'metric' | 'imperial';
   display_mode?: 'simple' | 'advanced';
+  experience_level?: 'beginner' | 'intermediate' | 'advanced';
+  weekly_training_hours?: number;
   timezone?: string;
   push_token?: string;
   push_notifications_enabled?: boolean;

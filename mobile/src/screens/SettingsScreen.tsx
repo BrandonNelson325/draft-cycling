@@ -53,6 +53,10 @@ export default function SettingsScreen({ navigation }: any) {
   const [restingHr, setRestingHr] = useState(String(user?.resting_hr || ''));
   const [dateOfBirth, setDateOfBirth] = useState(user?.date_of_birth || '');
   const [displayMode, setDisplayMode] = useState<'simple' | 'advanced'>(user?.display_mode || 'advanced');
+  const [experienceLevel, setExperienceLevel] = useState<'beginner' | 'intermediate' | 'advanced'>(
+    user?.experience_level || 'intermediate'
+  );
+  const [weeklyHours, setWeeklyHours] = useState(String(user?.weekly_training_hours || ''));
   const [timezone, setTimezone] = useState(
     user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
   );
@@ -94,6 +98,8 @@ export default function SettingsScreen({ navigation }: any) {
         weight_kg: weightMetric ? Math.round(weightMetric * 10) / 10 : undefined,
         unit_system: unitSystem,
         display_mode: displayMode,
+        experience_level: experienceLevel,
+        weekly_training_hours: weeklyHours ? Number(weeklyHours) : undefined,
         timezone,
         max_hr: maxHr ? Number(maxHr) : undefined,
         resting_hr: restingHr ? Number(restingHr) : undefined,
@@ -350,6 +356,33 @@ export default function SettingsScreen({ navigation }: any) {
             ))}
           </View>
 
+          <Label>Experience Level</Label>
+          <Text style={styles.hint}>How long you've been doing structured training</Text>
+          <View style={styles.segmented}>
+            {(['beginner', 'intermediate', 'advanced'] as const).map(lv => (
+              <TouchableOpacity
+                key={lv}
+                style={[styles.seg, experienceLevel === lv && styles.segActive]}
+                onPress={() => setExperienceLevel(lv)}
+              >
+                <Text style={[styles.segText, experienceLevel === lv && styles.segTextActive]}>
+                  {lv.charAt(0).toUpperCase() + lv.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
+          <Label>Weekly Training Hours</Label>
+          <Text style={styles.hint}>Hours per week you can commit to riding</Text>
+          <TextInput
+            style={styles.input}
+            value={weeklyHours}
+            onChangeText={setWeeklyHours}
+            placeholder="e.g. 8"
+            placeholderTextColor="#475569"
+            keyboardType="decimal-pad"
+          />
+
           <Label>Timezone</Label>
           <TouchableOpacity
             style={styles.input}
@@ -582,6 +615,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#94a3b8',
+    marginBottom: -4,
+  },
+  hint: {
+    fontSize: 11,
+    color: '#64748b',
     marginBottom: -4,
   },
   input: {
