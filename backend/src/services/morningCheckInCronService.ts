@@ -1,7 +1,8 @@
 import cron from 'node-cron';
 import { supabaseAdmin } from '../utils/supabase';
-import { sendMorningCheckInNotification } from './pushNotificationService';
+import { sendMorningCheckInNotification, sendMorningCheckInReminder } from './pushNotificationService';
 import { logger } from '../utils/logger';
+import { todayInTimezone } from '../utils/timezone';
 
 /**
  * Returns the current local time as "HH:MM" for the given IANA timezone.
@@ -25,6 +26,30 @@ function currentLocalHHMM(timezone: string): string {
   }
 }
 
+/**
+ * Add hours to a "HH:MM" string, returning a new "HH:MM" string.
+ */
+function addHoursToHHMM(hhmm: string, hours: number): string {
+  const [h, m] = hhmm.split(':').map(Number);
+  const totalMinutes = h * 60 + m + hours * 60;
+  const newH = Math.floor(totalMinutes / 60) % 24;
+  const newM = totalMinutes % 60;
+  return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+}
+
+/**
+ * Check if athlete has completed their daily check-in for today.
+ */
+async function hasCheckedInToday(athleteId: string, todayDate: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('daily_metrics')
+    .select('check_in_completed')
+    .eq('athlete_id', athleteId)
+    .eq('date', todayDate)
+    .single();
+  return !!data?.check_in_completed;
+}
+
 export function startMorningCheckInCron() {
   // Runs every minute
   cron.schedule('* * * * *', async () => {
@@ -32,7 +57,7 @@ export function startMorningCheckInCron() {
       // Find athletes with push enabled and a morning check-in time set
       const { data: athletes, error } = await supabaseAdmin
         .from('athletes')
-        .select('id, morning_checkin_time, timezone')
+        .select('id, morning_checkin_time, timezone, morning_notif_sent_date, morning_reminder_sent_date')
         .eq('push_notifications_enabled', true)
         .not('push_token', 'is', null)
         .not('morning_checkin_time', 'is', null);
@@ -45,15 +70,45 @@ export function startMorningCheckInCron() {
       if (!athletes || athletes.length === 0) return;
 
       for (const athlete of athletes) {
-        // morning_checkin_time is a TIME string like "07:00:00" — compare HH:MM portion
         const checkinHHMM = (athlete.morning_checkin_time as string).slice(0, 5);
         const tz = (athlete.timezone as string) || 'UTC';
         const localNow = currentLocalHHMM(tz);
-        if (checkinHHMM === localNow) {
+        const todayDate = todayInTimezone(tz);
+        const alreadySentToday = athlete.morning_notif_sent_date === todayDate;
+        const alreadyRemindedToday = athlete.morning_reminder_sent_date === todayDate;
+
+        // --- Initial notification: send once when time matches ---
+        if (!alreadySentToday && checkinHHMM === localNow) {
           try {
             await sendMorningCheckInNotification(athlete.id);
+            // Mark as sent for today
+            await supabaseAdmin
+              .from('athletes')
+              .update({ morning_notif_sent_date: todayDate })
+              .eq('id', athlete.id);
           } catch (err) {
             logger.error(`[MorningCron] Failed to notify athlete ${athlete.id}:`, err);
+          }
+          continue;
+        }
+
+        // --- Reminder: 4 hours after initial, if not completed and not yet reminded ---
+        if (alreadySentToday && !alreadyRemindedToday) {
+          const reminderHHMM = addHoursToHHMM(checkinHHMM, 4);
+          if (reminderHHMM === localNow) {
+            try {
+              // Check if they already filled it out
+              const completed = await hasCheckedInToday(athlete.id, todayDate);
+              if (completed) continue;
+
+              await sendMorningCheckInReminder(athlete.id);
+              await supabaseAdmin
+                .from('athletes')
+                .update({ morning_reminder_sent_date: todayDate })
+                .eq('id', athlete.id);
+            } catch (err) {
+              logger.error(`[MorningCron] Failed to send reminder to athlete ${athlete.id}:`, err);
+            }
           }
         }
       }

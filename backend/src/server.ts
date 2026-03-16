@@ -25,6 +25,7 @@ import pushRoutes from './routes/push';
 import subscriptionRoutes from './routes/subscriptionRoutes';
 import { stravaCronService } from './services/stravaCronService';
 import { startMorningCheckInCron } from './services/morningCheckInCronService';
+import { startActivityReminderCron } from './services/activityReminderCronService';
 
 const app = express();
 
@@ -151,6 +152,9 @@ app.listen(config.port, () => {
 
   // Start morning check-in cron (runs every minute, fires push at configured time)
   startMorningCheckInCron();
+
+  // Start activity feedback reminder cron (runs every 5 minutes)
+  startActivityReminderCron();
 });
 
 export default app;

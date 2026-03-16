@@ -106,10 +106,19 @@ export class StravaCronService {
           }
         }
 
-        // Send push notification (once per sync batch, respects quiet hours)
+        // Send push notification (once per sync batch, tracks per-activity)
         if (result.newIds && result.newIds.length > 0) {
           try {
-            await sendRideCompletedNotification(athleteId);
+            // result.newIds are strava_activity_ids — look up DB row UUIDs
+            const { data: rows } = await supabaseAdmin
+              .from('strava_activities')
+              .select('id')
+              .eq('athlete_id', athleteId)
+              .in('strava_activity_id', result.newIds);
+            const dbIds = (rows || []).map(r => r.id);
+            if (dbIds.length > 0) {
+              await sendRideCompletedNotification(athleteId, dbIds);
+            }
           } catch (pushErr) {
             logger.error(`     ⚠️  Push notification failed for ${athleteName}:`, pushErr);
           }

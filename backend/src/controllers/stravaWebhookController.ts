@@ -177,10 +177,20 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
     // Invalidate cached suggestion so dashboard shows post-ride state
     clearSuggestionCache(athleteId);
 
-    // Send push notification
-    await sendRideCompletedNotification(athleteId).catch((err) =>
-      logger.warn('Push notification failed:', err)
-    );
+    // Send push notification and mark the activity as notified
+    // Fetch the DB row ID for this strava activity
+    const { data: activityRow } = await supabaseAdmin
+      .from('strava_activities')
+      .select('id')
+      .eq('strava_activity_id', stravaActivityId)
+      .eq('athlete_id', athleteId)
+      .single();
+
+    if (activityRow) {
+      await sendRideCompletedNotification(athleteId, [activityRow.id]).catch((err) =>
+        logger.warn('Push notification failed:', err)
+      );
+    }
 
     logger.debug(`✅ Successfully processed new activity: ${stravaActivityId}`);
   } catch (error) {
