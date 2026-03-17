@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, AppState } from 'react-native';
+import { ScrollView, StyleSheet, View, AppState, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -23,6 +23,14 @@ export default function DashboardScreen() {
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
   const activitySheetRef = useRef<BottomSheetModal>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setRefreshKey((k) => k + 1);
+    // Components will remount and refetch. Use a short delay to dismiss the spinner.
+    setTimeout(() => setRefreshing(false), 1000);
+  }, []);
 
   // Refresh when screen comes into focus (tab switch or app foreground)
   useFocusEffect(
@@ -58,6 +66,14 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor="#3b82f6"
+            colors={['#3b82f6']}
+          />
+        }
       >
         <CoachCard key={`coach-${refreshKey}`} />
         <MetricsCard />
