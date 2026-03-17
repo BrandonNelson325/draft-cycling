@@ -17,6 +17,7 @@ import { useNewActivities } from './src/hooks/useNewActivities';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import { useTokenRefresh } from './src/hooks/useTokenRefresh';
 import { useAuthStore } from './src/stores/useAuthStore';
+import ConnectionBanner from './src/components/ui/ConnectionBanner';
 
 const linking = {
   prefixes: ['cyclingcoach://', 'exp://'],
@@ -98,6 +99,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <ConnectionBanner />
         <BottomSheetModalProvider>
           <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="light" />
