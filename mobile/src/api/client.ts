@@ -105,8 +105,9 @@ apiClient.interceptors.response.use(
     // since checkSubscription is the only source of 403 in this codebase.
     if (error.response?.status === 403 && !isAuthEndpoint) {
       try {
-        // Dynamic import to avoid circular dependency (authService imports client)
-        const { authService } = await import('../services/authService');
+        // Lazy require to avoid circular dependency (authService imports client)
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const { authService } = require('../services/authService');
         await authService.getProfile();
       } catch {
         // If profile refresh also fails, the error still propagates to the screen

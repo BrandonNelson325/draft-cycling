@@ -47,7 +47,7 @@ export default function FTPEstimateCard() {
   }
 
   if (!estimate && !error) return null;
-  if (error) {
+  if (error || !estimate) {
     return (
       <Card>
         <Text style={styles.title}>FTP Estimate</Text>
