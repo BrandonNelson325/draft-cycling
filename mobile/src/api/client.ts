@@ -99,6 +99,20 @@ apiClient.interceptors.response.use(
       }
     }
 
+    // Handle 403 — subscription/beta expired.
+    // Refresh profile so RootNavigator can redirect to BetaAccessScreen.
+    // We treat ALL 403s from non-auth endpoints as subscription issues,
+    // since checkSubscription is the only source of 403 in this codebase.
+    if (error.response?.status === 403 && !isAuthEndpoint) {
+      try {
+        // Dynamic import to avoid circular dependency (authService imports client)
+        const { authService } = await import('../services/authService');
+        await authService.getProfile();
+      } catch {
+        // If profile refresh also fails, the error still propagates to the screen
+      }
+    }
+
     return Promise.reject(error);
   }
 );
