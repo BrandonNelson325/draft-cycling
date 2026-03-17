@@ -99,10 +99,10 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <ConnectionBanner />
         <BottomSheetModalProvider>
           <NavigationContainer ref={navigationRef} linking={linking}>
             <StatusBar style="light" />
+            <ConnectionBanner />
             <TokenRefreshGate />
             <RootNavigator />
             <AppModals />

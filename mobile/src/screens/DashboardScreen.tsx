@@ -76,10 +76,10 @@ export default function DashboardScreen() {
         }
       >
         <CoachCard key={`coach-${refreshKey}`} />
-        <MetricsCard />
-        <WeeklyVolumeChart />
-        <PowerCurveChart />
-        <FTPEstimateCard />
+        <MetricsCard key={`metrics-${refreshKey}`} />
+        <WeeklyVolumeChart key={`weekly-${refreshKey}`} />
+        <PowerCurveChart key={`power-${refreshKey}`} />
+        <FTPEstimateCard key={`ftp-${refreshKey}`} />
         <RecentActivities key={`activities-${refreshKey}`} onActivityPress={handleActivityPress} />
         <View style={styles.bottomPad} />
       </ScrollView>

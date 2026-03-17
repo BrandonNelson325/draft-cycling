@@ -1,11 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, AppState } from 'react-native';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
 
 export default function ConnectionBanner() {
   const [connected, setConnected] = useState(true);
-  const connectedRef = useRef(true);
 
   const checkConnection = async () => {
     try {
@@ -13,10 +12,8 @@ export default function ConnectionBanner() {
       const timeout = setTimeout(() => controller.abort(), 5000);
       const res = await fetch(`${API_URL}/health`, { signal: controller.signal });
       clearTimeout(timeout);
-      connectedRef.current = res.ok;
       setConnected(res.ok);
     } catch {
-      connectedRef.current = false;
       setConnected(false);
     }
   };

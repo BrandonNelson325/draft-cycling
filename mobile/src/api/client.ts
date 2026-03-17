@@ -103,7 +103,8 @@ apiClient.interceptors.response.use(
     // Refresh profile so RootNavigator can redirect to BetaAccessScreen.
     // We treat ALL 403s from non-auth endpoints as subscription issues,
     // since checkSubscription is the only source of 403 in this codebase.
-    if (error.response?.status === 403 && !isAuthEndpoint) {
+    if (error.response?.status === 403 && !isAuthEndpoint && !originalRequest._403Handled) {
+      originalRequest._403Handled = true;
       try {
         // Lazy require to avoid circular dependency (authService imports client)
         // eslint-disable-next-line @typescript-eslint/no-var-requires
