@@ -35,6 +35,7 @@ function buildPath(pts: { x: number; y: number }[]): string {
 export default function WeeklyVolumeChart() {
   const [data, setData] = useState<WeeklyData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
@@ -49,6 +50,7 @@ export default function WeeklyVolumeChart() {
       setLoading(false);
     }).catch((err) => {
       console.warn('[WeeklyVolumeChart] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
+      setError(true);
       setLoading(false);
     });
   }, [user?.id]);
@@ -58,6 +60,17 @@ export default function WeeklyVolumeChart() {
       <Card>
         <Text style={styles.title}>Weekly Volume</Text>
         <ActivityIndicator color="#3b82f6" style={{ marginVertical: 16 }} />
+      </Card>
+    );
+  }
+
+  if (!loading && error && data.length === 0) {
+    return (
+      <Card>
+        <Text style={styles.title}>Weekly Volume</Text>
+        <Text style={{ color: '#ef4444', fontSize: 13, marginVertical: 12 }}>
+          Unable to load chart data. Pull down to refresh.
+        </Text>
       </Card>
     );
   }

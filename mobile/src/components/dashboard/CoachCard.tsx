@@ -22,13 +22,16 @@ export default function CoachCard() {
   const [suggestion, setSuggestion] = useState<TodaySuggestion | null>(null);
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
+    let failed = 0;
     Promise.all([
-      dailyAnalysisService.getTodaySuggestion().catch(() => null),
-      trainingService.getTrainingStatus().catch(() => null),
+      dailyAnalysisService.getTodaySuggestion().catch(() => { failed++; return null; }),
+      trainingService.getTrainingStatus().catch(() => { failed++; return null; }),
     ]).then(([s, t]) => {
+      if (failed === 2) setError(true);
       setSuggestion(s);
       setTraining(t ?? null);
       setLoading(false);
@@ -39,6 +42,17 @@ export default function CoachCard() {
     return (
       <Card>
         <ActivityIndicator color="#3b82f6" style={{ marginVertical: 24 }} />
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <Text style={styles.title}>Training Status</Text>
+        <Text style={{ color: '#ef4444', fontSize: 13, marginTop: 8 }}>
+          Unable to load training data. Pull down to refresh.
+        </Text>
       </Card>
     );
   }

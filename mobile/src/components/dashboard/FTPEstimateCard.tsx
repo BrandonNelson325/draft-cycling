@@ -11,6 +11,7 @@ export default function FTPEstimateCard() {
   const units = getConversionUtils(user);
   const [estimate, setEstimate] = useState<{ estimated_ftp: number; confidence: number; based_on_rides: number } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [accepting, setAccepting] = useState(false);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ export default function FTPEstimateCard() {
       ftpService.getEstimate().then(e => {
         setEstimate(e);
         setLoading(false);
-      }).catch(() => setLoading(false))
+      }).catch(() => { setError(true); setLoading(false); })
     );
   }, []);
 
@@ -45,7 +46,17 @@ export default function FTPEstimateCard() {
     );
   }
 
-  if (!estimate) return null;
+  if (!estimate && !error) return null;
+  if (error) {
+    return (
+      <Card>
+        <Text style={styles.title}>FTP Estimate</Text>
+        <Text style={{ color: '#ef4444', fontSize: 13 }}>
+          Unable to load FTP estimate.
+        </Text>
+      </Card>
+    );
+  }
 
   const currentFtp = user?.ftp;
   const weightKg = user?.weight_kg;

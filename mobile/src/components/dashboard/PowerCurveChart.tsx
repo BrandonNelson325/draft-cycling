@@ -33,6 +33,7 @@ function buildPath(pts: { x: number; y: number }[]): string {
 export default function PowerCurveChart() {
   const [prs, setPrs] = useState<Record<string, number> | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const [period, setPeriod] = useState<'8weeks' | 'all'>('all');
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export default function PowerCurveChart() {
       setLoading(false);
     }).catch((err) => {
       console.warn('[PowerCurveChart] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
+      setError(true);
       setLoading(false);
     });
   }, [period]);
@@ -51,6 +53,17 @@ export default function PowerCurveChart() {
       <Card>
         <Text style={styles.title}>Power Curve</Text>
         <ActivityIndicator color="#3b82f6" style={{ marginVertical: 16 }} />
+      </Card>
+    );
+  }
+
+  if (!loading && error && !prs) {
+    return (
+      <Card>
+        <Text style={styles.title}>Power Curve</Text>
+        <Text style={{ color: '#ef4444', fontSize: 13, marginVertical: 12 }}>
+          Unable to load power data. Pull down to refresh.
+        </Text>
       </Card>
     );
   }

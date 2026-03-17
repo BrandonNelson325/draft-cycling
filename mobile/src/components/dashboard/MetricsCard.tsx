@@ -19,6 +19,7 @@ export default function MetricsCard() {
   const [period, setPeriod] = useState<Period>('week');
   const [data, setData] = useState<MetricsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
 
@@ -29,12 +30,14 @@ export default function MetricsCard() {
 
   const load = async () => {
     setLoading(true);
+    setError(false);
     try {
       const d = await metricsService.getMetrics(period);
       setData(d);
     } catch (err: any) {
       console.warn('[MetricsCard] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
       setData(null);
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -71,7 +74,7 @@ export default function MetricsCard() {
           <StatBox label="🍩 Burned" value={data.total_calories > 0 ? Math.round(data.total_calories / 280).toLocaleString() : '0'} subtitle={data.total_calories > 0 ? `${data.total_calories.toLocaleString()} cal` : undefined} />
         </View>
       ) : (
-        <Text style={styles.empty}>No data for this period</Text>
+        <Text style={[styles.empty, error && { color: '#ef4444' }]}>{error ? 'Unable to load metrics. Pull down to refresh.' : 'No data for this period'}</Text>
       )}
     </Card>
   );
