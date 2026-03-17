@@ -19,6 +19,7 @@ import { PostRideModal } from './components/modals/PostRideModal';
 import { WelcomeModal } from './components/modals/WelcomeModal';
 import { useDailyMorning } from './hooks/useDailyMorning';
 import { useNewActivities } from './hooks/useNewActivities';
+import { authService } from './services/authService';
 
 function ProtectedRoutes() {
   const user = useAuthStore((state) => state.user);
@@ -31,6 +32,11 @@ function ProtectedRoutes() {
   const navigateToChat = useCallback((message: string) => {
     navigate('/chat', { state: { initialMessage: message } });
   }, [navigate]);
+
+  // Refresh user profile on mount to sync subscription/beta status with server
+  useEffect(() => {
+    authService.getProfile().catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (user && !localStorage.getItem(`welcome_shown_${user.id}`)) {

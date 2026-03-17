@@ -100,6 +100,20 @@ class ApiClient {
         }
       }
 
+      // If forbidden (subscription expired), refresh profile so UI can redirect.
+      // Uses a self-referential call with retryCount=999 to prevent re-entry.
+      if (response.status === 403 && requireAuth && retryCount === 0) {
+        try {
+          const profileResult = await this.request<any>('/api/auth/me', { method: 'GET', requireAuth: true }, 999);
+          if (profileResult.data) {
+            const { useAuthStore } = await import('../stores/useAuthStore');
+            useAuthStore.getState().setUser(profileResult.data);
+          }
+        } catch {
+          // Non-fatal
+        }
+      }
+
       // Handle 204 No Content (successful delete with no body)
       if (response.status === 204) {
         return { data: undefined as T };
