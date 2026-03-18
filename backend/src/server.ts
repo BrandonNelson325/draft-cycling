@@ -23,9 +23,18 @@ import dailyCheckInRoutes from './routes/dailyCheckInRoutes';
 import activityFeedbackRoutes from './routes/activityFeedbackRoutes';
 import pushRoutes from './routes/push';
 import subscriptionRoutes from './routes/subscriptionRoutes';
+import { warmJwksCache } from './middleware/auth';
 import { stravaCronService } from './services/stravaCronService';
 import { startMorningCheckInCron } from './services/morningCheckInCronService';
 import { startActivityReminderCron } from './services/activityReminderCronService';
+
+// Catch unhandled errors so background tasks (crons, fire-and-forget) don't crash the server
+process.on('uncaughtException', (err) => {
+  logger.error('Uncaught exception:', err);
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('Unhandled rejection:', reason);
+});
 
 const app = express();
 
@@ -141,11 +150,14 @@ app.use('/api/subscription', subscriptionRoutes);
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Start server
-app.listen(config.port, () => {
+// Start server — warm JWKS cache before accepting traffic
+app.listen(config.port, async () => {
   logger.info(`🚴 AI Cycling Coach API running on port ${config.port}`);
   logger.info(`📍 Environment: ${config.nodeEnv}`);
   logger.info(`🌐 Frontend URL: ${config.frontendUrl}`);
+
+  // Pre-warm JWKS cache so the first ES256 request doesn't trigger a cold fetch
+  await warmJwksCache();
 
   // Start Strava auto-sync cron job
   stravaCronService.start();

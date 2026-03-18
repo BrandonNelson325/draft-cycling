@@ -12,37 +12,92 @@ export interface AuthRequest extends Request {
 }
 
 /**
- * Cache for Supabase JWKS public keys.
- * Fetched once on first request, refreshed every hour.
+ * JWKS cache with stale-while-revalidate and mutex to prevent thundering herd.
+ *
+ * - Only ONE fetch runs at a time (mutex). Concurrent requests wait for the result.
+ * - If the cache is stale but a refresh fails, the old keys are still served.
+ * - Fetch retries up to 3 times with backoff before giving up.
  */
 let jwksCache: Map<string, string> | null = null;
 let jwksFetchedAt = 0;
+let jwksFetchPromise: Promise<Map<string, string>> | null = null;
 const JWKS_CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
+async function fetchJwksWithRetry(): Promise<Map<string, string>> {
+  const jwksUrl = `${config.supabase.url}/auth/v1/.well-known/jwks.json`;
+
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(jwksUrl, { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`JWKS fetch failed: ${response.status}`);
+      }
+      const jwks = await response.json() as { keys: any[] };
+
+      const keys = new Map<string, string>();
+      for (const key of jwks.keys) {
+        const publicKey = crypto.createPublicKey({ key, format: 'jwk' });
+        const pem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
+        keys.set(key.kid || 'default', pem);
+      }
+
+      jwksCache = keys;
+      jwksFetchedAt = Date.now();
+      logger.debug(`JWKS loaded: ${keys.size} keys`);
+      return keys;
+    } catch (err: any) {
+      lastError = err;
+      logger.warn(`JWKS fetch attempt ${attempt + 1}/3 failed: ${err.message}`);
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, (attempt + 1) * 1000));
+      }
+    }
+  }
+
+  // All retries failed — return stale cache if available
+  if (jwksCache) {
+    logger.warn('JWKS refresh failed after 3 attempts, serving stale keys');
+    return jwksCache;
+  }
+
+  throw lastError || new Error('JWKS fetch failed after 3 attempts');
+}
+
 async function getJwksPublicKeys(): Promise<Map<string, string>> {
+  // Cache is fresh — return immediately
   if (jwksCache && Date.now() - jwksFetchedAt < JWKS_CACHE_TTL) {
     return jwksCache;
   }
 
-  const jwksUrl = `${config.supabase.url}/auth/v1/.well-known/jwks.json`;
-  const response = await fetch(jwksUrl);
-  if (!response.ok) {
-    throw new Error(`JWKS fetch failed: ${response.status}`);
-  }
-  const jwks = await response.json() as { keys: any[] };
-
-  const keys = new Map<string, string>();
-  for (const key of jwks.keys) {
-    // Convert JWK to PEM public key
-    const publicKey = crypto.createPublicKey({ key, format: 'jwk' });
-    const pem = publicKey.export({ type: 'spki', format: 'pem' }) as string;
-    keys.set(key.kid || 'default', pem);
+  // Mutex: if a fetch is already in progress, wait for it instead of starting another
+  if (jwksFetchPromise) {
+    return jwksFetchPromise;
   }
 
-  jwksCache = keys;
-  jwksFetchedAt = Date.now();
-  logger.debug(`JWKS loaded: ${keys.size} keys`);
-  return keys;
+  // Start the fetch and let concurrent callers share the same promise
+  jwksFetchPromise = fetchJwksWithRetry().finally(() => {
+    jwksFetchPromise = null;
+  });
+
+  return jwksFetchPromise;
+}
+
+/**
+ * Pre-warm the JWKS cache at server startup so the first user request
+ * doesn't trigger a cold fetch.
+ */
+export async function warmJwksCache(): Promise<void> {
+  try {
+    await getJwksPublicKeys();
+    logger.info('JWKS cache warmed successfully');
+  } catch (err: any) {
+    logger.error('Failed to warm JWKS cache (will retry on first request):', err.message);
+  }
 }
 
 /**
