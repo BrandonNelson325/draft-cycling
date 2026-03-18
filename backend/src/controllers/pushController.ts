@@ -21,6 +21,15 @@ export const registerPushToken = async (req: AuthRequest, res: Response): Promis
       return;
     }
 
+    // Clear this push token from any OTHER athlete rows first.
+    // A device token belongs to one user — if someone tested multiple accounts
+    // on the same phone, the old account would still receive notifications.
+    await supabaseAdmin
+      .from('athletes')
+      .update({ push_token: null, push_notifications_enabled: false })
+      .eq('push_token', token)
+      .neq('id', req.user.id);
+
     const { error } = await supabaseAdmin
       .from('athletes')
       .update({

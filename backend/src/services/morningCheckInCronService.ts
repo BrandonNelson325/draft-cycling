@@ -80,8 +80,12 @@ export function startMorningCheckInCron() {
         // --- Initial notification: send once when time matches ---
         if (!alreadySentToday && checkinHHMM === localNow) {
           try {
-            await sendMorningCheckInNotification(athlete.id);
-            // Mark as sent for today
+            // Skip if they already completed the check-in (e.g., opened the app early)
+            const alreadyDone = await hasCheckedInToday(athlete.id, todayDate);
+            if (!alreadyDone) {
+              await sendMorningCheckInNotification(athlete.id);
+            }
+            // Mark as sent for today regardless, so we don't re-send
             await supabaseAdmin
               .from('athletes')
               .update({ morning_notif_sent_date: todayDate })
