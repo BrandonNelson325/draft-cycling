@@ -17,7 +17,7 @@ export type MainTabParamList = {
   Dashboard: undefined;
   Calendar: undefined;
   Chat: { initialMessage?: string } | undefined;
-  Workouts: undefined;
+  Plans: undefined;
   Settings: undefined;
 };
 

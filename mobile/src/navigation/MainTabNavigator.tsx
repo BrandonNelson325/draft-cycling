@@ -59,11 +59,11 @@ export default function MainTabNavigator() {
         }}
       />
       <Tab.Screen
-        name="Workouts"
+        name="Plans"
         component={WorkoutsScreen}
         options={{
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="barbell-outline" size={size} color={color} />
+            <Ionicons name="clipboard-outline" size={size} color={color} />
           ),
         }}
       />
