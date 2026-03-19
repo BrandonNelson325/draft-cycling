@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useParams, useLocation } from 'react-router-dom';
+import { useParams, useLocation, useNavigate } from 'react-router-dom';
 import toast, { Toaster } from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 import { useChatStore } from '../stores/useChatStore';
@@ -8,11 +8,18 @@ import { ChatInput } from '../components/chat/ChatInput';
 import { ConversationList } from '../components/chat/ConversationList';
 import { Button } from '../components/ui/button';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
+import { trainingPlanService } from '../services/trainingPlanService';
 
 function ChatPageContent() {
   const { conversationId } = useParams<{ conversationId?: string }>();
   const location = useLocation();
+  const navigate = useNavigate();
   const [showConversations, setShowConversations] = useState(false);
+  const [activePlan, setActivePlan] = useState<boolean>(false);
+
+  useEffect(() => {
+    trainingPlanService.getActivePlan().then(plan => setActivePlan(!!plan)).catch(() => {});
+  }, []);
 
   // Pre-filled message from morning modal (shown in input, not auto-sent)
   const initialMessage = (location.state as { initialMessage?: string } | null)?.initialMessage ?? '';
@@ -101,6 +108,17 @@ function ChatPageContent() {
     </div>
   );
 
+  const suggestedPrompt = !activePlan && activeMessages.length === 0 ? (
+    <div className="flex justify-center mt-2 mb-2">
+      <button
+        onClick={() => handleSendMessage('Help me pick a training plan')}
+        className="text-sm px-4 py-2 rounded-full border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors"
+      >
+        Help me pick a training plan
+      </button>
+    </div>
+  ) : null;
+
   return (
     <>
       <Toaster />
@@ -137,6 +155,15 @@ function ChatPageContent() {
               emptyState
             )}
             <div className="border-t border-border p-4">
+              {suggestedPrompt}
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => navigate('/plans')}
+                  className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                >
+                  Browse Plans
+                </button>
+              </div>
               <ChatInput
                 onSend={handleSendMessage}
                 disabled={loading}
@@ -173,6 +200,15 @@ function ChatPageContent() {
 
           <div className="border-t border-gray-200 p-6 bg-white">
             <div className="max-w-4xl mx-auto">
+              {suggestedPrompt}
+              <div className="flex items-center gap-2 mb-2">
+                <button
+                  onClick={() => navigate('/plans')}
+                  className="text-xs px-3 py-1.5 rounded-full bg-muted text-muted-foreground hover:bg-muted/80 transition-colors"
+                >
+                  Browse Plans
+                </button>
+              </div>
               <ChatInput
                 onSend={handleSendMessage}
                 disabled={loading}
