@@ -16,12 +16,14 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { useChatStore } from '../stores/useChatStore';
+import { trainingPlanService } from '../services/trainingPlanService';
 import MessageBubble from '../components/chat/MessageBubble';
 import LoadingDots from '../components/chat/LoadingDots';
 import type { MainTabScreenProps } from '../navigation/types';
 
 export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Chat'>) {
   const [inputText, setInputText] = useState('');
+  const [hasActivePlan, setHasActivePlan] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const sheetRef = useRef<BottomSheet>(null);
   const initialMessageSent = useRef(false);
@@ -43,6 +45,10 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   } = useChatStore();
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
+
+  useEffect(() => {
+    trainingPlanService.getActivePlan().then(plan => setHasActivePlan(!!plan)).catch(() => {});
+  }, []);
 
   // Load conversations on mount and resume the most recent
   useEffect(() => {
@@ -156,10 +162,30 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
               <MessageBubble role={item.role} content={item.content} />
             )}
             ListFooterComponent={loading ? <LoadingDots /> : null}
+            ListEmptyComponent={
+              !hasActivePlan && !loading ? (
+                <TouchableOpacity
+                  style={{ alignSelf: 'center', marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#334155' }}
+                  onPress={() => handleSend('Help me pick a training plan')}
+                >
+                  <Text style={{ color: '#94a3b8', fontSize: 14 }}>Help me pick a training plan</Text>
+                </TouchableOpacity>
+              ) : null
+            }
             contentContainerStyle={styles.messages}
             showsVerticalScrollIndicator={false}
           />
         )}
+
+        {/* Quick actions */}
+        <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingTop: 6 }}>
+          <TouchableOpacity
+            style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#1e293b', borderRadius: 16 }}
+            onPress={() => navigation.navigate('Plans')}
+          >
+            <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '500' }}>Browse Plans</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Input */}
         <View style={styles.inputRow}>
