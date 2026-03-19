@@ -13,6 +13,9 @@ import { workoutService, type Workout } from '../services/workoutService';
 import WorkoutDetailSheet from '../components/workout/WorkoutDetailSheet';
 import Badge from '../components/ui/Badge';
 import EmptyState from '../components/ui/EmptyState';
+import PlanTemplateList from '../components/plans/PlanTemplateList';
+import { trainingPlanService } from '../services/trainingPlanService';
+import type { TrainingPlan } from '../services/trainingPlanService';
 
 const TYPES = ['all', 'endurance', 'tempo', 'threshold', 'vo2max', 'sprint', 'recovery', 'custom'];
 
@@ -40,10 +43,16 @@ export default function WorkoutsScreen() {
   const [loading, setLoading] = useState(true);
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+  const [activeTab, setActiveTab] = useState<'plans' | 'workouts'>('plans');
+  const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    trainingPlanService.getActivePlan().then(setActivePlan).catch(() => {});
   }, []);
 
   const [error, setError] = useState<string | null>(null);
@@ -95,42 +104,68 @@ export default function WorkoutsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
-      {/* Type filter */}
-      <FlatList
-        data={TYPES}
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyExtractor={t => t}
-        style={styles.filterList}
-        contentContainerStyle={styles.filterContent}
-        renderItem={({ item: t }) => (
-          <TouchableOpacity
-            style={[styles.chip, typeFilter === t && styles.chipActive]}
-            onPress={() => setTypeFilter(t)}
-          >
-            <Text style={[styles.chipText, typeFilter === t && styles.chipTextActive]}>
-              {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        )}
-      />
+      {/* Tab bar */}
+      <View style={styles.tabBar}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'plans' && styles.tabActive]}
+          onPress={() => setActiveTab('plans')}
+        >
+          <Text style={[styles.tabText, activeTab === 'plans' && styles.tabTextActive]}>
+            Training Plans
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'workouts' && styles.tabActive]}
+          onPress={() => setActiveTab('workouts')}
+        >
+          <Text style={[styles.tabText, activeTab === 'workouts' && styles.tabTextActive]}>
+            Workouts
+          </Text>
+        </TouchableOpacity>
+      </View>
 
-      {loading ? (
-        <ActivityIndicator color="#3b82f6" style={{ marginTop: 40 }} />
+      {activeTab === 'plans' ? (
+        <PlanTemplateList activePlan={activePlan} />
       ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={w => w.id}
-          renderItem={renderItem}
-          contentContainerStyle={styles.list}
-          ListEmptyComponent={
-            <EmptyState
-              icon="barbell-outline"
-              title={error ? 'Error loading workouts' : 'No workouts found'}
-              subtitle={error || 'Create workouts by chatting with the AI coach.'}
+        <>
+          {/* Type filter */}
+          <FlatList
+            data={TYPES}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={t => t}
+            style={styles.filterList}
+            contentContainerStyle={styles.filterContent}
+            renderItem={({ item: t }) => (
+              <TouchableOpacity
+                style={[styles.chip, typeFilter === t && styles.chipActive]}
+                onPress={() => setTypeFilter(t)}
+              >
+                <Text style={[styles.chipText, typeFilter === t && styles.chipTextActive]}>
+                  {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+
+          {loading ? (
+            <ActivityIndicator color="#3b82f6" style={{ marginTop: 40 }} />
+          ) : (
+            <FlatList
+              data={filtered}
+              keyExtractor={w => w.id}
+              renderItem={renderItem}
+              contentContainerStyle={styles.list}
+              ListEmptyComponent={
+                <EmptyState
+                  icon="barbell-outline"
+                  title={error ? 'Error loading workouts' : 'No workouts found'}
+                  subtitle={error || 'Create workouts by chatting with the AI coach.'}
+                />
+              }
             />
-          }
-        />
+          )}
+        </>
       )}
 
       {/* Workout detail sheet */}
@@ -188,4 +223,27 @@ const styles = StyleSheet.create({
   cardDesc: { fontSize: 13, color: '#94a3b8', lineHeight: 18 },
   sheetBg: { backgroundColor: '#1e293b' },
   sheetHandle: { backgroundColor: '#475569' },
+  tabBar: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: '#1e293b',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  tabActive: {
+    borderBottomColor: '#3b82f6',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  tabTextActive: {
+    color: '#f1f5f9',
+  },
 });
