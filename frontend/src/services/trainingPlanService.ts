@@ -1,4 +1,5 @@
 import { api } from './api';
+import type { TrainingPlanTemplate } from '../types/shared';
 
 export interface TrainingWeek {
   week_number: number;
@@ -59,5 +60,16 @@ export const trainingPlanService = {
     if (error) {
       throw new Error(error.error || 'Failed to delete training plan');
     }
+  },
+
+  async getTemplates(filters?: { difficulty?: string; search?: string }): Promise<TrainingPlanTemplate[]> {
+    const params = new URLSearchParams();
+    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
+    if (filters?.search) params.set('search', filters.search);
+    const qs = params.toString();
+    const url = `/api/training-plans/templates${qs ? `?${qs}` : ''}`;
+    const { data, error } = await api.get<{ templates: TrainingPlanTemplate[] }>(url, true);
+    if (error || !data) return [];
+    return data.templates;
   },
 };

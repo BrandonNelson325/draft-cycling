@@ -147,3 +147,18 @@ export interface ApiError {
   error: string;
   details?: any;
 }
+
+export interface TrainingPlanTemplate {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  target_event: string | null;
+  difficulty_level: 'beginner' | 'intermediate' | 'advanced';
+  duration_weeks: number;
+  days_per_week: number;
+  hours_per_week_min: number;
+  hours_per_week_max: number;
+  tags: string[];
+  sort_order: number;
+}
