@@ -184,7 +184,7 @@ The existing `get_training_plan_templates` AI tool already queries this table. T
 #### Backend
 | File | Change |
 |------|--------|
-| `backend/migrations/015_ftp_builder_template.sql` | New migration: INSERT FTP Builder plan template |
+| `backend/migrations/023_ftp_builder_template.sql` | New migration: INSERT FTP Builder plan template |
 | `backend/src/routes/trainingPlanRoutes.ts` | Add `GET /templates` route |
 | `backend/src/controllers/trainingPlanController.ts` | Add `getTemplates` handler |
 
