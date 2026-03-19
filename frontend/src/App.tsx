@@ -73,7 +73,8 @@ function ProtectedRoutes() {
       <Routes>
         <Route element={<AppLayout />}>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/workouts" element={<WorkoutsPage />} />
+          <Route path="/plans" element={<WorkoutsPage />} />
+          <Route path="/workouts" element={<Navigate to="/plans" replace />} />
           <Route path="/calendar" element={<CalendarPage />} />
           <Route path="/training-plan" element={<TrainingPlanPage />} />
           <Route path="/chat" element={<ChatPage />} />

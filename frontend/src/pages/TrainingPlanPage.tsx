@@ -54,11 +54,7 @@ export function TrainingPlanPage() {
   };
 
   const handleBrowsePlans = () => {
-    navigate('/chat', {
-      state: {
-        initialMessage: 'Show me your pre-built training plans',
-      },
-    });
+    navigate('/plans');
   };
 
   if (loading) {

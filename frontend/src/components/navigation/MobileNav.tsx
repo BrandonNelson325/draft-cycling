@@ -15,7 +15,7 @@ export function MobileNav({ className = '' }: MobileNavProps) {
   const navItems = [
     { path: '/', label: 'Dashboard', Icon: DashboardIcon },
     { path: '/calendar', label: 'Calendar', Icon: CalendarIcon },
-    { path: '/training-plan', label: 'Plan', Icon: TrainingPlanIcon },
+    { path: '/plans', label: 'Plans', Icon: TrainingPlanIcon },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
     { path: '/settings', label: 'Settings', Icon: SettingsIcon },
   ];

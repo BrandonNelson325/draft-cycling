@@ -17,7 +17,7 @@ export function DesktopNav({ className = '' }: DesktopNavProps) {
 
   const navItems = [
     { path: '/', label: 'Dashboard', Icon: DashboardIcon },
-    { path: '/workouts', label: 'Workouts', Icon: WorkoutsIcon },
+    { path: '/plans', label: 'Plans', Icon: WorkoutsIcon },
     { path: '/calendar', label: 'Calendar', Icon: CalendarIcon },
     { path: '/training-plan', label: 'Training Plan', Icon: TrainingPlanIcon },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
