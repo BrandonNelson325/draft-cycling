@@ -13,21 +13,61 @@ const PAD = { top: 16, right: 12, bottom: 8, left: 12 };
 const IW = CHART_W - PAD.left - PAD.right;
 const IH = CHART_H - PAD.top - PAD.bottom;
 
-/** Cardinal spline → cubic bezier SVG path */
+/** Monotone cubic Hermite interpolation → smooth SVG path without overshooting */
 function buildPath(pts: { x: number; y: number }[]): string {
   if (pts.length < 2) return '';
-  const t = 0.35;
+  if (pts.length === 2) {
+    return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)} L ${pts[1].x.toFixed(1)} ${pts[1].y.toFixed(1)}`;
+  }
+
+  const n = pts.length;
+  // Compute slopes using Fritsch-Carlson monotone method
+  const dx: number[] = [];
+  const dy: number[] = [];
+  const slopes: number[] = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx.push(pts[i + 1].x - pts[i].x);
+    dy.push(pts[i + 1].y - pts[i].y);
+    slopes.push(dx[i] === 0 ? 0 : dy[i] / dx[i]);
+  }
+
+  // Compute tangents
+  const tangents: number[] = [slopes[0]];
+  for (let i = 1; i < n - 1; i++) {
+    if (slopes[i - 1] * slopes[i] <= 0) {
+      tangents.push(0);
+    } else {
+      tangents.push((slopes[i - 1] + slopes[i]) / 2);
+    }
+  }
+  tangents.push(slopes[n - 2]);
+
+  // Fritsch-Carlson adjustment to ensure monotonicity
+  for (let i = 0; i < n - 1; i++) {
+    if (Math.abs(slopes[i]) < 1e-6) {
+      tangents[i] = 0;
+      tangents[i + 1] = 0;
+    } else {
+      const alpha = tangents[i] / slopes[i];
+      const beta = tangents[i + 1] / slopes[i];
+      const mag = alpha * alpha + beta * beta;
+      if (mag > 9) {
+        const tau = 3 / Math.sqrt(mag);
+        tangents[i] = tau * alpha * slopes[i];
+        tangents[i + 1] = tau * beta * slopes[i];
+      }
+    }
+  }
+
+  // Build cubic bezier path
   let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`;
-  for (let i = 1; i < pts.length; i++) {
-    const p0 = pts[i - 1];
-    const p1 = pts[i];
-    const prev2 = i >= 2 ? pts[i - 2] : p0;
-    const next = i < pts.length - 1 ? pts[i + 1] : p1;
-    const cp1x = p0.x + (p1.x - prev2.x) * t;
-    const cp1y = p0.y + (p1.y - prev2.y) * t;
-    const cp2x = p1.x - (next.x - p0.x) * t;
-    const cp2y = p1.y - (next.y - p0.y) * t;
-    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)} ${cp2x.toFixed(1)} ${cp2y.toFixed(1)} ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
+  for (let i = 0; i < n - 1; i++) {
+    const seg = dx[i] / 3;
+    const cp1x = pts[i].x + seg;
+    const cp1y = pts[i].y + tangents[i] * seg;
+    const cp2x = pts[i + 1].x - seg;
+    const cp2y = pts[i + 1].y - tangents[i + 1] * seg;
+    d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)} ${cp2x.toFixed(1)} ${cp2y.toFixed(1)} ${pts[i + 1].x.toFixed(1)} ${pts[i + 1].y.toFixed(1)}`;
   }
   return d;
 }

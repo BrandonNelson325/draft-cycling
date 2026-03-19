@@ -25,6 +25,14 @@ const features = [
     bg: '#1e3a5f',
   },
   {
+    icon: 'calendar-outline' as const,
+    title: 'Training Plans',
+    description:
+      'Tell the coach your goal and it\'ll build a personalized training plan on your calendar. Training for a race or event? It\'ll periodize from base through race day. Want to get stronger or ride more? It\'ll build a plan around your schedule and fitness level. Whatever your goal, the coach has you covered.',
+    color: '#ef4444',
+    bg: '#450a0a',
+  },
+  {
     icon: 'navigate-outline' as const,
     title: 'Strava Sync',
     description:
@@ -49,12 +57,12 @@ const features = [
     bg: '#052e16',
   },
   {
-    icon: 'calendar-outline' as const,
-    title: 'Training Plans',
+    icon: 'chatbubble-ellipses-outline' as const,
+    title: 'Managing Conversations',
     description:
-      'Need a full plan? Tell the coach your goal and timeline and it\'ll build a periodized plan on your calendar — from base through race day.',
-    color: '#ef4444',
-    bg: '#450a0a',
+      'Start new conversations anytime to keep topics organized. Long-press any conversation to delete it. Your coach remembers your history across chats so nothing is lost.',
+    color: '#06b6d4',
+    bg: '#083344',
   },
 ];
 

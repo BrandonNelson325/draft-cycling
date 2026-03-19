@@ -16,6 +16,13 @@ const features = [
     bg: 'bg-blue-50',
   },
   {
+    icon: Calendar,
+    title: 'Training Plans',
+    description: 'Tell the coach your goal and it\'ll build a personalized training plan on your calendar. Training for a race or event? It\'ll periodize from base through race day. Want to get stronger or ride more? It\'ll build a plan around your schedule and fitness level. Whatever your goal, the coach has you covered.',
+    color: 'text-red-600',
+    bg: 'bg-red-50',
+  },
+  {
     icon: Route,
     title: 'Strava Sync',
     description: 'Connect Strava and your rides sync automatically. We track your power, TSS, and fitness trends so everything stays up to date.',
@@ -37,11 +44,11 @@ const features = [
     bg: 'bg-green-50',
   },
   {
-    icon: Calendar,
-    title: 'Training Plans',
-    description: 'Need a full plan? Tell the coach your goal and timeline and it\'ll build a periodized plan on your calendar — from base through race day.',
-    color: 'text-red-600',
-    bg: 'bg-red-50',
+    icon: MessageCircle,
+    title: 'Managing Conversations',
+    description: 'Start new conversations anytime to keep topics organized. Click the trash icon on any conversation to delete it. Your coach remembers your history across chats so nothing is lost.',
+    color: 'text-cyan-600',
+    bg: 'bg-cyan-50',
   },
 ];
 
