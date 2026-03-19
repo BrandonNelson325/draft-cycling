@@ -28,6 +28,19 @@ Additionally, the AI coach can surface plan templates conversationally via a qui
 - New FTP Builder plan template (DB seed)
 - Backend endpoint to list training plan templates
 
+### Hard Constraint: No Regressions
+
+The app is in a good state. This feature is purely additive. All existing functionality must be preserved:
+
+- Existing workout browsing, detail view, scheduling, and ZWO/FIT export must work exactly as today (migrated into the Workouts tab)
+- Active training plan display, week breakdown, and cancel flow remain untouched
+- Chat (streaming + non-streaming), conversation list, delete, and AI tool execution unchanged
+- Calendar, Strava sync, morning check-in, post-ride feedback, and all dashboard features unaffected
+- All existing API endpoints must continue to work with the same contracts
+- Mobile and web must both be verified after changes
+
+If any existing behavior would need to change to support this feature, flag it explicitly rather than silently modifying it.
+
 ### Out of Scope
 - Rich card message types in chat (coach uses text + existing tools)
 - Inline plan editing before scheduling
