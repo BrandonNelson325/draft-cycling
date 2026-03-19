@@ -1,4 +1,5 @@
 import apiClient from '../api/client';
+import type { TrainingPlanTemplate } from '../types/shared';
 
 export interface TrainingWeek {
   week_number: number;
@@ -52,5 +53,16 @@ export const trainingPlanService = {
 
   async deletePlan(planId: string): Promise<void> {
     await apiClient.delete(`/api/training-plans/${planId}`);
+  },
+
+  async getTemplates(filters?: { difficulty?: string; search?: string }): Promise<TrainingPlanTemplate[]> {
+    const params = new URLSearchParams();
+    if (filters?.difficulty) params.set('difficulty', filters.difficulty);
+    if (filters?.search) params.set('search', filters.search);
+    const qs = params.toString();
+    const { data } = await apiClient.get<{ templates: TrainingPlanTemplate[] }>(
+      `/api/training-plans/templates${qs ? `?${qs}` : ''}`
+    );
+    return data?.templates || [];
   },
 };
