@@ -41,6 +41,12 @@ export const trainingPlanService = {
     return data.plan;
   },
 
+  async getActivePlans(): Promise<TrainingPlan[]> {
+    const { data, error } = await api.get<{ plans: TrainingPlan[] }>('/api/training-plans/active/all', true);
+    if (error || !data) return [];
+    return data.plans;
+  },
+
   async getPlanById(planId: string): Promise<TrainingPlan | null> {
     const { data, error } = await api.get<{ plan: TrainingPlan }>(
       `/api/training-plans/${planId}`,

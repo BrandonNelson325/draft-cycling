@@ -7,6 +7,7 @@ const router = Router();
 
 // All routes require auth + subscription
 router.get('/active', authenticateJWT, checkSubscription, trainingPlanController.getActivePlan);
+router.get('/active/all', authenticateJWT, checkSubscription, trainingPlanController.getActivePlans);
 router.get('/templates', authenticateJWT, checkSubscription, trainingPlanController.getTemplates);
 router.get('/:planId', authenticateJWT, checkSubscription, trainingPlanController.getPlanById);
 router.delete('/:planId', authenticateJWT, checkSubscription, trainingPlanController.deletePlan);

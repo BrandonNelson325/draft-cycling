@@ -735,6 +735,33 @@ export const trainingPlanService = {
   },
 
   /**
+   * Get all active training plans for athlete, sorted by start_date ascending (soonest first)
+   */
+  async getActivePlans(athleteId: string): Promise<TrainingPlan[]> {
+    const { data, error } = await supabaseAdmin
+      .from('training_plans')
+      .select('*')
+      .eq('athlete_id', athleteId)
+      .eq('status', 'active')
+      .order('start_date', { ascending: true });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map((d: any) => ({
+      id: d.id,
+      athlete_id: d.athlete_id,
+      goal_event: d.goal_event,
+      event_date: d.event_date,
+      start_date: d.start_date,
+      weeks: d.weeks,
+      total_tss: d.total_tss,
+      created_at: d.created_at,
+    }));
+  },
+
+  /**
    * Get training plan by ID
    */
   async getPlanById(planId: string, athleteId: string): Promise<TrainingPlan | null> {

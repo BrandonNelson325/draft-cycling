@@ -177,16 +177,6 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
           />
         )}
 
-        {/* Quick actions */}
-        <View style={{ flexDirection: 'row', paddingHorizontal: 12, paddingTop: 6 }}>
-          <TouchableOpacity
-            style={{ paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#1e293b', borderRadius: 16 }}
-            onPress={() => navigation.navigate('Plans')}
-          >
-            <Text style={{ color: '#64748b', fontSize: 12, fontWeight: '500' }}>Browse Plans</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Input */}
         <View style={styles.inputRow}>
           <TextInput

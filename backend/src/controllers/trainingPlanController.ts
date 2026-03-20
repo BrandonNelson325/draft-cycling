@@ -3,6 +3,21 @@ import { AuthRequest } from '../middleware/auth';
 import { trainingPlanService } from '../services/trainingPlanService';
 import { supabaseAdmin } from '../utils/supabase';
 
+export const getActivePlans = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const plans = await trainingPlanService.getActivePlans(req.user.id);
+    res.json({ plans });
+  } catch (error) {
+    console.error('Get active plans error:', error);
+    res.status(500).json({ error: 'Failed to get training plans' });
+  }
+};
+
 export const getActivePlan = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {

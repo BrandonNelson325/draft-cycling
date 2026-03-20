@@ -19,12 +19,13 @@ export function CalendarPage() {
   const [selectedEntries, setSelectedEntries] = useState<CalendarEntry[]>([]);
   const [selectedActivities, setSelectedActivities] = useState<StravaActivity[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const [plan, setPlan] = useState<TrainingPlan | null>(null);
+  const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [planLoading, setPlanLoading] = useState(true);
+  const [activePlanIndex, setActivePlanIndex] = useState(0);
 
   useEffect(() => {
-    trainingPlanService.getActivePlan()
-      .then(setPlan)
+    trainingPlanService.getActivePlans()
+      .then(setPlans)
       .catch(() => {})
       .finally(() => setPlanLoading(false));
   }, []);
@@ -81,12 +82,12 @@ export function CalendarPage() {
     }
   };
 
-  const handleCancelPlan = async () => {
-    if (!plan) return;
+  const handleCancelPlan = async (planId: string) => {
     if (!confirm('Are you sure you want to cancel this training plan? This will not delete your workouts from the calendar.')) return;
     try {
-      await trainingPlanService.deletePlan(plan.id);
-      setPlan(null);
+      await trainingPlanService.deletePlan(planId);
+      setPlans(prev => prev.filter(p => p.id !== planId));
+      if (activePlanIndex >= plans.length - 1) setActivePlanIndex(Math.max(0, activePlanIndex - 1));
     } catch (err) {
       console.error('Failed to cancel plan:', err);
       alert('Failed to cancel training plan');
@@ -136,24 +137,43 @@ export function CalendarPage() {
         </div>
 
         {/* Training Plan Sidebar */}
-        <div className="lg:sticky lg:top-4 lg:self-start space-y-4">
+        <div className="lg:sticky lg:top-4 lg:self-start space-y-4 max-h-[calc(100vh-120px)] overflow-y-auto">
           {planLoading ? (
             <div className="bg-card border rounded-lg p-6 text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
             </div>
-          ) : plan ? (
+          ) : plans.length > 0 ? (
             <div className="bg-card border rounded-lg p-4 space-y-4">
+              {/* Plan switcher — only if multiple plans */}
+              {plans.length > 1 && (
+                <div className="flex gap-1 border-b border-border pb-2">
+                  {plans.map((p, i) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setActivePlanIndex(i)}
+                      className={`flex-1 px-2 py-1.5 text-xs font-medium rounded transition-colors truncate ${
+                        i === activePlanIndex
+                          ? 'bg-primary text-primary-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      {p.goal_event}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold">Training Plan</h2>
                 <button
-                  onClick={handleCancelPlan}
+                  onClick={() => handleCancelPlan(plans[activePlanIndex].id)}
                   className="text-xs text-red-500 hover:text-red-600 transition-colors"
                 >
                   Cancel Plan
                 </button>
               </div>
-              <PlanOverview plan={plan} />
-              <WeekBreakdown weeks={plan.weeks} startDate={plan.start_date} />
+              <PlanOverview plan={plans[activePlanIndex]} />
+              <WeekBreakdown weeks={plans[activePlanIndex].weeks} startDate={plans[activePlanIndex].start_date} />
             </div>
           ) : (
             <div className="bg-card border rounded-lg p-6 text-center">
