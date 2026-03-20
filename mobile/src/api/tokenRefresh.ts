@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { useAuthStore } from '../stores/useAuthStore';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = __DEV__
+  ? 'http://localhost:3000'
+  : (process.env.EXPO_PUBLIC_API_URL || 'https://api.draftcycling.com');
 
 /**
  * Centralized token refresh logic.

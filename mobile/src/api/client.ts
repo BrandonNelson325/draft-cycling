@@ -6,7 +6,12 @@ import axios, {
 import { useAuthStore } from '../stores/useAuthStore';
 import { refreshAccessToken } from './tokenRefresh';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+// In dev mode (Expo Go / dev client), always use localhost — the iOS simulator
+// shares the Mac's network stack so localhost reaches the local backend.
+// In production builds, use the configured API URL.
+const API_URL = __DEV__
+  ? 'http://localhost:3000'
+  : (process.env.EXPO_PUBLIC_API_URL || 'https://api.draftcycling.com');
 
 // Create singleton axios instance
 const apiClient: AxiosInstance = axios.create({

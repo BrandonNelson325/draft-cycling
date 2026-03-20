@@ -96,7 +96,9 @@ export const workoutService = {
 
   async downloadZWO(id: string, name: string): Promise<void> {
     const token = useAuthStore.getState().accessToken;
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+    const apiUrl = __DEV__
+      ? 'http://localhost:3000'
+      : (process.env.EXPO_PUBLIC_API_URL || 'https://api.draftcycling.com');
     const filename = `${name.replace(/[^a-z0-9]/gi, '_')}.zwo`;
     const dest = FileSystem.cacheDirectory + filename;
 
@@ -110,7 +112,9 @@ export const workoutService = {
 
   async downloadFIT(id: string, name: string): Promise<void> {
     const token = useAuthStore.getState().accessToken;
-    const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+    const apiUrl = __DEV__
+      ? 'http://localhost:3000'
+      : (process.env.EXPO_PUBLIC_API_URL || 'https://api.draftcycling.com');
     const filename = `${name.replace(/[^a-z0-9]/gi, '_')}.fit`;
     const dest = FileSystem.cacheDirectory + filename;
 

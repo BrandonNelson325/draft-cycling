@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, AppState } from 'react-native';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = __DEV__
+  ? 'http://localhost:3000'
+  : (process.env.EXPO_PUBLIC_API_URL || 'https://api.draftcycling.com');
 
 export default function ConnectionBanner() {
   const [connected, setConnected] = useState(true);
