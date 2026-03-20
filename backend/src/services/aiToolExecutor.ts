@@ -368,13 +368,6 @@ export const aiToolExecutor = {
       throw new Error(`Failed to delete calendar entries: ${deleteError.message}`);
     }
 
-    // Also deactivate any active training plans that fall in this range
-    await supabaseAdmin
-      .from('training_plans')
-      .update({ status: 'cancelled' })
-      .eq('athlete_id', athleteId)
-      .eq('status', 'active');
-
     return {
       success: true,
       deleted_count: entries.length,
@@ -609,13 +602,6 @@ export const aiToolExecutor = {
         .eq('athlete_id', athleteId);
     }
 
-    // Deactivate any existing active plan
-    await supabaseAdmin
-      .from('training_plans')
-      .update({ status: 'cancelled' })
-      .eq('athlete_id', athleteId)
-      .eq('status', 'active');
-
     // Create all athlete workouts in parallel (no ZWO/FIT generation — done on demand)
     const created = await Promise.all(
       deduplicatedWorkouts.map(async (item) => {
@@ -687,13 +673,6 @@ export const aiToolExecutor = {
           }));
 
         const totalTss = weeks.reduce((sum, w) => sum + w.tss, 0);
-
-        // Deactivate any existing active plan
-        await supabaseAdmin
-          .from('training_plans')
-          .update({ status: 'cancelled' })
-          .eq('athlete_id', athleteId)
-          .eq('status', 'active');
 
         await supabaseAdmin.from('training_plans').insert({
           id: uuidv4(),
