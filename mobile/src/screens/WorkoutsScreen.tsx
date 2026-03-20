@@ -3,6 +3,7 @@ import {
   View,
   Text,
   FlatList,
+  ScrollView,
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
@@ -129,15 +130,15 @@ export default function WorkoutsScreen() {
       ) : (
         <>
           {/* Type filter */}
-          <FlatList
-            data={TYPES}
+          <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            keyExtractor={t => t}
-            style={styles.filterList}
+            style={{ height: 55 }}
             contentContainerStyle={styles.filterContent}
-            renderItem={({ item: t }) => (
+          >
+            {TYPES.map(t => (
               <TouchableOpacity
+                key={t}
                 style={[styles.chip, typeFilter === t && styles.chipActive]}
                 onPress={() => setTypeFilter(t)}
               >
@@ -145,8 +146,8 @@ export default function WorkoutsScreen() {
                   {t === 'all' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
                 </Text>
               </TouchableOpacity>
-            )}
-          />
+            ))}
+          </ScrollView>
 
           {loading ? (
             <ActivityIndicator color="#3b82f6" style={{ marginTop: 40 }} />
@@ -180,7 +181,7 @@ export default function WorkoutsScreen() {
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
       >
-        <WorkoutDetailSheet workout={selectedWorkout} />
+        <WorkoutDetailSheet workout={selectedWorkout} showSchedule={true} />
       </BottomSheet>
     </SafeAreaView>
   );
@@ -188,7 +189,6 @@ export default function WorkoutsScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#0f172a' },
-  filterList: { maxHeight: 52 },
   filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   chip: {
     paddingHorizontal: 14,
@@ -227,10 +227,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     borderBottomWidth: 1,
     borderBottomColor: '#1e293b',
+    paddingHorizontal: 16,
   },
   tab: {
     flex: 1,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
@@ -239,8 +240,8 @@ const styles = StyleSheet.create({
     borderBottomColor: '#3b82f6',
   },
   tabText: {
-    fontSize: 14,
-    fontWeight: '500',
+    fontSize: 15,
+    fontWeight: '600',
     color: '#64748b',
   },
   tabTextActive: {

@@ -5,8 +5,6 @@ import { WorkoutsIcon } from '../icons/WorkoutsIcon';
 import { CalendarIcon } from '../icons/CalendarIcon';
 import { ChatIcon } from '../icons/ChatIcon';
 import { SettingsIcon } from '../icons/SettingsIcon';
-import { TrainingPlanIcon } from '../icons/TrainingPlanIcon';
-
 interface DesktopNavProps {
   className?: string;
 }
@@ -19,7 +17,6 @@ export function DesktopNav({ className = '' }: DesktopNavProps) {
     { path: '/', label: 'Dashboard', Icon: DashboardIcon },
     { path: '/plans', label: 'Plans', Icon: WorkoutsIcon },
     { path: '/calendar', label: 'Calendar', Icon: CalendarIcon },
-    { path: '/training-plan', label: 'Training Plan', Icon: TrainingPlanIcon },
     { path: '/chat', label: 'Chat', Icon: ChatIcon },
     { path: '/settings', label: 'Settings', Icon: SettingsIcon },
   ];

@@ -12,7 +12,7 @@ import { CalendarPage } from './pages/CalendarPage';
 import { ChatPage } from './pages/ChatPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { StravaCallback } from './pages/StravaCallback';
-import { TrainingPlanPage } from './pages/TrainingPlanPage';
+// TrainingPlanPage removed — plan now shown in calendar sidebar
 import { PrivacyPolicy } from './pages/PrivacyPolicy';
 import { DailyMorningModal } from './components/modals/DailyMorningModal';
 import { PostRideModal } from './components/modals/PostRideModal';
@@ -76,7 +76,7 @@ function ProtectedRoutes() {
           <Route path="/plans" element={<WorkoutsPage />} />
           <Route path="/workouts" element={<Navigate to="/plans" replace />} />
           <Route path="/calendar" element={<CalendarPage />} />
-          <Route path="/training-plan" element={<TrainingPlanPage />} />
+          <Route path="/training-plan" element={<Navigate to="/calendar" replace />} />
           <Route path="/chat" element={<ChatPage />} />
           <Route path="/chat/:conversationId" element={<ChatPage />} />
           <Route path="/settings" element={<SettingsPage />} />

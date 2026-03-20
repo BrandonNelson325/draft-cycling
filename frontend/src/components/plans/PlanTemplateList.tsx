@@ -50,7 +50,7 @@ export function PlanTemplateList({ activePlan }: PlanTemplateListProps) {
       {/* Active plan banner */}
       {activePlan && (
         <button
-          onClick={() => navigate('/training-plan')}
+          onClick={() => navigate('/calendar')}
           className="w-full mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg text-left hover:bg-blue-100 transition-colors"
         >
           <div className="flex items-center justify-between">
@@ -62,6 +62,22 @@ export function PlanTemplateList({ activePlan }: PlanTemplateListProps) {
           </div>
         </button>
       )}
+
+      {/* Custom plan button */}
+      <button
+        onClick={() => navigate('/chat', {
+          state: { initialMessage: 'I want to create a custom training plan' },
+        })}
+        className="w-full mb-4 px-5 py-4 bg-blue-600 hover:bg-blue-700 rounded-lg text-left transition-colors flex items-center justify-between group"
+      >
+        <div>
+          <p className="text-sm font-bold text-white">Create a custom plan</p>
+          <p className="text-xs text-blue-200 mt-0.5">Tell the coach your goals and get a personalized plan</p>
+        </div>
+        <svg className="w-5 h-5 text-blue-200 group-hover:text-white transition-colors shrink-0 ml-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
 
       {/* Filter chips */}
       <div className="flex gap-2 mb-4">

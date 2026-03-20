@@ -6,10 +6,13 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import type { Workout } from '../../services/workoutService';
 import { workoutService } from '../../services/workoutService';
+import { calendarService } from '../../services/calendarService';
 import IntervalVisualizer from './IntervalVisualizer';
 import Badge from '../ui/Badge';
 
@@ -17,12 +20,30 @@ interface WorkoutDetailSheetProps {
   workout: Workout | null;
   onClose?: () => void;
   onScheduled?: () => void;
+  showSchedule?: boolean;
 }
 
-export default function WorkoutDetailSheet({ workout, onClose, onScheduled }: WorkoutDetailSheetProps) {
+export default function WorkoutDetailSheet({ workout, onClose, onScheduled, showSchedule = false }: WorkoutDetailSheetProps) {
   const [downloading, setDownloading] = useState<'zwo' | 'fit' | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [scheduling, setScheduling] = useState(false);
 
   if (!workout) return null;
+
+  const handleSchedule = async (date: Date) => {
+    setScheduling(true);
+    try {
+      await calendarService.scheduleWorkout(workout.id, date);
+      Alert.alert('Scheduled', `${workout.name} added to your calendar.`);
+      setShowDatePicker(false);
+      onScheduled?.();
+    } catch {
+      Alert.alert('Error', 'Failed to schedule workout.');
+    } finally {
+      setScheduling(false);
+    }
+  };
 
   const handleDownload = async (type: 'zwo' | 'fit') => {
     setDownloading(type);
@@ -85,6 +106,53 @@ export default function WorkoutDetailSheet({ workout, onClose, onScheduled }: Wo
           <Text style={styles.sectionTitle}>Intervals</Text>
           <IntervalVisualizer intervals={workout.intervals} />
         </View>
+      )}
+
+      {/* Schedule button — only from workouts browse, not calendar */}
+      {showSchedule && (
+        <>
+          <Pressable
+            style={styles.scheduleBtn}
+            onPress={() => setShowDatePicker(true)}
+            disabled={scheduling}
+          >
+            {scheduling ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.scheduleBtnText}>Schedule to Calendar</Text>
+            )}
+          </Pressable>
+
+          {showDatePicker && (
+            <View style={styles.datePickerContainer}>
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                minimumDate={new Date()}
+                themeVariant="dark"
+                onChange={(event, date) => {
+                  if (Platform.OS === 'android') {
+                    setShowDatePicker(false);
+                    if (event.type === 'set' && date) handleSchedule(date);
+                  } else if (date) {
+                    setSelectedDate(date);
+                  }
+                }}
+              />
+              {Platform.OS === 'ios' && (
+                <View style={styles.datePickerActions}>
+                  <Pressable onPress={() => setShowDatePicker(false)}>
+                    <Text style={styles.datePickerCancel}>Cancel</Text>
+                  </Pressable>
+                  <Pressable onPress={() => handleSchedule(selectedDate)}>
+                    <Text style={styles.datePickerConfirm}>Confirm</Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          )}
+        </>
       )}
 
       <View style={styles.actions}>
@@ -162,6 +230,33 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  scheduleBtn: {
+    backgroundColor: '#2563eb',
+    borderRadius: 10,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  scheduleBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 15,
+  },
+  datePickerContainer: {
+    backgroundColor: '#0f172a',
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 12,
+  },
+  datePickerActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  datePickerCancel: { color: '#64748b', fontSize: 15, fontWeight: '600' },
+  datePickerConfirm: { color: '#3b82f6', fontSize: 15, fontWeight: '600' },
   actions: {
     flexDirection: 'row',
     gap: 12,

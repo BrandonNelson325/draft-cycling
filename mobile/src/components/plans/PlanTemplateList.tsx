@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import type { MainTabParamList } from '../../navigation/types';
@@ -67,6 +68,20 @@ export default function PlanTemplateList({ activePlan }: PlanTemplateListProps) 
           </View>
         </View>
       )}
+
+      {/* Custom plan button */}
+      <TouchableOpacity
+        style={styles.customPlanBtn}
+        onPress={() => navigation.navigate('Chat', {
+          initialMessage: 'I want to create a custom training plan',
+        })}
+      >
+        <View style={{ flex: 1 }}>
+          <Text style={styles.customPlanText}>Create a custom plan</Text>
+          <Text style={styles.customPlanSub}>Tell the coach your goals and get a personalized plan</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#bfdbfe" />
+      </TouchableOpacity>
 
       {/* Filter chips */}
       <FlatList
@@ -139,6 +154,27 @@ export default function PlanTemplateList({ activePlan }: PlanTemplateListProps) 
 const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { padding: 16, paddingTop: 0 },
+  customPlanBtn: {
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    backgroundColor: '#2563eb',
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  customPlanText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  customPlanSub: {
+    fontSize: 12,
+    color: '#bfdbfe',
+    marginTop: 3,
+  },
   banner: {
     flexDirection: 'row',
     alignItems: 'center',
