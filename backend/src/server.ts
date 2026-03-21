@@ -38,6 +38,10 @@ process.on('unhandledRejection', (reason) => {
 
 const app = express();
 
+// Disable ETags — they cause 304 responses on mobile where there's no persistent cache,
+// resulting in empty data on fresh app opens
+app.set('etag', false);
+
 // Trust Railway's reverse proxy so express-rate-limit can read the real client IP
 app.set('trust proxy', 1);
 
