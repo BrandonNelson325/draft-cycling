@@ -519,6 +519,36 @@ export default function CalendarScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Clear calendar button */}
+      <TouchableOpacity
+        style={styles.clearBtn}
+        onPress={() => {
+          Alert.alert(
+            'Clear Calendar',
+            'Remove ALL scheduled workouts from your calendar? This cannot be undone.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Clear All',
+                style: 'destructive',
+                onPress: async () => {
+                  try {
+                    const result = await calendarService.clearCalendar();
+                    Alert.alert('Done', `Removed ${result.deletedCount} workouts.`);
+                    loadCalendar();
+                  } catch {
+                    Alert.alert('Error', 'Failed to clear calendar');
+                  }
+                },
+              },
+            ]
+          );
+        }}
+      >
+        <Ionicons name="trash-outline" size={14} color="#f87171" />
+        <Text style={styles.clearBtnText}>Clear Calendar</Text>
+      </TouchableOpacity>
+
       {/* Day headers */}
       <View style={styles.dayHeaders}>
         {DAYS.map(d => (
@@ -752,6 +782,19 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: '#f1f5f9',
+  },
+  clearBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    gap: 4,
+    paddingHorizontal: 20,
+    paddingBottom: 4,
+  },
+  clearBtnText: {
+    fontSize: 12,
+    color: '#f87171',
+    fontWeight: '500',
   },
   dayHeaders: {
     flexDirection: 'row',

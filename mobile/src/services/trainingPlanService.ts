@@ -60,8 +60,9 @@ export const trainingPlanService = {
     }
   },
 
-  async deletePlan(planId: string): Promise<void> {
-    await apiClient.delete(`/api/training-plans/${planId}`);
+  async deletePlan(planId: string, removeWorkouts: boolean = false): Promise<void> {
+    const url = `/api/training-plans/${planId}${removeWorkouts ? '?removeWorkouts=true' : ''}`;
+    await apiClient.delete(url);
   },
 
   async getTemplates(filters?: { difficulty?: string; search?: string }): Promise<TrainingPlanTemplate[]> {

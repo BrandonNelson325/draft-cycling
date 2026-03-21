@@ -83,11 +83,22 @@ export function CalendarPage() {
   };
 
   const handleCancelPlan = async (planId: string) => {
-    if (!confirm('Are you sure you want to cancel this training plan? This will not delete your workouts from the calendar.')) return;
+    const removeWorkouts = confirm(
+      'Cancel this training plan?\n\nClick OK to also remove the scheduled workouts from your calendar.\nClick Cancel to keep the workouts on your calendar.'
+    );
+
+    // User clicked X on the first dialog — they don't want to cancel at all
+    // We need a two-step confirm since browser confirm is limited
+    if (!confirm(removeWorkouts
+      ? 'Confirm: Cancel plan AND remove all its workouts from calendar?'
+      : 'Confirm: Cancel plan but keep workouts on calendar?'
+    )) return;
+
     try {
-      await trainingPlanService.deletePlan(planId);
+      await trainingPlanService.deletePlan(planId, removeWorkouts);
       setPlans(prev => prev.filter(p => p.id !== planId));
       if (activePlanIndex >= plans.length - 1) setActivePlanIndex(Math.max(0, activePlanIndex - 1));
+      if (removeWorkouts) setRefreshTrigger(prev => prev + 1); // Refresh calendar grid
     } catch (err) {
       console.error('Failed to cancel plan:', err);
       alert('Failed to cancel training plan');

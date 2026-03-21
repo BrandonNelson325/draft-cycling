@@ -60,8 +60,9 @@ export const trainingPlanService = {
     return data.plan;
   },
 
-  async deletePlan(planId: string): Promise<void> {
-    const { error } = await api.delete(`/api/training-plans/${planId}`, true);
+  async deletePlan(planId: string, removeWorkouts: boolean = false): Promise<void> {
+    const url = `/api/training-plans/${planId}${removeWorkouts ? '?removeWorkouts=true' : ''}`;
+    const { error } = await api.delete(url, true);
 
     if (error) {
       throw new Error(error.error || 'Failed to delete training plan');

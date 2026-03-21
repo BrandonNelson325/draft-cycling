@@ -825,9 +825,29 @@ export const trainingPlanService = {
   },
 
   /**
-   * Delete training plan
+   * Delete training plan. Optionally remove associated calendar entries and workouts.
    */
-  async deletePlan(planId: string, athleteId: string): Promise<void> {
+  async deletePlan(planId: string, athleteId: string, removeWorkouts: boolean = false): Promise<{ removedCount: number }> {
+    let removedCount = 0;
+
+    if (removeWorkouts) {
+      // Delete calendar entries linked to this plan first (FK constraint)
+      const { data: deletedEntries } = await supabaseAdmin
+        .from('calendar_entries')
+        .delete()
+        .eq('training_plan_id', planId)
+        .select('id');
+
+      removedCount = deletedEntries?.length || 0;
+
+      // Delete workouts linked to this plan
+      await supabaseAdmin
+        .from('workouts')
+        .delete()
+        .eq('training_plan_id', planId)
+        .eq('athlete_id', athleteId);
+    }
+
     const { error } = await supabaseAdmin
       .from('training_plans')
       .update({ status: 'cancelled' })
@@ -837,6 +857,8 @@ export const trainingPlanService = {
     if (error) {
       throw new Error(`Failed to delete training plan: ${error.message}`);
     }
+
+    return { removedCount };
   },
 
   /**

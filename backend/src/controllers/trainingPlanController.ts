@@ -81,9 +81,16 @@ export const deletePlan = async (req: AuthRequest, res: Response): Promise<void>
       return;
     }
 
-    await trainingPlanService.deletePlan(planId, req.user.id);
+    const removeWorkouts = req.query.removeWorkouts === 'true';
+    const result = await trainingPlanService.deletePlan(planId, req.user.id, removeWorkouts);
 
-    res.json({ success: true, message: 'Training plan cancelled' });
+    res.json({
+      success: true,
+      message: removeWorkouts
+        ? `Training plan cancelled. Removed ${result.removedCount} workouts from calendar.`
+        : 'Training plan cancelled',
+      removedCount: result.removedCount,
+    });
   } catch (error) {
     console.error('Delete plan error:', error);
     res.status(500).json({ error: 'Failed to delete training plan' });

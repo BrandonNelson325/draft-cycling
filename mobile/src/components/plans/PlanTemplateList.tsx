@@ -73,15 +73,26 @@ export default function PlanTemplateList({ activePlans, onPlanCancelled }: PlanT
             onPress={() => {
               Alert.alert(
                 'Cancel Plan',
-                'Are you sure? This will not remove workouts from your calendar.',
+                'Would you also like to remove the scheduled workouts from your calendar?',
                 [
-                  { text: 'Keep', style: 'cancel' },
+                  { text: 'Keep Plan', style: 'cancel' },
                   {
-                    text: 'Cancel Plan',
+                    text: 'Cancel & Keep Workouts',
+                    onPress: async () => {
+                      try {
+                        await trainingPlanService.deletePlan(plan.id, false);
+                        onPlanCancelled?.(plan.id);
+                      } catch {
+                        Alert.alert('Error', 'Failed to cancel plan');
+                      }
+                    },
+                  },
+                  {
+                    text: 'Cancel & Remove Workouts',
                     style: 'destructive',
                     onPress: async () => {
                       try {
-                        await trainingPlanService.deletePlan(plan.id);
+                        await trainingPlanService.deletePlan(plan.id, true);
                         onPlanCancelled?.(plan.id);
                       } catch {
                         Alert.alert('Error', 'Failed to cancel plan');
