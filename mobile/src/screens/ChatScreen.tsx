@@ -36,6 +36,8 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     activeConversationId,
     messages,
     loading,
+    streamingContent,
+    toolStatus,
     loadConversations,
     startConversation,
     selectConversation,
@@ -161,7 +163,22 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             renderItem={({ item }) => (
               <MessageBubble role={item.role} content={item.content} />
             )}
-            ListFooterComponent={loading ? <LoadingDots /> : null}
+            ListFooterComponent={
+              loading ? (
+                <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
+                  {toolStatus ? (
+                    <View style={{ backgroundColor: '#1e293b', borderRadius: 12, padding: 12, marginBottom: 4 }}>
+                      <Text style={{ color: '#60a5fa', fontSize: 13, fontStyle: 'italic' }}>{toolStatus}</Text>
+                    </View>
+                  ) : null}
+                  {streamingContent ? (
+                    <MessageBubble role="assistant" content={streamingContent} />
+                  ) : (
+                    <LoadingDots />
+                  )}
+                </View>
+              ) : null
+            }
             ListEmptyComponent={
               !hasActivePlan && !loading ? (
                 <TouchableOpacity

@@ -6,6 +6,8 @@ interface ChatStore {
   activeConversationId: string | null;
   messages: Record<string, ChatMessage[]>;
   loading: boolean;
+  streamingContent: string;
+  toolStatus: string | null;
 
   loadConversations: () => Promise<void>;
   startConversation: () => Promise<void>;
@@ -20,6 +22,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   activeConversationId: null,
   messages: {},
   loading: false,
+  streamingContent: '',
+  toolStatus: null,
 
   loadConversations: async () => {
     try {
@@ -76,7 +80,6 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const initialConversationId = get().activeConversationId;
 
     const userTempId = `temp-user-${Date.now()}`;
-    const assistantTempId = `temp-assistant-${Date.now()}`;
 
     const userMessage: ChatMessage = {
       id: userTempId,
@@ -97,54 +100,105 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       });
     }
 
-    set({ loading: true });
+    set({ loading: true, streamingContent: '', toolStatus: null });
+
+    let conversationId = initialConversationId;
+    let accumulatedContent = '';
 
     try {
-      const response = await chatService.sendMessage(message, initialConversationId || undefined);
-      const conversationId = response.conversation_id;
+      await chatService.sendMessageStream(
+        message,
+        initialConversationId,
+        {
+          onStart: (convId: string) => {
+            conversationId = convId;
 
-      if (!initialConversationId) {
-        // New conversation — set active and add both messages
-        const msgs: ChatMessage[] = [
-          { ...userMessage, conversation_id: conversationId },
-          response.message,
-        ];
-        set({
-          activeConversationId: conversationId,
-          messages: { ...get().messages, [conversationId]: msgs },
-        });
-        // Reload conversation list
-        await get().loadConversations();
-      } else {
-        // Existing conversation — replace optimistic user message + add assistant message
-        const convMessages = get().messages[conversationId] || [];
-        set({
-          messages: {
-            ...get().messages,
-            [conversationId]: [
-              ...convMessages.filter((m) => m.id !== userTempId),
-              { ...userMessage, id: `user-${Date.now()}` },
-              response.message,
-            ],
+            if (!initialConversationId) {
+              // New conversation
+              set({
+                activeConversationId: convId,
+                messages: {
+                  ...get().messages,
+                  [convId]: [{ ...userMessage, conversation_id: convId }],
+                },
+              });
+            }
           },
-        });
-      }
+
+          onToken: (text: string) => {
+            accumulatedContent += text;
+            set({ streamingContent: accumulatedContent, toolStatus: null });
+          },
+
+          onProgress: (progressMessage: string) => {
+            set({ toolStatus: progressMessage });
+          },
+
+          onDone: () => {
+            if (conversationId && accumulatedContent) {
+              const assistantMessage: ChatMessage = {
+                id: `assistant-${Date.now()}`,
+                conversation_id: conversationId,
+                role: 'assistant',
+                content: accumulatedContent,
+                created_at: new Date().toISOString(),
+              };
+
+              const convMessages = get().messages[conversationId] || [];
+              set({
+                messages: {
+                  ...get().messages,
+                  [conversationId]: [
+                    ...convMessages.filter((m) => m.id !== userTempId),
+                    { ...userMessage, id: `user-${Date.now()}`, conversation_id: conversationId },
+                    assistantMessage,
+                  ],
+                },
+                streamingContent: '',
+                toolStatus: null,
+                loading: false,
+              });
+            } else {
+              set({ streamingContent: '', toolStatus: null, loading: false });
+            }
+
+            // Reload conversations to get updated titles
+            get().loadConversations();
+          },
+
+          onError: (error: string) => {
+            console.error('Stream error:', error);
+            // Remove optimistic user message on error
+            if (conversationId) {
+              set({
+                messages: {
+                  ...get().messages,
+                  [conversationId]: (get().messages[conversationId] || []).filter(
+                    (m) => m.id !== userTempId
+                  ),
+                },
+              });
+            }
+            set({ streamingContent: '', toolStatus: null, loading: false });
+          },
+        }
+      );
     } catch (error) {
       console.error('Failed to send message:', error);
       // Remove optimistic user message on error
-      if (initialConversationId) {
+      const convId = conversationId || initialConversationId;
+      if (convId) {
         set({
           messages: {
             ...get().messages,
-            [initialConversationId]: (get().messages[initialConversationId] || []).filter(
-              (m) => m.id !== userTempId && m.id !== assistantTempId
+            [convId]: (get().messages[convId] || []).filter(
+              (m) => m.id !== userTempId
             ),
           },
         });
       }
+      set({ streamingContent: '', toolStatus: null, loading: false });
       throw error;
-    } finally {
-      set({ loading: false });
     }
   },
 
