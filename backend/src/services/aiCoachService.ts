@@ -32,7 +32,7 @@ interface AthleteContext {
   rpeHistory: any[];
   fatigueProfile: FatigueProfile | null;
   planDeviations: PlanDeviation[];
-  activePlan: any | null;
+  activePlans: any[];
 }
 
 export const aiCoachService = {
@@ -95,7 +95,7 @@ export const aiCoachService = {
       { data: dailyCheckIn },
       { data: rpeHistory },
       fatigueProfile,
-      { data: activePlan },
+      { data: activePlans },
     ] = await Promise.all([
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
@@ -131,9 +131,7 @@ export const aiCoachService = {
         .select('id, goal_event, event_date, start_date, weeks, total_weeks, total_tss, status')
         .eq('athlete_id', athleteId)
         .eq('status', 'active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .order('start_date', { ascending: true }),
     ]);
 
     // Find plan deviations: missed workouts (past, not completed) and different rides
@@ -196,61 +194,68 @@ export const aiCoachService = {
       rpeHistory: rpeHistory || [],
       fatigueProfile,
       planDeviations,
-      activePlan: activePlan || null,
+      activePlans: activePlans || [],
     };
   },
 
   /**
-   * Build the active training plan section for the system prompt.
-   * This gives the AI coach full awareness of the athlete's current plan,
-   * goal event, what phase they're in, and what's coming up.
+   * Build the active training plans section for the system prompt.
+   * Shows ALL active plans so the AI knows exactly what the athlete is working on.
+   * Only active plans are shown — cancelled/completed plans are excluded.
    */
-  buildActivePlanSection(activePlan: any | null, todayIso: string): string {
-    if (!activePlan) return '';
+  buildActivePlanSection(activePlans: any[], todayIso: string): string {
+    if (!activePlans || activePlans.length === 0) {
+      return 'ACTIVE TRAINING PLANS: None. The athlete has no active training plans.\n\n';
+    }
 
     const today = new Date(todayIso + 'T12:00:00');
-    const startDate = new Date(activePlan.start_date + 'T12:00:00');
-    const eventDate = new Date(activePlan.event_date + 'T12:00:00');
-    const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-    const currentWeekNum = Math.max(1, Math.ceil(daysSinceStart / 7));
-    const daysUntilEvent = Math.floor((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    const weeksUntilEvent = Math.ceil(daysUntilEvent / 7);
+    let section = `ACTIVE TRAINING PLANS (${activePlans.length}):\n`;
 
-    let section = `ACTIVE TRAINING PLAN:
-- Goal Event: ${activePlan.goal_event}
-- Event Date: ${activePlan.event_date} (${daysUntilEvent > 0 ? `${daysUntilEvent} days / ~${weeksUntilEvent} weeks away` : 'PAST'})
-- Plan Start: ${activePlan.start_date}
-- Total Weeks: ${activePlan.total_weeks || (activePlan.weeks?.length ?? '?')}
+    for (const plan of activePlans) {
+      const startDate = new Date(plan.start_date + 'T12:00:00');
+      const eventDate = new Date(plan.event_date + 'T12:00:00');
+      const daysSinceStart = Math.floor((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+      const currentWeekNum = Math.max(1, Math.ceil(daysSinceStart / 7));
+      const daysUntilEvent = Math.floor((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const weeksUntilEvent = Math.ceil(daysUntilEvent / 7);
+
+      section += `
+--- Plan: ${plan.goal_event} ---
+- Event Date: ${plan.event_date} (${daysUntilEvent > 0 ? `${daysUntilEvent} days / ~${weeksUntilEvent} weeks away` : 'PAST'})
+- Plan Start: ${plan.start_date}
+- Total Weeks: ${plan.total_weeks || (plan.weeks?.length ?? '?')}
 - Current Week: ${currentWeekNum}
 `;
 
-    // Show current week's phase and details
-    const weeks = activePlan.weeks || [];
-    const currentWeek = weeks.find((w: any) => w.week_number === currentWeekNum);
-    const nextWeek = weeks.find((w: any) => w.week_number === currentWeekNum + 1);
+      const weeks = plan.weeks || [];
+      const currentWeek = weeks.find((w: any) => w.week_number === currentWeekNum);
+      const nextWeek = weeks.find((w: any) => w.week_number === currentWeekNum + 1);
 
-    if (currentWeek) {
-      section += `- Current Phase: ${currentWeek.phase.toUpperCase()}${currentWeek.notes ? ` (${currentWeek.notes})` : ''}
+      if (currentWeek) {
+        section += `- Current Phase: ${currentWeek.phase.toUpperCase()}${currentWeek.notes ? ` (${currentWeek.notes})` : ''}
 - This Week's TSS Target: ${currentWeek.tss}
 - This Week's Workouts: ${currentWeek.workouts?.map((w: any) => w.name).join(', ') || 'None'}
 `;
-    }
+      }
 
-    if (nextWeek) {
-      section += `- Next Week: ${nextWeek.phase.toUpperCase()}${nextWeek.notes ? ` (${nextWeek.notes})` : ''}
+      if (nextWeek) {
+        section += `- Next Week: ${nextWeek.phase.toUpperCase()}${nextWeek.notes ? ` (${nextWeek.notes})` : ''}
+`;
+      }
+
+      const phaseMap: Record<string, number[]> = {};
+      for (const week of weeks) {
+        const phase = week.phase || 'unknown';
+        if (!phaseMap[phase]) phaseMap[phase] = [];
+        phaseMap[phase].push(week.week_number);
+      }
+      section += `- Phase Overview: ${Object.entries(phaseMap).map(([phase, wks]) => `${phase} (wk ${wks[0]}-${wks[wks.length - 1]})`).join(', ')}
 `;
     }
 
-    // Show phase overview
-    const phaseMap: Record<string, number[]> = {};
-    for (const week of weeks) {
-      const phase = week.phase || 'unknown';
-      if (!phaseMap[phase]) phaseMap[phase] = [];
-      phaseMap[phase].push(week.week_number);
-    }
-    section += `- Phase Overview: ${Object.entries(phaseMap).map(([phase, wks]) => `${phase} (wk ${wks[0]}-${wks[wks.length - 1]})`).join(', ')}
-
-**IMPORTANT:** The athlete ALREADY HAS a training plan for "${activePlan.goal_event}" on ${activePlan.event_date}. You know their goal — do NOT ask about it. If they want changes to the plan, modify the existing plan rather than starting from scratch unless they explicitly ask for a new plan.
+    const planNames = activePlans.map(p => `"${p.goal_event}"`).join(' and ');
+    section += `
+**IMPORTANT:** The athlete has ${activePlans.length} active training plan(s): ${planNames}. These are the ONLY active plans — any cancelled plans no longer exist. If they ask to build a new plan, confirm whether they want to replace an existing one or add alongside it.
 
 `;
     return section;
@@ -301,7 +306,7 @@ ${athlete.ftp && athlete.weight_kg ? `- Power-to-Weight: ${(athlete.ftp / athlet
 TRAINING GOALS:
 ${athlete.training_goal || 'Not set - Ask the athlete about their goals (event, target date, what they want to improve)'}
 
-${this.buildActivePlanSection(context.activePlan, isoDate)}
+${this.buildActivePlanSection(context.activePlans, isoDate)}
 ${athletePreferencesService.formatForContext(preferences)}
 
 **REST DAYS & TRAINING SCHEDULE:**
@@ -1167,7 +1172,13 @@ Mon: rest | Tue: 90min threshold intervals | Wed: 2hr Z2 endurance | Thu: 90min 
 
 Always call get_workouts first — if a suitable workout exists, schedule it instead of creating a new one.
 
-For training plans: if the athlete explicitly requests a plan, ask goal, event date, rest days, and time availability per day (CRITICAL) if not already known — those are the only required questions. Use CTL/FTP/recent rides for everything else. MUST know rest days before scheduling any plan.
+For training plans: if the athlete explicitly requests a plan, gather these REQUIRED details (ask one at a time, not all at once):
+1. **Goal/event** — What are you training for? (e.g., century, gran fondo, crit, general fitness)
+2. **Competitive intent** — Are you training to WIN/compete, or to finish/complete the event? This dramatically changes plan intensity and structure. A competitive 200-mile racer needs a very different plan than someone aiming to finish their first century.
+3. **Event date** — When is it? (or "no event, ongoing" for general fitness)
+4. **Time availability** — How many hours per week can you train, and how does that break down by day? (CRITICAL for plan structure)
+5. **Rest days** — Which days are completely off? MUST know before scheduling.
+Use CTL/FTP/experience level/recent rides for everything else — don't ask what you already know from their profile.
 
 **FTP Testing in Plans:** When building a multi-week plan, check the athlete's ftp_test_preference. If not set, ask: "Would you like me to schedule FTP tests at the start of each training block (every ~6 weeks), or would you prefer I estimate your FTP from your ride data?" Save their answer with update_athlete_preferences. If they choose tests, include an FTP test workout in the first week of each new phase.
 
