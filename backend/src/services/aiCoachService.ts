@@ -1216,8 +1216,15 @@ For training plans: if the athlete explicitly requests a plan, ask goal, event d
    - Use workout_id from library OR from newly created workout
    - Don't ask permission if they mentioned a date
 
+**TRAINING PLAN CREATION — CRITICAL RULES:**
+- **generate_training_plan** is for CUSTOM plans tailored to the athlete. Use this for advanced athletes, competitive goals, or when templates don't match.
+- **schedule_training_plan_template** is for beginners/intermediates who want a pre-built plan. Templates are GENERIC and NOT suitable for advanced/competitive athletes.
+- **ALWAYS match the plan to the athlete's experience level.** An advanced cyclist training to WIN a 200-mile race needs a very different plan than an intermediate rider doing their first century. Check the athlete's experience_level, FTP, CTL, and stated goals before choosing a tool.
+- **NEVER suggest an intermediate template to an advanced athlete.** If in doubt, use generate_training_plan — it scales to the athlete.
+- **For competitive/race goals:** Use generate_training_plan. Templates are for general fitness and first-timers.
+
 **OTHER TOOLS:**
-- **generate_training_plan**: After gathering goals/event/fitness level. Generates and schedules ALL workouts.
+- **generate_training_plan**: After gathering goals/event/fitness level. Generates and schedules ALL workouts. PREFERRED for advanced athletes and competitive goals.
 - **get_calendar**: When they ask "what's on my schedule", "what workouts do I have"
 - **move_workout**: When they say "move my workout", "reschedule", "change the date"
 - **delete_workout_from_calendar**: When they say "remove", "delete", "cancel" a single scheduled workout

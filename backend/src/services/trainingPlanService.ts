@@ -163,24 +163,24 @@ export const trainingPlanService = {
       return {
         base: Math.floor(totalWeeks * 0.35),
         build: Math.floor(totalWeeks * 0.35),
-        peak: Math.floor(totalWeeks * 0.2),
-        taper: Math.max(1, Math.floor(totalWeeks * 0.1)),
+        peak: Math.floor(totalWeeks * 0.15),
+        taper: Math.max(2, Math.floor(totalWeeks * 0.15)), // 2 weeks min for endurance events
       };
     } else if (totalWeeks >= 8) {
       // Short plan
       return {
-        base: Math.floor(totalWeeks * 0.3),
+        base: Math.floor(totalWeeks * 0.25),
         build: Math.floor(totalWeeks * 0.4),
-        peak: Math.floor(totalWeeks * 0.2),
-        taper: 1,
+        peak: Math.floor(totalWeeks * 0.15),
+        taper: 2, // 2 weeks taper even for short plans
       };
     } else {
       // Very short plan (4-7 weeks)
       return {
         base: Math.floor(totalWeeks * 0.25),
-        build: Math.floor(totalWeeks * 0.5),
+        build: Math.floor(totalWeeks * 0.45),
         peak: Math.floor(totalWeeks * 0.15),
-        taper: 1,
+        taper: Math.max(1, Math.min(2, totalWeeks - 3)), // At least 1 week, 2 if room
       };
     }
   },
@@ -624,56 +624,92 @@ export const trainingPlanService = {
     };
     const restDayNumbers = restDays.map(day => dayMap[day]).filter(d => d !== undefined);
 
-    // Available training days (excluding rest days)
+    // Available training days (excluding rest days) — maintain training frequency
     const availableDays = [2, 4, 5, 1, 3, 6, 0].filter(day => !restDayNumbers.includes(day));
 
     if (availableDays.length === 0) return [];
 
     let dayIndex = 0;
 
-    // Short VO2max openers
+    // 1. Threshold maintenance — reduced volume, same intensity
     workouts.push({
-      name: 'Race Openers',
-      description: 'Short high-intensity efforts to stay sharp',
-      workout_type: 'vo2max',
+      name: 'Threshold Sharpener',
+      description: 'Maintain FTP with reduced volume — 3x8min at threshold with full recovery',
+      workout_type: 'threshold',
       duration_minutes: 60,
-      day_of_week: availableDays[dayIndex++],
+      day_of_week: availableDays[dayIndex++ % availableDays.length],
       intervals: [
         { duration: 600, power: 65, type: 'warmup' },
-        { duration: 120, power: 115, type: 'work', repeat: 3 },
-        { duration: 240, power: 60, type: 'rest', repeat: 3 },
+        { duration: 480, power: 100, type: 'work', repeat: 3 },
+        { duration: 300, power: 55, type: 'rest', repeat: 3 },
         { duration: 300, power: 55, type: 'cooldown' },
       ],
-      rationale: 'Keep legs fresh and sharp',
+      rationale: 'Maintain threshold fitness without generating fatigue. Reduce volume, keep intensity.',
     });
 
-    // Easy spin
-    if (availableDays.length > dayIndex) {
+    // 2. Easy endurance — shorter than normal
+    if (dayIndex < availableDays.length) {
       workouts.push({
-        name: 'Easy Spin',
-        description: 'Very easy recovery',
-        workout_type: 'recovery',
-        duration_minutes: 60,
-        day_of_week: availableDays[dayIndex++],
-        intervals: [{ duration: 3600, power: 55, type: 'work' }],
+        name: 'Easy Endurance',
+        description: 'Reduced-volume Z2 ride to maintain aerobic base',
+        workout_type: 'endurance',
+        duration_minutes: 75,
+        day_of_week: availableDays[dayIndex++ % availableDays.length],
+        intervals: [{ duration: 4500, power: 65, type: 'work' }],
+        rationale: 'Maintain aerobic fitness with reduced volume. Keep legs turning over.',
       });
     }
 
-    // Short activation (if race is upcoming)
-    if (availableDays.length > dayIndex) {
+    // 3. VO2max openers — short and sharp
+    if (dayIndex < availableDays.length) {
+      workouts.push({
+        name: 'Race Openers',
+        description: 'Short high-intensity efforts to keep neuromuscular systems sharp',
+        workout_type: 'vo2max',
+        duration_minutes: 50,
+        day_of_week: availableDays[dayIndex++ % availableDays.length],
+        intervals: [
+          { duration: 600, power: 65, type: 'warmup' },
+          { duration: 120, power: 115, type: 'work', repeat: 4 },
+          { duration: 240, power: 55, type: 'rest', repeat: 4 },
+          { duration: 30, power: 150, type: 'work', repeat: 2 },
+          { duration: 180, power: 50, type: 'rest', repeat: 2 },
+          { duration: 300, power: 55, type: 'cooldown' },
+        ],
+        rationale: 'VO2max bursts + sprints to stay sharp. NOT fatiguing — think reminders, not workouts.',
+      });
+    }
+
+    // 4. Easy spin — active recovery
+    if (dayIndex < availableDays.length) {
+      workouts.push({
+        name: 'Easy Spin',
+        description: 'Very easy recovery ride with high cadence',
+        workout_type: 'recovery',
+        duration_minutes: 45,
+        day_of_week: availableDays[dayIndex++ % availableDays.length],
+        intervals: [{ duration: 2700, power: 50, type: 'work' }],
+        rationale: 'Active recovery — flush legs, maintain neuromuscular patterns.',
+      });
+    }
+
+    // 5. Pre-race activation (2 days before race day)
+    if (dayIndex < availableDays.length) {
       workouts.push({
         name: 'Pre-Race Activation',
-        description: 'Final tune-up before race',
+        description: 'Final tune-up: warmup, race-pace openers, cool down',
         workout_type: 'custom',
-        duration_minutes: 60,
-        day_of_week: availableDays[dayIndex++],
+        duration_minutes: 45,
+        day_of_week: availableDays[dayIndex++ % availableDays.length],
         intervals: [
-        { duration: 600, power: 60, type: 'warmup' },
-        { duration: 60, power: 110, type: 'work', repeat: 3 },
-        { duration: 120, power: 65, type: 'rest', repeat: 3 },
-        { duration: 300, power: 55, type: 'cooldown' },
-      ],
-      rationale: 'Activate systems before race day',
+          { duration: 600, power: 60, type: 'warmup' },
+          { duration: 60, power: 115, type: 'work', repeat: 4 },
+          { duration: 120, power: 55, type: 'rest', repeat: 4 },
+          { duration: 30, power: 150, type: 'work', repeat: 2 },
+          { duration: 120, power: 50, type: 'rest', repeat: 2 },
+          { duration: 300, power: 55, type: 'cooldown' },
+        ],
+        rationale: 'Activate all systems without generating fatigue. Arrive at start line sharp.',
       });
     }
 
