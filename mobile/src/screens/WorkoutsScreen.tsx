@@ -45,7 +45,7 @@ export default function WorkoutsScreen() {
   const [typeFilter, setTypeFilter] = useState('all');
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [activeTab, setActiveTab] = useState<'plans' | 'workouts'>('plans');
-  const [activePlan, setActivePlan] = useState<TrainingPlan | null>(null);
+  const [activePlans, setActivePlans] = useState<TrainingPlan[]>([]);
   const sheetRef = useRef<BottomSheet>(null);
 
   useEffect(() => {
@@ -53,7 +53,7 @@ export default function WorkoutsScreen() {
   }, []);
 
   useEffect(() => {
-    trainingPlanService.getActivePlan().then(setActivePlan).catch(() => {});
+    trainingPlanService.getActivePlans().then(setActivePlans).catch(() => {});
   }, []);
 
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +126,10 @@ export default function WorkoutsScreen() {
       </View>
 
       {activeTab === 'plans' ? (
-        <PlanTemplateList activePlan={activePlan} />
+        <PlanTemplateList
+          activePlans={activePlans}
+          onPlanCancelled={(planId) => setActivePlans(prev => prev.filter(p => p.id !== planId))}
+        />
       ) : (
         <>
           {/* Type filter */}

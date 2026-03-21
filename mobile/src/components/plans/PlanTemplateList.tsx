@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
@@ -20,10 +21,11 @@ import EmptyState from '../ui/EmptyState';
 const FILTERS = ['all', 'beginner', 'intermediate', 'advanced'] as const;
 
 interface PlanTemplateListProps {
-  activePlan: TrainingPlan | null;
+  activePlans: TrainingPlan[];
+  onPlanCancelled?: (planId: string) => void;
 }
 
-export default function PlanTemplateList({ activePlan }: PlanTemplateListProps) {
+export default function PlanTemplateList({ activePlans, onPlanCancelled }: PlanTemplateListProps) {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [templates, setTemplates] = useState<TrainingPlanTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,15 +61,41 @@ export default function PlanTemplateList({ activePlan }: PlanTemplateListProps) 
 
   const renderHeader = () => (
     <View>
-      {/* Active plan banner */}
-      {activePlan && (
-        <View style={styles.banner}>
-          <View>
+      {/* Active plan banners */}
+      {activePlans.map(plan => (
+        <View key={plan.id} style={styles.banner}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.bannerLabel}>Active Plan</Text>
-            <Text style={styles.bannerTitle}>{activePlan.goal_event}</Text>
+            <Text style={styles.bannerTitle}>{plan.goal_event}</Text>
+            <Text style={styles.bannerDates}>{plan.start_date} → {plan.event_date}</Text>
           </View>
+          <TouchableOpacity
+            onPress={() => {
+              Alert.alert(
+                'Cancel Plan',
+                'Are you sure? This will not remove workouts from your calendar.',
+                [
+                  { text: 'Keep', style: 'cancel' },
+                  {
+                    text: 'Cancel Plan',
+                    style: 'destructive',
+                    onPress: async () => {
+                      try {
+                        await trainingPlanService.deletePlan(plan.id);
+                        onPlanCancelled?.(plan.id);
+                      } catch {
+                        Alert.alert('Error', 'Failed to cancel plan');
+                      }
+                    },
+                  },
+                ]
+              );
+            }}
+          >
+            <Text style={styles.bannerCancel}>Cancel</Text>
+          </TouchableOpacity>
         </View>
-      )}
+      ))}
 
       {/* Custom plan button */}
       <TouchableOpacity
@@ -188,6 +216,8 @@ const styles = StyleSheet.create({
   },
   bannerLabel: { fontSize: 11, color: '#93c5fd', fontWeight: '500' },
   bannerTitle: { fontSize: 14, color: '#f1f5f9', fontWeight: '600', marginTop: 2 },
+  bannerDates: { fontSize: 11, color: '#64748b', marginTop: 2 },
+  bannerCancel: { fontSize: 12, color: '#f87171', fontWeight: '600' },
   filterList: { maxHeight: 52 },
   filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
   chip: {

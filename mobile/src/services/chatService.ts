@@ -44,6 +44,8 @@ export const chatService = {
       conversation_id: conversationId,
       client_date: new Date().toLocaleDateString('en-CA'),
       display_mode: user?.display_mode ?? 'advanced',
+    }, {
+      timeout: 120000, // 2 minutes — AI tool calls (plan generation, scheduling) can take 60s+
     });
     return data;
   },
@@ -52,7 +54,9 @@ export const chatService = {
     const { data } = await apiClient.post<{
       conversation_id: string;
       message: ChatMessage;
-    }>('/api/ai/start-conversation', {});
+    }>('/api/ai/start-conversation', {}, {
+      timeout: 120000,
+    });
     return data;
   },
 
