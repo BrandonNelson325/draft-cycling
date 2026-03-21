@@ -17,11 +17,6 @@ export interface ChatConversation {
   updated_at: string;
 }
 
-interface SendMessageResponse {
-  message: ChatMessage;
-  conversation_id: string;
-}
-
 export interface StreamCallbacks {
   onStart: (conversationId: string) => void;
   onToken: (text: string) => void;
@@ -49,71 +44,95 @@ export const chatService = {
     return data?.messages || [];
   },
 
-  async sendMessageStream(
+  /**
+   * Stream chat messages using XMLHttpRequest (React Native compatible).
+   * RN's fetch() does not support ReadableStream/getReader(), so we use XHR
+   * with progressive responseText reading to parse SSE events.
+   */
+  sendMessageStream(
     message: string,
     conversationId: string | null | undefined,
     callbacks: StreamCallbacks
   ): Promise<void> {
-    const user = useAuthStore.getState().user;
-    const token = useAuthStore.getState().accessToken;
+    return new Promise((resolve, reject) => {
+      const user = useAuthStore.getState().user;
+      const token = useAuthStore.getState().accessToken;
 
-    const response = await fetch(`${API_URL}/api/ai/chat/stream`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-      body: JSON.stringify({
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${API_URL}/api/ai/chat/stream`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+
+      let lastIndex = 0;
+
+      xhr.onprogress = () => {
+        const newText = xhr.responseText.substring(lastIndex);
+        lastIndex = xhr.responseText.length;
+
+        const lines = newText.split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            switch (event.type) {
+              case 'start':
+                callbacks.onStart(event.conversation_id);
+                break;
+              case 'token':
+                callbacks.onToken(event.text);
+                break;
+              case 'progress':
+                callbacks.onProgress(event.message || 'Working on it...');
+                break;
+              case 'done':
+                callbacks.onDone();
+                break;
+              case 'error':
+                callbacks.onError(event.error);
+                break;
+            }
+          } catch {
+            // Skip malformed events
+          }
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve();
+        } else {
+          let errorMsg = 'Failed to send message';
+          try {
+            const errData = JSON.parse(xhr.responseText);
+            errorMsg = errData.error || errorMsg;
+          } catch {}
+          callbacks.onError(errorMsg);
+          reject(new Error(errorMsg));
+        }
+      };
+
+      xhr.onerror = () => {
+        callbacks.onError('Network error. Please try again.');
+        reject(new Error('Network error'));
+      };
+
+      xhr.ontimeout = () => {
+        callbacks.onError('Request timed out. Please try again.');
+        reject(new Error('Timeout'));
+      };
+
+      // No timeout — streaming can take as long as needed
+      xhr.timeout = 0;
+
+      xhr.send(JSON.stringify({
         message,
         conversation_id: conversationId || null,
         client_date: new Date().toLocaleDateString('en-CA'),
         display_mode: user?.display_mode ?? 'advanced',
-      }),
+      }));
     });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'Stream connection failed' }));
-      throw new Error(err.error || 'Stream connection failed');
-    }
-
-    const reader = response.body!.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const event = JSON.parse(line.slice(6));
-          switch (event.type) {
-            case 'start':
-              callbacks.onStart(event.conversation_id);
-              break;
-            case 'token':
-              callbacks.onToken(event.text);
-              break;
-            case 'progress':
-              callbacks.onProgress(event.message || 'Working on it...');
-              break;
-            case 'done':
-              callbacks.onDone();
-              break;
-            case 'error':
-              callbacks.onError(event.error);
-              break;
-          }
-        } catch {
-          // Skip malformed events
-        }
-      }
-    }
   },
 
   async startConversation(): Promise<{ conversation_id: string; message: ChatMessage }> {
