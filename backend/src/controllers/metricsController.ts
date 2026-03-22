@@ -81,6 +81,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     if (!activities || activities.length === 0) {
+      console.warn(`[Metrics] No activities found for athlete ${req.user.id}, period=${period}, startDate=${startDateISO}, tz=${tz}`);
       res.json({
         period,
         total_distance_meters: 0,

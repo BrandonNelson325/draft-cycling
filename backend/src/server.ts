@@ -24,6 +24,7 @@ import activityFeedbackRoutes from './routes/activityFeedbackRoutes';
 import pushRoutes from './routes/push';
 import subscriptionRoutes from './routes/subscriptionRoutes';
 import { warmJwksCache } from './middleware/auth';
+import { supabaseAdmin } from './utils/supabase';
 import { stravaCronService } from './services/stravaCronService';
 import { startMorningCheckInCron } from './services/morningCheckInCronService';
 import { startActivityReminderCron } from './services/activityReminderCronService';
@@ -41,6 +42,18 @@ const app = express();
 // Disable ETags — they cause 304 responses on mobile where there's no persistent cache,
 // resulting in empty data on fresh app opens
 app.set('etag', false);
+
+// Prevent ALL caching on API responses — Railway edge, CDN, and mobile HTTP layers
+// must never serve stale or empty responses
+app.use('/api/', (_req, res, next) => {
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store',
+  });
+  next();
+});
 
 // Trust Railway's reverse proxy so express-rate-limit can read the real client IP
 app.set('trust proxy', 1);
@@ -148,9 +161,36 @@ app.use(cors({
 // Body Parser
 app.use(express.json());
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// Health check with diagnostics
+app.get('/health', async (req, res) => {
+  const mem = process.memoryUsage();
+  const uptimeSeconds = process.uptime();
+
+  // Test Supabase connectivity
+  let dbOk = false;
+  let dbError = '';
+  try {
+    const { data, error } = await supabaseAdmin.from('athletes').select('id').limit(1);
+    dbOk = !error;
+    if (error) dbError = error.message;
+  } catch (e: any) {
+    dbError = e.message;
+  }
+
+  const status = dbOk ? 'ok' : 'degraded';
+  const httpStatus = dbOk ? 200 : 503;
+
+  res.status(httpStatus).json({
+    status,
+    timestamp: new Date().toISOString(),
+    uptime: `${Math.floor(uptimeSeconds / 3600)}h ${Math.floor((uptimeSeconds % 3600) / 60)}m`,
+    memory: {
+      rss: `${Math.round(mem.rss / 1024 / 1024)}MB`,
+      heapUsed: `${Math.round(mem.heapUsed / 1024 / 1024)}MB`,
+      heapTotal: `${Math.round(mem.heapTotal / 1024 / 1024)}MB`,
+    },
+    db: dbOk ? 'connected' : `ERROR: ${dbError}`,
+  });
 });
 
 // Routes
@@ -193,6 +233,35 @@ app.listen(config.port, async () => {
 
   // Start activity feedback reminder cron (runs every 5 minutes)
   startActivityReminderCron();
+
+  // Self-monitoring: log health every 10 minutes to catch degradation
+  setInterval(async () => {
+    const mem = process.memoryUsage();
+    const heapMB = Math.round(mem.heapUsed / 1024 / 1024);
+    const rssMB = Math.round(mem.rss / 1024 / 1024);
+
+    // Test DB connectivity
+    try {
+      const start = Date.now();
+      const { error } = await supabaseAdmin.from('athletes').select('id').limit(1);
+      const dbMs = Date.now() - start;
+
+      if (error) {
+        logger.error(`[HEALTH] DB ERROR after ${dbMs}ms: ${error.message} | Memory: heap=${heapMB}MB rss=${rssMB}MB`);
+      } else if (dbMs > 2000) {
+        logger.warn(`[HEALTH] DB SLOW: ${dbMs}ms | Memory: heap=${heapMB}MB rss=${rssMB}MB`);
+      } else {
+        logger.debug(`[HEALTH] OK: db=${dbMs}ms heap=${heapMB}MB rss=${rssMB}MB uptime=${Math.floor(process.uptime() / 60)}min`);
+      }
+    } catch (e: any) {
+      logger.error(`[HEALTH] DB EXCEPTION: ${e.message} | Memory: heap=${heapMB}MB rss=${rssMB}MB`);
+    }
+
+    // Warn if memory is getting high (Railway free tier is 512MB, pro is 8GB)
+    if (rssMB > 400) {
+      logger.warn(`[HEALTH] HIGH MEMORY: rss=${rssMB}MB heap=${heapMB}MB — may need restart`);
+    }
+  }, 10 * 60 * 1000); // Every 10 minutes
 });
 
 export default app;
