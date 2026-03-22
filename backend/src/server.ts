@@ -84,7 +84,15 @@ const authLimiter = rateLimit({
 });
 
 app.use('/api/auth/', authLimiter);
-app.use('/api/', generalLimiter);
+
+// Skip rate limiting for critical one-time actions that must never fail
+const skipRateLimitPaths = ['/api/subscription/redeem', '/api/beta/activate', '/api/subscription/webhook'];
+app.use('/api/', (req: any, res: any, next: any) => {
+  if (skipRateLimitPaths.some(p => req.path === p || req.originalUrl?.includes(p))) {
+    return next();
+  }
+  return generalLimiter(req, res, next);
+});
 
 // Stripe webhook needs raw body for signature verification — must come before CORS/json parser
 app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req, _res, next) => {
