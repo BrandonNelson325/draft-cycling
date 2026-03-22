@@ -30,7 +30,14 @@ export default function BetaAccessScreen() {
     try {
       const result = await subscriptionService.redeemCode(promoCode.trim());
       Alert.alert('Success', result.message);
-      await authService.getProfile(); // Refresh user to trigger navigation
+      // Refresh profile to trigger navigation — if this fails, the code was still redeemed
+      try {
+        await authService.getProfile();
+      } catch {
+        // Profile refresh failed (possibly rate limited) — retry once after a short delay
+        await new Promise(r => setTimeout(r, 1000));
+        await authService.getProfile().catch(() => {});
+      }
     } catch (err: any) {
       Alert.alert('Invalid Code', err.message || 'That code is not valid.');
     } finally {

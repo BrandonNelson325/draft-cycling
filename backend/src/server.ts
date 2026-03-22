@@ -86,7 +86,7 @@ const authLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 
 // Skip rate limiting for critical one-time actions that must never fail
-const skipRateLimitPaths = ['/api/subscription/redeem', '/api/beta/activate', '/api/subscription/webhook'];
+const skipRateLimitPaths = ['/api/subscription/redeem', '/api/beta/activate', '/api/subscription/webhook', '/api/auth/profile', '/api/auth/refresh'];
 app.use('/api/', (req: any, res: any, next: any) => {
   if (skipRateLimitPaths.some(p => req.path === p || req.originalUrl?.includes(p))) {
     return next();
