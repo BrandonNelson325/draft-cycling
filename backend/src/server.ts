@@ -51,19 +51,33 @@ app.use(helmet({
   crossOriginEmbedderPolicy: config.nodeEnv === 'production',
 }));
 
-// Rate Limiting — generous for normal usage, strict for auth to prevent brute force
+// Rate Limiting
+// IMPORTANT: Rate limiters run BEFORE route-level auth middleware, so req.user is not available.
+// We extract the user ID directly from the JWT in the Authorization header for per-user limiting.
+const keyGenerator = (req: any) => {
+  try {
+    const authHeader = req.headers?.authorization;
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+      if (payload.sub) return payload.sub; // Supabase JWT user ID
+    }
+  } catch {}
+  return req.ip || 'unknown';
+};
+
 const generalLimiter = rateLimit({
-  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 minutes
-  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 500, // 500 requests per 15 min per IP
+  windowMs: Number(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: Number(process.env.RATE_LIMIT_MAX_REQUESTS) || 2000,
   message: { error: 'Too many requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator,
 });
 
-// Auth endpoints: stricter limit to prevent brute force, but enough for normal usage
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, // 30 auth requests per 15 min per IP (login, register, refresh)
+  max: 100, // 100 auth requests per 15 min per IP — generous because mobile retries
   message: { error: 'Too many auth requests, please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

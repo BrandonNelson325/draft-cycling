@@ -135,6 +135,20 @@ export const chatService = {
     });
   },
 
+  /** Non-streaming fallback — used if streaming fails */
+  async sendMessage(message: string, conversationId?: string): Promise<{ message: ChatMessage; conversation_id: string }> {
+    const user = useAuthStore.getState().user;
+    const { data } = await apiClient.post<{ message: ChatMessage; conversation_id: string }>('/api/ai/chat', {
+      message,
+      conversation_id: conversationId,
+      client_date: new Date().toLocaleDateString('en-CA'),
+      display_mode: user?.display_mode ?? 'advanced',
+    }, {
+      timeout: 180000, // 3 minutes for non-streaming fallback
+    });
+    return data;
+  },
+
   async startConversation(): Promise<{ conversation_id: string; message: ChatMessage }> {
     const { data } = await apiClient.post<{
       conversation_id: string;

@@ -183,22 +183,57 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           },
         }
       );
-    } catch (error) {
-      console.error('Failed to send message:', error);
-      // Remove optimistic user message on error
-      const convId = conversationId || initialConversationId;
-      if (convId) {
-        set({
-          messages: {
-            ...get().messages,
-            [convId]: (get().messages[convId] || []).filter(
-              (m) => m.id !== userTempId
-            ),
-          },
-        });
+    } catch (streamError) {
+      console.warn('Streaming failed, falling back to non-streaming:', streamError);
+
+      // Fallback to non-streaming endpoint
+      try {
+        set({ toolStatus: 'Processing your message...', streamingContent: '' });
+        const response = await chatService.sendMessage(message, initialConversationId || undefined);
+        const convId = response.conversation_id;
+
+        if (!initialConversationId) {
+          set({
+            activeConversationId: convId,
+            messages: {
+              ...get().messages,
+              [convId]: [
+                { ...userMessage, conversation_id: convId },
+                response.message,
+              ],
+            },
+          });
+          await get().loadConversations();
+        } else {
+          const convMessages = get().messages[convId] || [];
+          set({
+            messages: {
+              ...get().messages,
+              [convId]: [
+                ...convMessages.filter((m) => m.id !== userTempId),
+                { ...userMessage, id: `user-${Date.now()}`, conversation_id: convId },
+                response.message,
+              ],
+            },
+          });
+        }
+        set({ streamingContent: '', toolStatus: null, loading: false });
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        const convId = conversationId || initialConversationId;
+        if (convId) {
+          set({
+            messages: {
+              ...get().messages,
+              [convId]: (get().messages[convId] || []).filter(
+                (m) => m.id !== userTempId
+              ),
+            },
+          });
+        }
+        set({ streamingContent: '', toolStatus: null, loading: false });
+        throw fallbackError;
       }
-      set({ streamingContent: '', toolStatus: null, loading: false });
-      throw error;
     }
   },
 
