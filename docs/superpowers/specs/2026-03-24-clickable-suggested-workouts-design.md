@@ -21,24 +21,31 @@ Have the AI pick from real workouts (user's library + workout templates) instead
 
 1. In `getTodaySuggestion()`, add queries to the existing `Promise.all`:
    - Fetch athlete's workouts: `supabaseAdmin.from('workouts').select('id, name, workout_type, duration_minutes, tss').eq('athlete_id', athleteId)`
-   - Fetch workout templates: `supabaseAdmin.from('workout_templates').select('id, name, workout_type, duration_minutes, tss')`
+   - Fetch workout templates: `supabaseAdmin.from('workout_templates').select('id, name, workout_type, duration_minutes, tss_estimate')` (note: templates use `tss_estimate`, not `tss`)
 
 2. In `buildSuggestionContext()` and `buildPostRideContext()` (the no-planned-workout branches):
+   - Accept a new `availableWorkouts` parameter: a normalized list of `{ id, name, type, duration, tss }` combining user workouts + templates (map `tss_estimate` → `tss` for templates)
    - Append a compact workout list to the prompt: `AVAILABLE WORKOUTS:\nid | name | type | duration | tss`
-   - Combine user workouts + templates, deduplicate by name
-   - Update the JSON format instruction: replace free-text `suggestedWorkout` with `"workoutId": "<id>"` and keep `"suggestedWorkout"` for rest days only
+   - Deduplicate by name (prefer user workout over template if same name)
+   - Update the JSON format instruction: AI returns `"workoutId": "<id>"` for non-rest suggestions. Keep free-text `suggestedWorkout` fields (name, type, duration, description) alongside the ID for display fallback.
+   - For rest day suggestions: no `workoutId`, just the rest day description as before.
 
-3. Update `TodaySuggestion` interface:
+3. **Template-to-workout cloning:** When the AI picks a template ID (from `workout_templates` table), clone it into the `workouts` table for the athlete before returning. This ensures `getWorkout(id)` works via the existing `/api/workouts/:id` endpoint which filters by `athlete_id`. The clone step:
+   - Check if the returned ID belongs to `workout_templates` (not `workouts`)
+   - If so, insert a new row in `workouts` with the template data + `athlete_id`
+   - Return the new workout's ID as `workoutId`
+
+4. Update `TodaySuggestion` interface:
    - `suggestedWorkout`: add `workoutId?: string`
    - `todaysWorkout`: add `workoutId?: string`
    - `tomorrowsWorkout`: add `workoutId?: string`
 
-4. In the result assembly, include workout IDs:
+5. In the result assembly, include workout IDs:
    - `todaysWorkout.workoutId` from `todayEntry.data.workouts.id`
    - `tomorrowsWorkout.workoutId` from `tomorrowEntry.data.workouts.id`
-   - `suggestedWorkout.workoutId` from AI response
+   - `suggestedWorkout.workoutId` from AI response (after template clone if needed)
 
-5. In `getSuggestionAIAnalysis()`, update the return type to include `workoutId?: string` in `suggestedWorkout`.
+6. In `getSuggestionAIAnalysis()`, update the return type to include `workoutId?: string`.
 
 ### Frontend Changes
 
@@ -48,37 +55,50 @@ Have the AI pick from real workouts (user's library + workout templates) instead
 **Files:** `frontend/src/components/dashboard/CoachCard.tsx` and `TodaySuggestionCard.tsx`
 
 1. Import `WorkoutDetail` from `../workout/WorkoutDetail`, `workoutService`, and `calendarService`
-2. Add state: `selectedWorkout` (full Workout object or null), `schedulingWorkoutId` (loading state)
-3. Make workout boxes clickable:
+2. Add state: `selectedWorkout` (full Workout object or null)
+3. Make workout boxes clickable (when `workoutId` is present):
    - Add `cursor-pointer hover:shadow-md transition-shadow` + `onClick` handler
    - On click: call `workoutService.getWorkout(workoutId)`, set `selectedWorkout`
    - Render `WorkoutDetail` modal when `selectedWorkout` is set
-4. Add "Add to Calendar" button on suggested workout boxes (purple):
-   - Pre-ride: schedules for today's date
-   - Post-ride "Suggested for Tomorrow": schedules for tomorrow's date
-   - Calls `calendarService.scheduleWorkout(workoutId, date)`
-   - Show success feedback (brief inline text or the box changes to "Scheduled" style)
+   - Use the existing `onSchedule` prop on `WorkoutDetail` to handle scheduling
+4. `onSchedule` handler for suggested workouts:
+   - Determine target date from context: if `hasRiddenToday` is true, schedule for tomorrow; otherwise schedule for today
+   - Call `calendarService.scheduleWorkout(workoutId, targetDate)`
+   - On success: clear `selectedWorkout`, refresh suggestion data, invalidate backend cache
 5. Rest day suggestions: remain non-clickable (no `workoutId`)
-6. Planned workout boxes (blue): clickable to view `WorkoutDetail`, no schedule button needed (already on calendar)
+6. Planned workout boxes (blue): clickable to view `WorkoutDetail`, no schedule button needed (already on calendar) — pass `onSchedule` as undefined or omit it
+
+**Note:** `WorkoutDetail` renders as a full-screen modal overlay (fixed inset-0 with backdrop). Just conditionally render it — no wrapper needed.
 
 ### Mobile Changes
 
 **File:** `mobile/src/services/dailyAnalysisService.ts` (or equivalent types)
 - Same `workoutId` additions to the `TodaySuggestion` type
 
-**File:** `mobile/src/components/dashboard/TodaySuggestionCard.tsx`
-- Make suggestion boxes pressable (`TouchableOpacity`)
-- On press: fetch workout via `workoutService.getWorkout(workoutId)`
-- Open `WorkoutDetailSheet` with `showSchedule={true}`
-- The existing date picker + schedule flow in `WorkoutDetailSheet` handles the rest
+**Files:** `mobile/src/components/dashboard/CoachCard.tsx` and `TodaySuggestionCard.tsx`
+- Make suggestion/planned/tomorrow workout boxes pressable (`TouchableOpacity`) when `workoutId` is present
+- On press: call `onWorkoutPress(workoutId)` callback (passed from parent)
+- Rest day suggestions: remain non-pressable
 
 **File:** `mobile/src/screens/DashboardScreen.tsx`
-- If the `TodaySuggestionCard` needs to open a bottom sheet that lives in the parent, pass an `onWorkoutPress(workoutId)` callback
+- Add state for selected workout + bottom sheet ref
+- Pass `onWorkoutPress(workoutId)` to `CoachCard` and `TodaySuggestionCard`
+- On callback: fetch workout via `workoutService.getWorkout(workoutId)`, open `WorkoutDetailSheet` with `showSchedule={true}`
+- The existing date picker + schedule flow in `WorkoutDetailSheet` handles the rest
+
+### Cache Invalidation
+
+After a user schedules a suggested workout from the dashboard:
+- Frontend: re-fetch suggestion data so the UI updates (suggested → planned)
+- Backend: call `clearSuggestionCache(athleteId)` after the calendar entry is created (this function already exists in `dailyAnalysisService.ts`)
 
 ## Key Decisions
 
 - **AI picks from real workouts** rather than fuzzy-matching after the fact — more reliable
+- **Workout templates cloned to workouts table** when selected — ensures all existing workout endpoints work without modification
+- **`tss_estimate` normalized to `tss`** when combining templates with user workouts for the AI prompt
 - **Workout templates included** alongside user's library so new users with few custom workouts still get good suggestions
 - **Rest days remain non-clickable** — no workout to view or schedule
-- **Existing `WorkoutDetail` and `WorkoutDetailSheet` reused** — no new components needed
+- **Existing `WorkoutDetail` and `WorkoutDetailSheet` reused** — no new components needed; `onSchedule` prop leveraged
 - **Planned workout IDs included too** — makes all workout boxes on the dashboard interactive, not just suggestions
+- **Target date inferred from `hasRiddenToday`** — today if pre-ride, tomorrow if post-ride
