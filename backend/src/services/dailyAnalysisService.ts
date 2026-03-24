@@ -35,17 +35,64 @@ export interface TodaySuggestion {
     summary: string;
     recommendation: string;
     suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more' | 'suggested-workout';
-    todaysWorkout: { name: string; type: string; duration: number; tss: number } | null;
-    suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
+    todaysWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
+    suggestedWorkout: { workoutId?: string; name: string; type: string; duration: number; description: string } | null;
     status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
     currentTSB: number;
-    tomorrowsWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
   } | null;
 }
 
+interface AvailableWorkout {
+  id: string;
+  name: string;
+  type: string;
+  duration: number;
+  tss: number;
+  source: 'athlete' | 'template';
+}
+
 // In-memory cache: key = "athleteId:YYYY-MM-DD:pre|post"
 const suggestionCache = new Map<string, TodaySuggestion>();
+
+/**
+ * Clone a workout_template into the workouts table for a specific athlete.
+ * Returns the new workout's ID.
+ */
+async function cloneTemplateToWorkout(templateId: string, athleteId: string): Promise<string> {
+  const { data: template, error: fetchErr } = await supabaseAdmin
+    .from('workout_templates')
+    .select('name, description, workout_type, duration_minutes, tss_estimate, intervals')
+    .eq('id', templateId)
+    .single();
+
+  if (fetchErr || !template) {
+    throw new Error(`Template ${templateId} not found`);
+  }
+
+  const { data: workout, error: insertErr } = await supabaseAdmin
+    .from('workouts')
+    .insert({
+      athlete_id: athleteId,
+      name: template.name,
+      description: template.description,
+      workout_type: template.workout_type,
+      duration_minutes: template.duration_minutes,
+      tss: template.tss_estimate,
+      intervals: template.intervals,
+      generated_by_ai: true,
+      ai_prompt: 'Suggested by AI daily coach',
+    })
+    .select('id')
+    .single();
+
+  if (insertErr || !workout) {
+    throw new Error(`Failed to clone template: ${insertErr?.message}`);
+  }
+
+  return workout.id;
+}
 
 /**
  * Build the ACWR-based training status block for AI prompts.
@@ -437,7 +484,7 @@ Format as JSON:
     const todayUTC = localDayToUTCRange(todayStr, tz);
     const sevenDaysAgoUTC = localDayToUTCRange(sevenDaysAgo.toISOString().split('T')[0], tz);
 
-    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile] = await Promise.all([
+    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile, athleteWorkoutsResult, templatesResult] = await Promise.all([
       trainingLoadService.getTrainingStatus(athleteId),
       supabaseAdmin
         .from('strava_activities')
@@ -474,6 +521,15 @@ Format as JSON:
         .gte('start_date', sevenDaysAgoUTC.start)
         .order('start_date', { ascending: false }),
       fatigueProfileService.getFatigueProfile(athleteId),
+      supabaseAdmin
+        .from('workouts')
+        .select('id, name, workout_type, duration_minutes, tss')
+        .eq('athlete_id', athleteId)
+        .order('created_at', { ascending: false })
+        .limit(50),
+      supabaseAdmin
+        .from('workout_templates')
+        .select('id, name, workout_type, duration_minutes, tss_estimate'),
     ]);
 
     const yesterdayActivities = yesterdayResult.data || [];
@@ -481,6 +537,32 @@ Format as JSON:
     const todayActivities = todayRidesResult.data || [];
     const hasPlannedWorkout = !!todayEntry.data?.workouts;
     const hasTomorrowWorkout = !!tomorrowEntry.data?.workouts;
+
+    // Build normalized list of available workouts for AI to pick from
+    const athleteWorkouts: AvailableWorkout[] = (athleteWorkoutsResult.data || []).map((w: any) => ({
+      id: w.id,
+      name: w.name,
+      type: w.workout_type,
+      duration: w.duration_minutes,
+      tss: w.tss || 0,
+      source: 'athlete' as const,
+    }));
+
+    const templateWorkouts: AvailableWorkout[] = (templatesResult.data || []).map((t: any) => ({
+      id: t.id,
+      name: t.name,
+      type: t.workout_type,
+      duration: t.duration_minutes,
+      tss: t.tss_estimate || 0,
+      source: 'template' as const,
+    }));
+
+    // Deduplicate by name, prefer athlete workouts
+    const seenNames = new Set(athleteWorkouts.map(w => w.name));
+    const availableWorkouts: AvailableWorkout[] = [
+      ...athleteWorkouts,
+      ...templateWorkouts.filter(t => !seenNames.has(t.name)),
+    ];
 
     // Build AI context — use post-ride prompt if ridden today
     let context: string;
@@ -490,7 +572,8 @@ Format as JSON:
         trainingStatus,
         tomorrowEntry.data,
         recentActivities,
-        fatigueProfile
+        fatigueProfile,
+        availableWorkouts
       );
     } else {
       context = this.buildSuggestionContext(
@@ -499,12 +582,31 @@ Format as JSON:
         todayEntry.data,
         recentActivities,
         hasPlannedWorkout,
-        fatigueProfile
+        fatigueProfile,
+        availableWorkouts
       );
     }
 
     // Get AI suggestion
     const aiResult = await this.getSuggestionAIAnalysis(context, riddenToday ? true : hasPlannedWorkout);
+
+    // If AI picked a workout, resolve the ID (clone template if needed)
+    let resolvedWorkoutId: string | undefined;
+    if (aiResult.suggestedWorkout?.workoutId) {
+      const pickedId = aiResult.suggestedWorkout.workoutId;
+      const matchedWorkout = availableWorkouts.find(w => w.id === pickedId);
+      if (!matchedWorkout) {
+        logger.warn(`AI returned unknown workoutId ${pickedId}, ignoring`);
+      } else if (matchedWorkout.source === 'athlete') {
+        resolvedWorkoutId = pickedId;
+      } else {
+        try {
+          resolvedWorkoutId = await cloneTemplateToWorkout(pickedId, athleteId);
+        } catch (err) {
+          logger.warn('Failed to clone template, suggestion will lack workoutId:', err);
+        }
+      }
+    }
 
     // Determine status using ACWR (must match FreshnessGauge logic)
     const tsb = trainingStatus?.tsb || 0;
@@ -532,6 +634,7 @@ Format as JSON:
 
     const tomorrowsWorkout = hasTomorrowWorkout
       ? {
+          workoutId: tomorrowEntry.data.workouts.id,
           name: tomorrowEntry.data.workouts.name,
           type: tomorrowEntry.data.workouts.workout_type,
           duration: tomorrowEntry.data.workouts.duration_minutes,
@@ -547,13 +650,22 @@ Format as JSON:
         suggestedAction: aiResult.suggestedAction,
         todaysWorkout: hasPlannedWorkout
           ? {
+              workoutId: todayEntry.data.workouts.id,
               name: todayEntry.data.workouts.name,
               type: todayEntry.data.workouts.workout_type,
               duration: todayEntry.data.workouts.duration_minutes,
               tss: todayEntry.data.workouts.tss,
             }
           : null,
-        suggestedWorkout: aiResult.suggestedWorkout || null,
+        suggestedWorkout: aiResult.suggestedWorkout
+          ? {
+              workoutId: resolvedWorkoutId,
+              name: aiResult.suggestedWorkout.name,
+              type: aiResult.suggestedWorkout.type,
+              duration: aiResult.suggestedWorkout.duration,
+              description: aiResult.suggestedWorkout.description,
+            }
+          : null,
         status,
         currentTSB: tsb,
         tomorrowsWorkout,
@@ -574,7 +686,8 @@ Format as JSON:
     todayEntry: any,
     recentActivities: any[],
     hasPlannedWorkout: boolean,
-    fatigueProfile: FatigueProfile | null = null
+    fatigueProfile: FatigueProfile | null = null,
+    availableWorkouts: AvailableWorkout[] = []
   ): string {
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
@@ -628,14 +741,21 @@ Format as JSON:
 }`;
     }
 
+    const workoutListText = availableWorkouts.length > 0
+      ? '\n\nAVAILABLE WORKOUTS (pick the best fit by ID):\nid | name | type | duration_min | tss\n' +
+        availableWorkouts.map(w => `${w.id} | ${w.name} | ${w.type} | ${w.duration} | ${w.tss}`).join('\n')
+      : '';
+
     return `${base}
 
 No workout is scheduled for today.
+${workoutListText}
 
 YOUR TASK:
 Suggest what the athlete should do today — this could be a workout OR a rest day. Your suggestion MUST match the training status above.
 If Overreaching/Overtraining: prescribe rest or very easy recovery. If Productive: moderate training is fine. If Fresh/Balanced: can push harder.
 Base your description on the ACTUAL ride data — don't guess or assume what the week looked like. Be direct, no filler.
+${availableWorkouts.length > 0 ? 'If suggesting a workout (not rest), pick from the AVAILABLE WORKOUTS list and include its ID.' : ''}
 
 Format as JSON:
 {
@@ -643,6 +763,7 @@ Format as JSON:
   "recommendation": "1 sentence: why this choice (e.g. 'Good day for tempo work to build on your base.' or 'With the load you've built up, take a full rest day.')",
   "suggestedAction": "suggested-workout",
   "suggestedWorkout": {
+    "workoutId": "<UUID from the AVAILABLE WORKOUTS list, or omit for rest days>",
     "name": "Workout Name (or 'Rest Day')",
     "type": "rest|recovery|endurance|tempo|threshold|vo2max",
     "duration": 0,
@@ -659,7 +780,8 @@ Format as JSON:
     trainingStatus: any,
     tomorrowEntry: any,
     recentActivities: any[],
-    fatigueProfile: FatigueProfile | null = null
+    fatigueProfile: FatigueProfile | null = null,
+    availableWorkouts: AvailableWorkout[] = []
   ): string {
     const todayTSS = todayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
@@ -688,17 +810,25 @@ Format as JSON:
         + '  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"\n'
         + '}';
     } else {
-      tomorrowSection = '- No workout scheduled\n\n'
+      const workoutListText = availableWorkouts.length > 0
+        ? '\n\nAVAILABLE WORKOUTS (pick the best fit by ID):\nid | name | type | duration_min | tss\n'
+          + availableWorkouts.map(w => `${w.id} | ${w.name} | ${w.type} | ${w.duration} | ${w.tss}`).join('\n')
+        : '';
+
+      tomorrowSection = '- No workout scheduled\n'
+        + workoutListText + '\n\n'
         + 'YOUR TASK:\n'
         + 'Summarize today\'s training effort and suggest what to do tomorrow — this could be a workout OR a rest day. Your suggestion MUST match the training status above.\n'
         + 'If Overreaching/Overtraining: prescribe rest or very easy recovery. If Productive: moderate training is fine. If Fresh/Balanced: can push harder.\n'
-        + 'Base your description on the ACTUAL ride data — don\'t guess or assume what the week looked like. Be direct, no filler.\n\n'
-        + 'Format as JSON:\n'
+        + 'Base your description on the ACTUAL ride data — don\'t guess or assume what the week looked like. Be direct, no filler.\n'
+        + (availableWorkouts.length > 0 ? 'If suggesting a workout (not rest), pick from the AVAILABLE WORKOUTS list and include its ID.\n' : '')
+        + '\nFormat as JSON:\n'
         + '{\n'
         + '  "summary": "1 sentence: today\'s ride recap referencing actual data (e.g. \'Big 136 TSS effort on top of a demanding week.\')",\n'
         + '  "recommendation": "1 sentence: why this choice (e.g. \'After today\'s big effort, an easy spin tomorrow will aid recovery.\' or \'With the load you\'ve built up, take tomorrow off.\')",\n'
-        + '  "suggestedAction": "proceed-as-planned",\n'
+        + '  "suggestedAction": "suggested-workout",\n'
         + '  "suggestedWorkout": {\n'
+        + '    "workoutId": "<UUID from the AVAILABLE WORKOUTS list, or omit for rest days>",\n'
         + '    "name": "Workout Name (or \'Rest Day\')",\n'
         + '    "type": "rest|recovery|endurance|tempo|threshold|vo2max",\n'
         + '    "duration": 0,\n'
@@ -733,7 +863,7 @@ Format as JSON:
     summary: string;
     recommendation: string;
     suggestedAction: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['suggestedAction'];
-    suggestedWorkout?: { name: string; type: string; duration: number; description: string };
+    suggestedWorkout?: { workoutId?: string; name: string; type: string; duration: number; description: string };
   }> {
     try {
       const response = await anthropic.messages.create({
