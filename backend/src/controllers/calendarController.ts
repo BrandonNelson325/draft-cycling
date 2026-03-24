@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { calendarService } from '../services/calendarService';
 import { ScheduleWorkoutDTO, BulkScheduleDTO, CompleteWorkoutDTO } from '../types/calendar';
+import { clearSuggestionCache } from '../services/dailyAnalysisService';
 
 export const scheduleWorkout = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -24,6 +25,7 @@ export const scheduleWorkout = async (req: AuthRequest, res: Response): Promise<
       data.ai_rationale
     );
 
+    clearSuggestionCache(req.user.id);
     res.status(201).json(entry);
   } catch (error: any) {
     console.error('Schedule workout error:', error);
