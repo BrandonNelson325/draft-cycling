@@ -3,11 +3,15 @@ import { Link } from 'react-router-dom';
 import { ChevronDown, ChevronUp, Moon, Activity, Heart, Battery, TrendingUp, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { FreshnessGauge } from './FreshnessGauge';
+import { WorkoutDetail } from '../workout/WorkoutDetail';
 import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
 import { trainingService } from '../../services/trainingService';
 import { healthDataService } from '../../services/healthDataService';
 import type { HealthData } from '../../services/healthDataService';
+import { workoutService } from '../../services/workoutService';
+import { calendarService } from '../../services/calendarService';
+import type { Workout } from '../../services/workoutService';
 
 interface TrainingStatus {
   ctl: number;
@@ -23,6 +27,35 @@ export function CoachCard() {
   const [healthData, setHealthData] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+  const [loadingWorkoutId, setLoadingWorkoutId] = useState<string | null>(null);
+
+  const handleWorkoutClick = async (workoutId: string | undefined) => {
+    if (!workoutId || loadingWorkoutId) return;
+    setLoadingWorkoutId(workoutId);
+    try {
+      const workout = await workoutService.getWorkout(workoutId);
+      setSelectedWorkout(workout);
+    } catch (err) {
+      console.error('Failed to load workout:', err);
+    } finally {
+      setLoadingWorkoutId(null);
+    }
+  };
+
+  const handleSchedule = async (workout: Workout) => {
+    try {
+      const targetDate = hasRidden
+        ? new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1)
+        : new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+      await calendarService.scheduleWorkout(workout.id, targetDate);
+      setSelectedWorkout(null);
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setSuggestion(fresh);
+    } catch (err) {
+      console.error('Failed to schedule workout:', err);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -85,7 +118,10 @@ export function CoachCard() {
 
             {/* Today's planned workout (pre-ride) */}
             {!hasRidden && s.todaysWorkout && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <div
+                className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${s.todaysWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                onClick={() => handleWorkoutClick(s.todaysWorkout?.workoutId)}
+              >
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Planned</p>
                 <p className="text-sm font-medium text-gray-800">{s.todaysWorkout.name}</p>
                 <p className="text-xs text-gray-500">
@@ -96,7 +132,10 @@ export function CoachCard() {
 
             {/* Suggested workout or rest day (pre-ride, no plan) */}
             {!hasRidden && s.suggestedWorkout && !s.todaysWorkout && (
-              <div className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'}`}>
+              <div
+                className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'} ${s.suggestedWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                onClick={() => handleWorkoutClick(s.suggestedWorkout?.workoutId)}
+              >
                 <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${s.suggestedWorkout.type === 'rest' ? 'text-green-700' : 'text-purple-700'}`}>
                   {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
                 </p>
@@ -112,7 +151,10 @@ export function CoachCard() {
 
             {/* Tomorrow's scheduled workout (post-ride) */}
             {hasRidden && s.tomorrowsWorkout && (
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+              <div
+                className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${s.tomorrowsWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                onClick={() => handleWorkoutClick(s.tomorrowsWorkout?.workoutId)}
+              >
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Tomorrow</p>
                 <p className="text-sm font-medium text-gray-800">{s.tomorrowsWorkout.name}</p>
                 <p className="text-xs text-gray-500">
@@ -123,7 +165,10 @@ export function CoachCard() {
 
             {/* Suggested tomorrow workout or rest day (post-ride, no scheduled workout) */}
             {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
-              <div className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'}`}>
+              <div
+                className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'} ${s.suggestedWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+                onClick={() => handleWorkoutClick(s.suggestedWorkout?.workoutId)}
+              >
                 <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${s.suggestedWorkout.type === 'rest' ? 'text-green-700' : 'text-purple-700'}`}>
                   {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
                 </p>
@@ -178,6 +223,19 @@ export function CoachCard() {
           Chat with Coach
         </Link>
       </CardContent>
+
+      {selectedWorkout && (
+        <WorkoutDetail
+          workout={selectedWorkout}
+          onClose={() => setSelectedWorkout(null)}
+          onSchedule={
+            // Show schedule for suggested workouts (not already on calendar)
+            !s?.todaysWorkout?.workoutId || selectedWorkout.id !== s.todaysWorkout.workoutId
+              ? handleSchedule
+              : undefined
+          }
+        />
+      )}
     </Card>
   );
 }

@@ -1,8 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { WorkoutDetail } from '../workout/WorkoutDetail';
 import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
+import { workoutService } from '../../services/workoutService';
+import { calendarService } from '../../services/calendarService';
+import type { Workout } from '../../services/workoutService';
 
 const STATUS_CONFIG: Record<string, { bg: string; text: string; label: string }> = {
   fresh: { bg: 'bg-emerald-900/50', text: 'text-emerald-400', label: 'Fresh' },
@@ -23,6 +27,35 @@ export function TodaySuggestionCard() {
   const [data, setData] = useState<TodaySuggestion | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+  const [loadingWorkoutId, setLoadingWorkoutId] = useState<string | null>(null);
+
+  const handleWorkoutClick = async (workoutId: string | undefined) => {
+    if (!workoutId || loadingWorkoutId) return;
+    setLoadingWorkoutId(workoutId);
+    try {
+      const workout = await workoutService.getWorkout(workoutId);
+      setSelectedWorkout(workout);
+    } catch (err) {
+      console.error('Failed to load workout:', err);
+    } finally {
+      setLoadingWorkoutId(null);
+    }
+  };
+
+  const handleSchedule = async (workout: Workout) => {
+    try {
+      const targetDate = data?.hasRiddenToday
+        ? new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate() + 1)
+        : new Date(new Date().getFullYear(), new Date().getMonth(), new Date().getDate());
+      await calendarService.scheduleWorkout(workout.id, targetDate);
+      setSelectedWorkout(null);
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setData(fresh);
+    } catch (err) {
+      console.error('Failed to schedule workout:', err);
+    }
+  };
 
   useEffect(() => {
     dailyAnalysisService
@@ -91,7 +124,10 @@ export function TodaySuggestionCard() {
 
         {/* Today's planned workout (pre-ride) */}
         {!hasRiddenToday && suggestion.todaysWorkout && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div
+            className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${suggestion.todaysWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+            onClick={() => handleWorkoutClick(suggestion.todaysWorkout?.workoutId)}
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-1">
               Planned
             </p>
@@ -104,7 +140,10 @@ export function TodaySuggestionCard() {
 
         {/* Suggested workout (pre-ride, no plan) */}
         {!hasRiddenToday && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
-          <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+          <div
+            className={`rounded-lg border border-purple-200 bg-purple-50 p-3 ${suggestion.suggestedWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+            onClick={() => handleWorkoutClick(suggestion.suggestedWorkout?.workoutId)}
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-purple-700 mb-1">
               Suggested
             </p>
@@ -118,7 +157,10 @@ export function TodaySuggestionCard() {
 
         {/* Tomorrow's workout preview */}
         {hasRiddenToday && suggestion.tomorrowsWorkout && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-3">
+          <div
+            className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${suggestion.tomorrowsWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+            onClick={() => handleWorkoutClick(suggestion.tomorrowsWorkout?.workoutId)}
+          >
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-1">
               Tomorrow
             </p>
@@ -143,6 +185,18 @@ export function TodaySuggestionCard() {
           Chat with Coach
         </Link>
       </CardContent>
+
+      {selectedWorkout && (
+        <WorkoutDetail
+          workout={selectedWorkout}
+          onClose={() => setSelectedWorkout(null)}
+          onSchedule={
+            !suggestion.todaysWorkout?.workoutId || selectedWorkout.id !== suggestion.todaysWorkout.workoutId
+              ? handleSchedule
+              : undefined
+          }
+        />
+      )}
     </Card>
   );
 }
