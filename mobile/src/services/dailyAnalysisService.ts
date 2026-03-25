@@ -30,11 +30,11 @@ export interface TodaySuggestion {
     summary: string;
     recommendation: string;
     suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more' | 'suggested-workout';
-    todaysWorkout: { name: string; type: string; duration: number; tss: number } | null;
-    suggestedWorkout: { name: string; type: string; duration: number; description: string } | null;
+    todaysWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
+    suggestedWorkout: { workoutId?: string; name: string; type: string; duration: number; description: string } | null;
     status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
     currentTSB: number;
-    tomorrowsWorkout: { name: string; type: string; duration: number; tss: number } | null;
+    tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
   } | null;
 }

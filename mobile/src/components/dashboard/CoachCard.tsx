@@ -17,7 +17,11 @@ interface TrainingStatus {
   form_status: string;
 }
 
-export default function CoachCard() {
+interface CoachCardProps {
+  onWorkoutPress?: (workoutId: string) => void;
+}
+
+export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [suggestion, setSuggestion] = useState<TodaySuggestion | null>(null);
   const [training, setTraining] = useState<TrainingStatus | null>(null);
@@ -94,54 +98,78 @@ export default function CoachCard() {
 
           {/* Today's planned workout (pre-ride) */}
           {!hasRidden && s.todaysWorkout && (
-            <View style={styles.workoutBox}>
-              <Text style={styles.workoutLabel}>Planned</Text>
-              <Text style={styles.workoutName}>{s.todaysWorkout.name}</Text>
-              <Text style={styles.workoutMeta}>
-                {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · Load {s.todaysWorkout.tss}
-              </Text>
-            </View>
+            <TouchableOpacity
+              activeOpacity={s.todaysWorkout.workoutId ? 0.7 : 1}
+              onPress={() => s.todaysWorkout?.workoutId && onWorkoutPress?.(s.todaysWorkout.workoutId)}
+              disabled={!s.todaysWorkout.workoutId}
+            >
+              <View style={styles.workoutBox}>
+                <Text style={styles.workoutLabel}>Planned</Text>
+                <Text style={styles.workoutName}>{s.todaysWorkout.name}</Text>
+                <Text style={styles.workoutMeta}>
+                  {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · Load {s.todaysWorkout.tss}
+                </Text>
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Suggested workout or rest day (pre-ride, no plan) */}
           {!hasRidden && s.suggestedWorkout && !s.todaysWorkout && (
-            <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
-              <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
-                {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
-              </Text>
-              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
-              {s.suggestedWorkout.type !== 'rest' && (
-                <Text style={styles.workoutMeta}>
-                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+            <TouchableOpacity
+              activeOpacity={s.suggestedWorkout.workoutId ? 0.7 : 1}
+              onPress={() => s.suggestedWorkout?.workoutId && onWorkoutPress?.(s.suggestedWorkout.workoutId)}
+              disabled={!s.suggestedWorkout.workoutId}
+            >
+              <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
+                <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
+                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
                 </Text>
-              )}
-            </View>
+                <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
+                {s.suggestedWorkout.type !== 'rest' && (
+                  <Text style={styles.workoutMeta}>
+                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Tomorrow's scheduled workout (post-ride) */}
           {hasRidden && s.tomorrowsWorkout && (
-            <View style={[styles.workoutBox, styles.tomorrowBox]}>
-              <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
-              <Text style={styles.workoutName}>{s.tomorrowsWorkout.name}</Text>
-              <Text style={styles.workoutMeta}>
-                {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · Load {s.tomorrowsWorkout.tss}
-              </Text>
-            </View>
+            <TouchableOpacity
+              activeOpacity={s.tomorrowsWorkout.workoutId ? 0.7 : 1}
+              onPress={() => s.tomorrowsWorkout?.workoutId && onWorkoutPress?.(s.tomorrowsWorkout.workoutId)}
+              disabled={!s.tomorrowsWorkout.workoutId}
+            >
+              <View style={[styles.workoutBox, styles.tomorrowBox]}>
+                <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
+                <Text style={styles.workoutName}>{s.tomorrowsWorkout.name}</Text>
+                <Text style={styles.workoutMeta}>
+                  {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · Load {s.tomorrowsWorkout.tss}
+                </Text>
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Suggested tomorrow workout or rest day (post-ride, no scheduled workout) */}
           {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
-            <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
-              <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
-                {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
-              </Text>
-              <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
-              {s.suggestedWorkout.type !== 'rest' && (
-                <Text style={styles.workoutMeta}>
-                  {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+            <TouchableOpacity
+              activeOpacity={s.suggestedWorkout.workoutId ? 0.7 : 1}
+              onPress={() => s.suggestedWorkout?.workoutId && onWorkoutPress?.(s.suggestedWorkout.workoutId)}
+              disabled={!s.suggestedWorkout.workoutId}
+            >
+              <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
+                <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
+                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
                 </Text>
-              )}
-            </View>
+                <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
+                {s.suggestedWorkout.type !== 'rest' && (
+                  <Text style={styles.workoutMeta}>
+                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
+                  </Text>
+                )}
+              </View>
+            </TouchableOpacity>
           )}
 
           {/* Single recommendation line — the only AI text shown */}

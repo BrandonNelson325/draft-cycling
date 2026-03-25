@@ -23,7 +23,11 @@ const ACTION_LABELS: Record<string, { icon: string; text: string; color: string 
   'suggested-workout': { icon: 'bulb', text: 'Suggested for today', color: '#a78bfa' },
 };
 
-export default function TodaySuggestionCard() {
+interface TodaySuggestionCardProps {
+  onWorkoutPress?: (workoutId: string) => void;
+}
+
+export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionCardProps = {}) {
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [data, setData] = useState<TodaySuggestion | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -85,36 +89,54 @@ export default function TodaySuggestionCard() {
 
       {/* Today's planned workout (pre-ride) */}
       {!hasRiddenToday && suggestion.todaysWorkout && (
-        <View style={styles.workoutBox}>
-          <Text style={styles.workoutLabel}>Planned</Text>
-          <Text style={styles.workoutName}>{suggestion.todaysWorkout.name}</Text>
-          <Text style={styles.workoutMeta}>
-            {suggestion.todaysWorkout.duration} min · {suggestion.todaysWorkout.type} · {suggestion.todaysWorkout.tss} TSS
-          </Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={suggestion.todaysWorkout.workoutId ? 0.7 : 1}
+          onPress={() => suggestion.todaysWorkout?.workoutId && onWorkoutPress?.(suggestion.todaysWorkout.workoutId)}
+          disabled={!suggestion.todaysWorkout.workoutId}
+        >
+          <View style={styles.workoutBox}>
+            <Text style={styles.workoutLabel}>Planned</Text>
+            <Text style={styles.workoutName}>{suggestion.todaysWorkout.name}</Text>
+            <Text style={styles.workoutMeta}>
+              {suggestion.todaysWorkout.duration} min · {suggestion.todaysWorkout.type} · {suggestion.todaysWorkout.tss} TSS
+            </Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       {/* Suggested workout (pre-ride, no plan) */}
       {!hasRiddenToday && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
-        <View style={[styles.workoutBox, styles.suggestedBox]}>
-          <Text style={[styles.workoutLabel, styles.suggestedLabel]}>Suggested</Text>
-          <Text style={styles.workoutName}>{suggestion.suggestedWorkout.name}</Text>
-          <Text style={styles.workoutMeta}>
-            {suggestion.suggestedWorkout.duration} min · {suggestion.suggestedWorkout.type}
-          </Text>
-          <Text style={styles.workoutDesc}>{suggestion.suggestedWorkout.description}</Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={suggestion.suggestedWorkout.workoutId ? 0.7 : 1}
+          onPress={() => suggestion.suggestedWorkout?.workoutId && onWorkoutPress?.(suggestion.suggestedWorkout.workoutId)}
+          disabled={!suggestion.suggestedWorkout.workoutId}
+        >
+          <View style={[styles.workoutBox, styles.suggestedBox]}>
+            <Text style={[styles.workoutLabel, styles.suggestedLabel]}>Suggested</Text>
+            <Text style={styles.workoutName}>{suggestion.suggestedWorkout.name}</Text>
+            <Text style={styles.workoutMeta}>
+              {suggestion.suggestedWorkout.duration} min · {suggestion.suggestedWorkout.type}
+            </Text>
+            <Text style={styles.workoutDesc}>{suggestion.suggestedWorkout.description}</Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       {/* Tomorrow's workout preview (post-ride) */}
       {hasRiddenToday && suggestion.tomorrowsWorkout && (
-        <View style={[styles.workoutBox, styles.tomorrowBox]}>
-          <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
-          <Text style={styles.workoutName}>{suggestion.tomorrowsWorkout.name}</Text>
-          <Text style={styles.workoutMeta}>
-            {suggestion.tomorrowsWorkout.duration} min · {suggestion.tomorrowsWorkout.type} · {suggestion.tomorrowsWorkout.tss} TSS
-          </Text>
-        </View>
+        <TouchableOpacity
+          activeOpacity={suggestion.tomorrowsWorkout.workoutId ? 0.7 : 1}
+          onPress={() => suggestion.tomorrowsWorkout?.workoutId && onWorkoutPress?.(suggestion.tomorrowsWorkout.workoutId)}
+          disabled={!suggestion.tomorrowsWorkout.workoutId}
+        >
+          <View style={[styles.workoutBox, styles.tomorrowBox]}>
+            <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
+            <Text style={styles.workoutName}>{suggestion.tomorrowsWorkout.name}</Text>
+            <Text style={styles.workoutMeta}>
+              {suggestion.tomorrowsWorkout.duration} min · {suggestion.tomorrowsWorkout.type} · {suggestion.tomorrowsWorkout.tss} TSS
+            </Text>
+          </View>
+        </TouchableOpacity>
       )}
 
       <View style={styles.actionRow}>

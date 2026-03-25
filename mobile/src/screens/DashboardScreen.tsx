@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import type { StravaActivity } from '../services/calendarService';
+import { workoutService } from '../services/workoutService';
+import type { Workout } from '../services/workoutService';
 
 import CoachCard from '../components/dashboard/CoachCard';
 import MetricsCard from '../components/dashboard/MetricsCard';
@@ -12,6 +14,7 @@ import PowerCurveChart from '../components/dashboard/PowerCurveChart';
 import FTPEstimateCard from '../components/dashboard/FTPEstimateCard';
 import RecentActivities from '../components/dashboard/RecentActivities';
 import ActivityDetailSheet from '../components/activity/ActivityDetailSheet';
+import WorkoutDetailSheet from '../components/workout/WorkoutDetailSheet';
 
 const SNAP_POINTS = ['60%', '85%'];
 
@@ -22,6 +25,8 @@ const renderBackdrop = (props: any) => (
 export default function DashboardScreen() {
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
   const activitySheetRef = useRef<BottomSheetModal>(null);
+  const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
+  const workoutSheetRef = useRef<BottomSheetModal>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -51,6 +56,16 @@ export default function DashboardScreen() {
     activitySheetRef.current?.present();
   }, []);
 
+  const handleWorkoutPress = useCallback(async (workoutId: string) => {
+    try {
+      const workout = await workoutService.getWorkout(workoutId);
+      setSelectedWorkout(workout);
+      workoutSheetRef.current?.present();
+    } catch (err) {
+      console.error('Failed to load workout:', err);
+    }
+  }, []);
+
   const handleFeedbackSaved = useCallback((activityId: string, effort: number) => {
     setSelectedActivity((prev) =>
       prev && prev.id === activityId ? { ...prev, perceived_effort: effort } : prev
@@ -75,7 +90,7 @@ export default function DashboardScreen() {
           />
         }
       >
-        <CoachCard key={`coach-${refreshKey}`} />
+        <CoachCard key={`coach-${refreshKey}`} onWorkoutPress={handleWorkoutPress} />
         <MetricsCard key={`metrics-${refreshKey}`} />
         <WeeklyVolumeChart key={`weekly-${refreshKey}`} />
         <PowerCurveChart key={`power-${refreshKey}`} />
@@ -93,6 +108,25 @@ export default function DashboardScreen() {
         handleIndicatorStyle={styles.sheetHandle}
       >
         <ActivityDetailSheet activity={selectedActivity} onFeedbackSaved={handleFeedbackSaved} />
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        ref={workoutSheetRef}
+        snapPoints={['85%']}
+        enablePanDownToClose
+        backdropComponent={renderBackdrop}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
+      >
+        <WorkoutDetailSheet
+          workout={selectedWorkout}
+          onClose={() => workoutSheetRef.current?.dismiss()}
+          onScheduled={() => {
+            workoutSheetRef.current?.dismiss();
+            setRefreshKey(k => k + 1);
+          }}
+          showSchedule={true}
+        />
       </BottomSheetModal>
     </SafeAreaView>
   );
