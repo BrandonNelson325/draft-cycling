@@ -216,7 +216,35 @@ app.use('/api/subscription', subscriptionRoutes);
 // Error handler (must be last)
 app.use(errorHandler);
 
-// Start server — warm JWKS cache before accepting traffic
+// Warm Supabase connection — retry SELECT until it returns data.
+// On free-tier Supabase (or after project pause), the first few reads may return empty
+// while PostgREST wakes up. This blocks server startup until reads actually work.
+async function warmSupabaseConnection(): Promise<void> {
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    try {
+      const start = Date.now();
+      // Use a table that always has rows if any user exists. Count is lightweight.
+      const { data, error, count } = await supabaseAdmin
+        .from('athletes')
+        .select('id', { count: 'exact', head: true });
+      const ms = Date.now() - start;
+
+      if (error) {
+        logger.warn(`[Supabase warmup] attempt ${attempt}/10 error (${ms}ms): ${error.message}`);
+      } else {
+        logger.info(`[Supabase warmup] connection ready in ${ms}ms (attempt ${attempt}, ${count ?? 0} athletes)`);
+        return;
+      }
+    } catch (e: any) {
+      logger.warn(`[Supabase warmup] attempt ${attempt}/10 exception: ${e.message}`);
+    }
+    // Backoff: 1s, 2s, 3s...
+    await new Promise(r => setTimeout(r, attempt * 1000));
+  }
+  logger.error('[Supabase warmup] failed after 10 attempts — starting anyway, reads may be empty');
+}
+
+// Start server — warm JWKS cache and Supabase connection before accepting traffic
 app.listen(config.port, async () => {
   logger.info(`🚴 AI Cycling Coach API running on port ${config.port}`);
   logger.info(`📍 Environment: ${config.nodeEnv}`);
@@ -224,6 +252,9 @@ app.listen(config.port, async () => {
 
   // Pre-warm JWKS cache so the first ES256 request doesn't trigger a cold fetch
   await warmJwksCache();
+
+  // Wake up Supabase DB connection so reads work before first user request
+  await warmSupabaseConnection();
 
   // Start Strava auto-sync cron job
   stravaCronService.start();
@@ -262,6 +293,16 @@ app.listen(config.port, async () => {
       logger.warn(`[HEALTH] HIGH MEMORY: rss=${rssMB}MB heap=${heapMB}MB — may need restart`);
     }
   }, 10 * 60 * 1000); // Every 10 minutes
+
+  // Supabase keepalive: lightweight SELECT every 2 minutes to prevent PostgREST
+  // connection from going stale (which causes empty reads on wake-up)
+  setInterval(async () => {
+    try {
+      await supabaseAdmin.from('athletes').select('id', { count: 'exact', head: true });
+    } catch {
+      // Silently ignore — the 10-minute health check will log real issues
+    }
+  }, 2 * 60 * 1000); // Every 2 minutes
 });
 
 export default app;
