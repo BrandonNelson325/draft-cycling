@@ -9,6 +9,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { dailyCheckInService, type DailyCheckInData } from '../../services/dailyCheckInService';
 import type { DailyAnalysis } from '../../services/dailyAnalysisService';
@@ -108,7 +110,10 @@ export default function DailyMorningModal({
       presentationStyle="pageSheet"
       onRequestClose={handleDismiss}
     >
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>
             {step === 1 ? 'Good Morning! 🌅' : 'Your Day Ahead'}
@@ -118,7 +123,7 @@ export default function DailyMorningModal({
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {step === 1 ? (
             <>
               <Text style={styles.question}>How did you sleep?</Text>
@@ -217,7 +222,7 @@ export default function DailyMorningModal({
             </>
           )}
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

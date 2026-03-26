@@ -9,6 +9,8 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import type { UnacknowledgedActivity, ActivityFeedback } from '../../services/activityFeedbackService';
 import { useAuthStore } from '../../stores/useAuthStore';
@@ -84,7 +86,10 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
       presentationStyle="pageSheet"
       onRequestClose={onSkip}
     >
-      <View style={styles.container}>
+      <KeyboardAvoidingView
+        style={styles.container}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
         <View style={styles.header}>
           <Text style={styles.title}>Post-Ride Feedback</Text>
           <TouchableOpacity onPress={onSkip}>
@@ -92,7 +97,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           {/* Activity info */}
           <View style={styles.activityCard}>
             <Text style={styles.activityName} numberOfLines={2}>{activity.name || 'Ride'}</Text>
@@ -246,7 +251,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
             )}
           </TouchableOpacity>
         </ScrollView>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
