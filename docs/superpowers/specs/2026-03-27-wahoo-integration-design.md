@@ -69,7 +69,7 @@ REPEAT=4
 
 ### Database Migration
 
-**File:** `backend/migrations/015_wahoo_integration.sql`
+**File:** `backend/migrations/024_wahoo_integration.sql`
 
 Add columns to `athletes` table:
 
@@ -105,8 +105,12 @@ Mirrors `intervalsIcuService.ts` structure:
   3. Base64 encode, POST to `POST /v1/plans` with `plan[file]` and `plan[external_id]=workoutId`
   4. POST to `POST /v1/workouts` with `workout[starts]` (UTC) and plan reference
   5. Record in `workout_syncs` with `integration: 'wahoo'`, `external_id: planId`
+- **`deleteWorkout(athleteId, workoutId)`** — DELETE the plan/workout from Wahoo, update `workout_syncs` status to `'deleted'`
 - **`disconnect(athleteId: string)`** — Null all wahoo columns, set `wahoo_auto_sync: false`
 - **`isConnected(athleteId: string)`** — Check if `wahoo_access_token` exists
+
+Env vars read directly in the service (matching `intervalsIcuService.ts` pattern — no centralized config):
+- `WAHOO_CLIENT_ID`, `WAHOO_CLIENT_SECRET`, `WAHOO_REDIRECT_URI`, `WAHOO_MOBILE_REDIRECT_URI`
 
 ### Plan File Generator — `wahooplanGenerator.ts`
 
@@ -147,32 +151,18 @@ All routes except callback require `authenticateJWT` middleware. Controller meth
 
 ### Auto-sync Hook
 
-In `calendarService.scheduleWorkout()` or the calendar controller's `scheduleWorkout` handler, after successfully creating the calendar entry:
+**File:** `backend/src/services/calendarService.ts` — `scheduleWorkout()` method
 
-- Check if athlete has `wahoo_auto_sync: true` and `wahoo_access_token` is set
-- If so, fire-and-forget call to `wahooService.uploadWorkout()`
-- Mirrors the existing Intervals.icu auto-sync pattern
+The existing auto-sync block (around line 38-60) fetches `intervals_icu_auto_sync` and fires off `intervalsIcuService.uploadWorkout()`. Expand the SELECT to also fetch `wahoo_auto_sync` and `wahoo_access_token`, then add a parallel Wahoo sync check:
 
-### Config
-
-**File:** `backend/src/config.ts`
-
-Add env vars:
-
-```typescript
-wahoo: {
-  clientId: process.env.WAHOO_CLIENT_ID || '',
-  clientSecret: process.env.WAHOO_CLIENT_SECRET || '',
-  redirectUri: process.env.WAHOO_REDIRECT_URI || '',
-  mobileRedirectUri: process.env.WAHOO_MOBILE_REDIRECT_URI || 'cyclingcoach://wahoo/callback',
-}
-```
+- If `wahoo_auto_sync: true` and `wahoo_access_token` is set, fire-and-forget call to `wahooService.uploadWorkout()`
+- Runs alongside (not replacing) the existing Intervals.icu check
 
 ### Frontend Settings UI
 
-**File:** `frontend/src/components/settings/ProfileEditForm.tsx` (or a new integrations section)
+**File:** `frontend/src/components/settings/ProfileEditForm.tsx`
 
-Add "Wahoo" section following the same pattern as Strava/Intervals.icu:
+The web frontend has an Intervals.icu section in this file. Add a "Wahoo" section following the same pattern:
 - Disconnected: "Connect Wahoo" button → opens OAuth URL in new tab
 - Connected: green indicator, auto-sync toggle, "Disconnect" button
 - Callback handler on `/settings?wahoo=connected` (same as Intervals.icu pattern)
@@ -181,11 +171,11 @@ Add "Wahoo" section following the same pattern as Strava/Intervals.icu:
 
 **File:** `mobile/src/screens/SettingsScreen.tsx`
 
-Add "Wahoo" section next to Strava:
+The mobile settings screen has a Strava section but no Intervals.icu section. Add a "Wahoo" section following the **Strava pattern** (not Intervals.icu):
 - Uses `expo-web-browser.openAuthSessionAsync()` for OAuth
 - Redirect URI: `cyclingcoach://wahoo/callback`
 - Connected state: auto-sync toggle + disconnect button
-- Same pattern as existing Strava section
+- Same UI pattern as the existing Strava connection section
 
 ### Mobile Deep Link
 
