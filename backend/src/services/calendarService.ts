@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { CalendarEntry, ScheduleWorkoutDTO, UpdateCalendarEntryDTO } from '../types/calendar';
 import { intervalsIcuService } from './intervalsIcuService';
+import { wahooService } from './wahooService';
 import { logger } from '../utils/logger';
 
 export const calendarService = {
@@ -39,7 +40,7 @@ export const calendarService = {
     try {
       const { data: athlete } = await supabaseAdmin
         .from('athletes')
-        .select('intervals_icu_auto_sync')
+        .select('intervals_icu_auto_sync, wahoo_auto_sync, wahoo_access_token')
         .eq('id', athleteId)
         .single();
 
@@ -52,6 +53,17 @@ export const calendarService = {
           })
           .catch((err) => {
             logger.error(`❌ Auto-sync to Intervals.icu failed:`, err.message);
+          });
+      }
+
+      if (athlete?.wahoo_auto_sync && athlete?.wahoo_access_token) {
+        wahooService
+          .uploadWorkout(athleteId, workoutId, scheduledDate, data.id)
+          .then(() => {
+            logger.debug(`Auto-synced workout ${workoutId} to Wahoo`);
+          })
+          .catch((err) => {
+            logger.error(`Auto-sync to Wahoo failed:`, err.message);
           });
       }
     } catch (syncError) {
