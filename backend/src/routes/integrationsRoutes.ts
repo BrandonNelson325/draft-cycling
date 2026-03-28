@@ -12,4 +12,12 @@ router.post('/intervals-icu/sync', authenticateJWT, integrationsController.syncW
 router.post('/intervals-icu/settings', authenticateJWT, integrationsController.updateIntervalsIcuSettings);
 router.delete('/intervals-icu', authenticateJWT, integrationsController.disconnectIntervalsIcu);
 
+// Wahoo routes
+router.get('/wahoo/auth-url', authenticateJWT, integrationsController.getWahooAuthUrl);
+router.get('/wahoo/callback', integrationsController.handleWahooCallback);
+router.get('/wahoo/status', authenticateJWT, integrationsController.getWahooStatus);
+router.post('/wahoo/sync', authenticateJWT, integrationsController.syncWorkoutToWahoo);
+router.post('/wahoo/settings', authenticateJWT, integrationsController.updateWahooSettings);
+router.delete('/wahoo', authenticateJWT, integrationsController.disconnectWahoo);
+
 export default router;

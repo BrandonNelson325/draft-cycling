@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { intervalsIcuService } from '../services/intervalsIcuService';
+import { wahooService } from '../services/wahooService';
 import { supabaseAdmin } from '../utils/supabase';
 
 /**
@@ -150,6 +151,108 @@ export const updateIntervalsIcuSettings = async (req: AuthRequest, res: Response
     res.json({ success: true, auto_sync });
   } catch (error: any) {
     console.error('Error updating Intervals.icu settings:', error);
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+};
+
+/**
+ * Wahoo Integration Controllers
+ */
+
+export const getWahooAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const state = req.user.id;
+    const mobile = req.query.mobile === 'true';
+    const authUrl = wahooService.getAuthUrl(state, mobile);
+    res.json({ authUrl });
+  } catch (error: any) {
+    console.error('Error generating Wahoo auth URL:', error);
+    res.status(500).json({ error: 'Failed to generate authorization URL' });
+  }
+};
+
+export const handleWahooCallback = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    const { code, state } = req.query;
+    if (!code || typeof code !== 'string') { res.status(400).json({ error: 'Missing authorization code' }); return; }
+    if (!state || typeof state !== 'string') { res.status(400).json({ error: 'Missing state parameter' }); return; }
+    const isMobile = state.includes(':mobile');
+    const athleteId = state.replace(':mobile', '');
+    await wahooService.handleCallback(code, athleteId);
+    if (isMobile) {
+      res.redirect(`cyclingcoach://wahoo/callback?status=connected`);
+    } else {
+      res.redirect(`${process.env.FRONTEND_URL}/settings?wahoo=connected`);
+    }
+  } catch (error: any) {
+    console.error('Wahoo callback error:', error);
+    const isMobile = (req.query.state as string)?.includes(':mobile');
+    if (isMobile) {
+      res.redirect(`cyclingcoach://wahoo/callback?status=error`);
+    } else {
+      res.redirect(`${process.env.FRONTEND_URL}/settings?wahoo=error`);
+    }
+  }
+};
+
+export const disconnectWahoo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    await wahooService.disconnect(req.user.id);
+    res.json({ success: true, message: 'Wahoo disconnected' });
+  } catch (error: any) {
+    console.error('Error disconnecting Wahoo:', error);
+    res.status(500).json({ error: 'Failed to disconnect Wahoo' });
+  }
+};
+
+export const getWahooStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('wahoo_user_id, wahoo_access_token, wahoo_auto_sync, wahoo_token_expires_at')
+      .eq('id', req.user.id)
+      .single();
+    res.json({
+      connected: !!athlete?.wahoo_access_token,
+      user_id: athlete?.wahoo_user_id,
+      auto_sync: athlete?.wahoo_auto_sync || false,
+      token_expires_at: athlete?.wahoo_token_expires_at,
+    });
+  } catch (error: any) {
+    console.error('Error getting Wahoo status:', error);
+    res.status(500).json({ error: 'Failed to get integration status' });
+  }
+};
+
+export const syncWorkoutToWahoo = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const { workout_id, scheduled_date, calendar_entry_id } = req.body;
+    if (!workout_id || !scheduled_date) { res.status(400).json({ error: 'workout_id and scheduled_date are required' }); return; }
+    const externalId = await wahooService.uploadWorkout(req.user.id, workout_id, new Date(scheduled_date), calendar_entry_id);
+    res.json({ success: true, message: 'Workout synced to Wahoo', external_id: externalId });
+  } catch (error: any) {
+    console.error('Error syncing workout to Wahoo:', error);
+    res.status(500).json({ error: error.message || 'Failed to sync workout' });
+  }
+};
+
+export const updateWahooSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const { auto_sync } = req.body;
+    if (typeof auto_sync !== 'boolean') { res.status(400).json({ error: 'auto_sync must be a boolean' }); return; }
+    const { error } = await supabaseAdmin
+      .from('athletes')
+      .update({ wahoo_auto_sync: auto_sync })
+      .eq('id', req.user.id);
+    if (error) throw new Error(`Failed to update settings: ${error.message}`);
+    res.json({ success: true, auto_sync });
+  } catch (error: any) {
+    console.error('Error updating Wahoo settings:', error);
     res.status(500).json({ error: 'Failed to update settings' });
   }
 };
