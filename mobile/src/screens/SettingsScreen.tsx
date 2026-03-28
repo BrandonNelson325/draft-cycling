@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -21,6 +21,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
+import { wahooService } from '../services/wahooService';
 import { subscriptionService } from '../services/subscriptionService';
 import { getConversionUtils, convertToMetric } from '../utils/units';
 import WelcomeModal from '../components/modals/WelcomeModal';
@@ -85,6 +86,20 @@ export default function SettingsScreen({ navigation }: any) {
   // Strava
   const [stravaLoading, setStravaLoading] = useState(false);
   const hasStrava = !!user?.strava_athlete_id;
+
+  // Wahoo
+  const [wahooConnected, setWahooConnected] = useState(false);
+  const [wahooLoading, setWahooLoading] = useState(false);
+  const [wahooAutoSync, setWahooAutoSync] = useState(false);
+
+  useEffect(() => {
+    wahooService.getStatus().then((status) => {
+      setWahooConnected(status.connected);
+      setWahooAutoSync(status.auto_sync);
+    }).catch(() => {
+      // silently ignore — not connected
+    });
+  }, []);
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -212,6 +227,61 @@ export default function SettingsScreen({ navigation }: any) {
       Alert.alert('Error', 'Failed to sync activities.');
     } finally {
       setStravaLoading(false);
+    }
+  };
+
+  const handleConnectWahoo = async () => {
+    setWahooLoading(true);
+    try {
+      const authUrl = await wahooService.getAuthUrl();
+      const redirectUri = __DEV__
+        ? 'exp://localhost:8081/--/wahoo/callback'
+        : 'cyclingcoach://wahoo/callback';
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type === 'success') {
+        const urlStr = result.url;
+        const params = new URLSearchParams(urlStr.split('?')[1] || '');
+        const status = params.get('status');
+        if (status === 'connected') {
+          setWahooConnected(true);
+          Alert.alert('Connected', 'Wahoo connected successfully!');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to connect Wahoo.');
+    } finally {
+      setWahooLoading(false);
+    }
+  };
+
+  const handleDisconnectWahoo = () => {
+    Alert.alert('Disconnect Wahoo', 'Remove Wahoo connection?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await wahooService.disconnect();
+            setWahooConnected(false);
+            setWahooAutoSync(false);
+          } catch {
+            Alert.alert('Error', 'Failed to disconnect Wahoo.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleWahooAutoSyncToggle = async (value: boolean) => {
+    setWahooAutoSync(value);
+    try {
+      await wahooService.updateSettings(value);
+    } catch {
+      Alert.alert('Error', 'Failed to update Wahoo settings.');
+      setWahooAutoSync(!value); // revert
     }
   };
 
@@ -446,6 +516,51 @@ export default function SettingsScreen({ navigation }: any) {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.btnText}>Connect Strava</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Wahoo Section */}
+        <View style={styles.stravaTitleRow}>
+          <Ionicons name="bicycle-outline" size={18} color="#3b82f6" />
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Wahoo</Text>
+        </View>
+        <View style={styles.section}>
+          {wahooConnected ? (
+            <>
+              <View style={styles.stravaConnected}>
+                <View style={styles.stravaStatus}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.stravaText}>Connected</Text>
+                </View>
+              </View>
+              <View style={styles.notifRow}>
+                <View>
+                  <Text style={styles.notifLabel}>Auto-sync workouts</Text>
+                  <Text style={styles.notifHint}>Send planned workouts to Wahoo</Text>
+                </View>
+                <Switch
+                  value={wahooAutoSync}
+                  onValueChange={handleWahooAutoSyncToggle}
+                  trackColor={{ false: '#334155', true: '#3b82f6' }}
+                  thumbColor="#fff"
+                />
+              </View>
+              <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnectWahoo}>
+                <Text style={styles.disconnectText}>Disconnect Wahoo</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: '#1d4ed8' }, wahooLoading && styles.btnDisabled]}
+              onPress={handleConnectWahoo}
+              disabled={wahooLoading}
+            >
+              {wahooLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.btnText}>Connect Wahoo</Text>
               )}
             </TouchableOpacity>
           )}
