@@ -134,8 +134,11 @@ export const refreshToken = async (req: Request, res: Response): Promise<void> =
       return;
     }
 
-    // Refresh the session using Supabase
-    const { data, error } = await supabaseAdmin.auth.refreshSession({
+    // Refresh the session using the anon client (NOT supabaseAdmin!)
+    // Using supabaseAdmin.auth.refreshSession() pollutes the admin client's auth state
+    // with the user's JWT, causing all subsequent queries to run with RLS as that user
+    // instead of the service role — breaking data access for other users.
+    const { data, error } = await supabase.auth.refreshSession({
       refresh_token,
     });
 

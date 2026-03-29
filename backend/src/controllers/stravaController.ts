@@ -208,7 +208,7 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { data: activities, error } = await supabaseAdmin
+    const { data: activities, error, status: dbStatus } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', req.user.id)
@@ -219,6 +219,15 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
       logger.error('Error fetching activities:', error);
       res.status(500).json({ error: 'Failed to fetch activities' });
       return;
+    }
+
+    if (!activities || activities.length === 0) {
+      // DIAGNOSTIC: check if data actually exists
+      const { count, error: countErr } = await supabaseAdmin
+        .from('strava_activities')
+        .select('id', { count: 'exact', head: true })
+        .eq('athlete_id', req.user.id);
+      logger.error(`[Activities] DIAGNOSTIC — Empty for athlete ${req.user.id}: dbStatus=${dbStatus} count=${count} countErr=${countErr?.message || 'none'} uptime=${Math.floor(process.uptime() / 60)}min`);
     }
 
     // Map database field names to frontend-expected names and extract useful raw_data fields

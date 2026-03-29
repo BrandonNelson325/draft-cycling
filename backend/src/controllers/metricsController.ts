@@ -67,7 +67,7 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     // Get activities in time period
-    const { data: activities, error } = await supabaseAdmin
+    const { data: activities, error, status, statusText } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', req.user.id)
@@ -81,7 +81,25 @@ export const getMetrics = async (req: AuthRequest, res: Response): Promise<void>
     }
 
     if (!activities || activities.length === 0) {
-      console.warn(`[Metrics] No activities found for athlete ${req.user.id}, period=${period}, startDate=${startDateISO}, tz=${tz}`);
+      // DIAGNOSTIC: Run a parallel count query + unfiltered query to diagnose empty reads
+      const [countResult, unfilteredResult] = await Promise.all([
+        supabaseAdmin
+          .from('strava_activities')
+          .select('id', { count: 'exact', head: true })
+          .eq('athlete_id', req.user.id),
+        supabaseAdmin
+          .from('strava_activities')
+          .select('id')
+          .eq('athlete_id', req.user.id)
+          .limit(3),
+      ]);
+
+      console.error(`[Metrics] DIAGNOSTIC — Empty activities for athlete ${req.user.id}:
+  period=${period}, startDate=${startDateISO}, tz=${tz}
+  Primary query: status=${status} statusText="${statusText}" data=${activities === null ? 'null' : '[]'}
+  Count query: count=${countResult.count} error=${countResult.error?.message || 'none'} status=${countResult.status}
+  Unfiltered query: rows=${unfilteredResult.data?.length ?? 'null'} error=${unfilteredResult.error?.message || 'none'} status=${unfilteredResult.status}
+  Uptime: ${Math.floor(process.uptime() / 60)}min`);
       res.json({
         period,
         total_distance_meters: 0,
