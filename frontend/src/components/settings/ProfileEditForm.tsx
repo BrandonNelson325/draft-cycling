@@ -20,7 +20,7 @@ export function ProfileEditForm() {
   const [fullName, setFullName] = useState(user?.full_name || '');
   const [ftp, setFtp] = useState(user?.ftp?.toString() || '');
   const [weight, setWeight] = useState(
-    user?.weight_kg ? units.formatWeightValue(user.weight_kg).toString() : ''
+    user?.weight_kg ? Math.round(units.formatWeightValue(user.weight_kg) * 10) / 10 + '' : ''
   );
   const [unitSystem, setUnitSystem] = useState<'metric' | 'imperial'>(
     user?.unit_system || 'metric'
@@ -286,10 +286,10 @@ export function ProfileEditForm() {
           ] as const).map((opt) => (
             <label
               key={opt.value}
-              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-md border cursor-pointer transition-colors ${
+              className={`flex-1 flex flex-col items-center gap-1 p-3 rounded-md border-2 cursor-pointer transition-colors ${
                 experienceLevel === opt.value
-                  ? 'border-primary bg-primary/10 text-primary'
-                  : 'border-input hover:border-muted-foreground'
+                  ? 'border-blue-500 bg-blue-500/10 text-blue-600 font-semibold'
+                  : 'border-gray-200 hover:border-gray-400'
               }`}
             >
               <input
