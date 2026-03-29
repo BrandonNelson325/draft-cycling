@@ -570,7 +570,9 @@ DO NOT suggest or discuss today's scheduled workout as if it still needs to be d
       prompt += `UPCOMING SCHEDULED WORKOUTS:\n`;
       context.upcomingWorkouts.slice(0, 7).forEach((entry: any) => {
         const isToday = entry.scheduled_date === isoDate;
-        const date = new Date(entry.scheduled_date + 'T12:00:00').toLocaleDateString();
+        const date = new Date(entry.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric', timeZone: athleteTz,
+        });
         if (entry.workouts && entry.workouts.name) {
           if (isToday && alreadyRodeToday) {
             prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ← TODAY — ALREADY COMPLETED (do not suggest this)\n`;
@@ -1584,9 +1586,10 @@ Format it clearly so I can follow it during my ride.`;
       // Always use tools and Sonnet for reliable coaching
       // The AI will decide when to use tools based on context
       const systemPrompt = this.buildSystemPromptWithTools(context, clientDate);
-      // Use Haiku for chat (10x faster, 12x cheaper than Sonnet)
-      // Sonnet only needed for complex multi-step tool use
-      const model = selectModel('chat');
+      // Use Sonnet for planning/scheduling conversations (needs date math + multi-step tool use)
+      // Use Haiku for simple Q&A (10x faster, 12x cheaper)
+      const needsSonnet = this.needsStrongerModel(message);
+      const model = needsSonnet ? SONNET : selectModel('chat');
 
       // Get or create conversation
       let convId: string = conversationId || '';
@@ -1828,7 +1831,8 @@ Format it clearly so I can follow it during my ride.`;
     try {
       const context = await this.buildAthleteContext(athleteId);
       const systemPrompt = this.buildSystemPromptWithTools(context, clientDate);
-      const model = selectModel('chat');
+      const needsSonnet = this.needsStrongerModel(message);
+      const model = needsSonnet ? SONNET : selectModel('chat');
 
       // Get or create conversation
       let convId: string = conversationId || '';
@@ -1949,6 +1953,13 @@ Format it clearly so I can follow it during my ride.`;
       // Build final message context
       const finalMessages = [...conversationMessages];
 
+      // Include what was already streamed to the user before tools ran,
+      // so the summary doesn't contradict the initial response.
+      const preToolContext = streamedText.trim()
+        ? `You already told the user: "${streamedText.trim()}". Do not contradict this. `
+        : '';
+      const summaryInstruction = `${preToolContext}Briefly confirm what was completed. For a training plan, include: how many workouts were scheduled, the date range, and what the first week looks like. Keep it to 2-3 sentences max.`;
+
       if (this.hasToolUse(finalResponse)) {
         // Hit 5-iteration limit — execute remaining tools and ask for summary
         const lastToolCalls = finalResponse.content.filter(
@@ -1960,7 +1971,7 @@ Format it clearly so I can follow it during my ride.`;
           role: 'user',
           content: [
             ...lastToolResults,
-            { type: 'text', text: 'Briefly confirm what was completed. For a training plan, include: how many workouts were scheduled, the date range, and what the first week looks like. Keep it to 2-3 sentences max.' },
+            { type: 'text', text: summaryInstruction },
           ],
         });
       } else {
@@ -1968,7 +1979,7 @@ Format it clearly so I can follow it during my ride.`;
         finalMessages.push({ role: 'assistant', content: finalResponse.content });
         finalMessages.push({
           role: 'user',
-          content: [{ type: 'text', text: 'Briefly confirm what was completed. For a training plan, include: how many workouts were scheduled, the date range, and what the first week looks like. Keep it to 2-3 sentences max.' }],
+          content: [{ type: 'text', text: summaryInstruction }],
         });
       }
 
@@ -2026,6 +2037,22 @@ Format it clearly so I can follow it during my ride.`;
   /**
    * Check if response contains tool use
    */
+  /**
+   * Detect if a message likely needs planning/scheduling capabilities
+   * that require a stronger model (Sonnet) instead of Haiku.
+   */
+  needsStrongerModel(message: string): boolean {
+    const lower = message.toLowerCase();
+    const planningKeywords = [
+      'training plan', 'build a plan', 'create a plan', 'make a plan', 'make that change',
+      'schedule', 'week plan', 'month plan', 'camp prep', 'race prep',
+      'periodiz', '4 week', '4-week', '8 week', '8-week', '12 week',
+      'please make', 'build it', 'create it', 'set it up',
+      'move workout', 'reschedule', 'adjust the plan', 'change the plan',
+    ];
+    return planningKeywords.some(kw => lower.includes(kw));
+  },
+
   hasToolUse(response: any): boolean {
     return response.content.some((block: any) => block.type === 'tool_use');
   },

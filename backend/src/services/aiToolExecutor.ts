@@ -12,6 +12,15 @@ import { supabaseAdmin } from '../utils/supabase';
 import { CreateWorkoutDTO } from '../types/workout';
 import { logger } from '../utils/logger';
 
+/**
+ * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
+ */
+function formatDateWithDay(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', year: 'numeric' });
+}
+
 interface ToolResult {
   type: 'tool_result';
   tool_use_id: string;
@@ -285,7 +294,7 @@ export const aiToolExecutor = {
       entry: {
         id: entry.id,
         workout_id: entry.workout_id,
-        scheduled_date: entry.scheduled_date,
+        scheduled_date: `${entry.scheduled_date} (${formatDateWithDay(entry.scheduled_date)})`,
         ai_rationale: entry.ai_rationale,
         workout_name: entry.workouts?.name,
       },
@@ -311,7 +320,7 @@ export const aiToolExecutor = {
       entry: {
         id: entry.id,
         workout_id: entry.workout_id,
-        scheduled_date: entry.scheduled_date,
+        scheduled_date: `${entry.scheduled_date} (${formatDateWithDay(entry.scheduled_date)})`,
         workout_name: entry.workouts?.name,
       },
     };
@@ -396,7 +405,7 @@ export const aiToolExecutor = {
       entries: entries.map((e) => ({
         id: e.id,
         workout_id: e.workout_id,
-        scheduled_date: e.scheduled_date,
+        scheduled_date: `${e.scheduled_date} (${formatDateWithDay(e.scheduled_date)})`,
         completed: e.completed,
         workout_name: e.workouts?.name,
         workout_type: e.workouts?.workout_type,
