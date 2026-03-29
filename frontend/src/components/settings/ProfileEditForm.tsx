@@ -1,7 +1,6 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authService } from '../../services/authService';
-import { wahooService } from '../../services/wahooService';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
 import { getConversionUtils, convertToMetric } from '../../utils/units';
@@ -45,74 +44,11 @@ export function ProfileEditForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Wahoo integration state
-  const [wahooConnected, setWahooConnected] = useState(false);
-  const [wahooAutoSync, setWahooAutoSync] = useState(false);
-  const [wahooLoading, setWahooLoading] = useState(false);
-
   const filteredTimezones = useMemo(() => {
     if (!tzSearch) return ALL_TIMEZONES;
     const q = tzSearch.toLowerCase();
     return ALL_TIMEZONES.filter(tz => tz.toLowerCase().includes(q));
   }, [tzSearch]);
-
-  useEffect(() => {
-    // Check URL params for Wahoo OAuth callback
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('wahoo') === 'connected') {
-      // Clean up the URL param
-      const url = new URL(window.location.href);
-      url.searchParams.delete('wahoo');
-      window.history.replaceState({}, '', url.toString());
-    }
-
-    // Fetch Wahoo connection status
-    wahooService.getStatus()
-      .then((status) => {
-        setWahooConnected(status.connected);
-        setWahooAutoSync(status.auto_sync);
-      })
-      .catch((err) => {
-        console.error('Failed to fetch Wahoo status:', err);
-      });
-  }, []);
-
-  const handleWahooConnect = async () => {
-    setWahooLoading(true);
-    try {
-      const authUrl = await wahooService.getAuthUrl();
-      window.open(authUrl, '_blank');
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to connect Wahoo' });
-    } finally {
-      setWahooLoading(false);
-    }
-  };
-
-  const handleWahooDisconnect = async () => {
-    if (!confirm('Are you sure you want to disconnect Wahoo?')) return;
-    setWahooLoading(true);
-    try {
-      await wahooService.disconnect();
-      setWahooConnected(false);
-      setWahooAutoSync(false);
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message || 'Failed to disconnect Wahoo' });
-    } finally {
-      setWahooLoading(false);
-    }
-  };
-
-  const handleWahooAutoSyncToggle = async (enabled: boolean) => {
-    setWahooAutoSync(enabled);
-    try {
-      await wahooService.updateSettings(enabled);
-    } catch (err: any) {
-      // Revert on failure
-      setWahooAutoSync(!enabled);
-      setMessage({ type: 'error', text: err.message || 'Failed to update Wahoo settings' });
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
