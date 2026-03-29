@@ -523,47 +523,32 @@ export default function SettingsScreen({ navigation }: any) {
 
         {/* Wahoo Section */}
         <View style={styles.stravaTitleRow}>
-          <Ionicons name="bicycle-outline" size={18} color="#3b82f6" />
+          <Ionicons name="bicycle-outline" size={18} color="#64748b" />
           <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Wahoo</Text>
         </View>
         <View style={styles.section}>
-          {wahooConnected ? (
-            <>
-              <View style={styles.stravaConnected}>
-                <View style={styles.stravaStatus}>
-                  <View style={styles.statusDot} />
-                  <Text style={styles.stravaText}>Connected</Text>
-                </View>
-              </View>
-              <View style={styles.notifRow}>
-                <View>
-                  <Text style={styles.notifLabel}>Auto-sync workouts</Text>
-                  <Text style={styles.notifHint}>Send planned workouts to Wahoo</Text>
-                </View>
-                <Switch
-                  value={wahooAutoSync}
-                  onValueChange={handleWahooAutoSyncToggle}
-                  trackColor={{ false: '#334155', true: '#3b82f6' }}
-                  thumbColor="#fff"
-                />
-              </View>
-              <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnectWahoo}>
-                <Text style={styles.disconnectText}>Disconnect Wahoo</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <TouchableOpacity
-              style={[styles.btn, { backgroundColor: '#1d4ed8' }, wahooLoading && styles.btnDisabled]}
-              onPress={handleConnectWahoo}
-              disabled={wahooLoading}
-            >
-              {wahooLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.btnText}>Connect Wahoo</Text>
-              )}
-            </TouchableOpacity>
-          )}
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: '#334155', opacity: 0.6 }]}
+            disabled={true}
+          >
+            <Text style={styles.btnText}>Connect Wahoo</Text>
+          </TouchableOpacity>
+          <Text style={{ color: '#64748b', fontSize: 12, marginTop: 6, textAlign: 'center' }}>Coming soon</Text>
+        </View>
+
+        {/* Garmin Section */}
+        <View style={styles.stravaTitleRow}>
+          <Ionicons name="watch-outline" size={18} color="#64748b" />
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Garmin</Text>
+        </View>
+        <View style={styles.section}>
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: '#334155', opacity: 0.6 }]}
+            disabled={true}
+          >
+            <Text style={styles.btnText}>Connect Garmin</Text>
+          </TouchableOpacity>
+          <Text style={{ color: '#64748b', fontSize: 12, marginTop: 6, textAlign: 'center' }}>Coming soon</Text>
         </View>
 
         {/* Notifications Section */}

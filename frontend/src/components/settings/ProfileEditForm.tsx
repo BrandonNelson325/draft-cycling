@@ -416,41 +416,19 @@ export function ProfileEditForm() {
       {/* Wahoo Integration */}
       <div className="pt-2">
         <h3 className="text-sm font-medium mb-3">Wahoo</h3>
-        {wahooConnected ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 p-3 rounded-md border border-green-500/30 bg-green-500/10">
-              <span className="text-green-500 text-sm font-medium">Connected</span>
-            </div>
-            <label className="flex items-center gap-3 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={wahooAutoSync}
-                onChange={(e) => handleWahooAutoSyncToggle(e.target.checked)}
-                className="w-4 h-4"
-                disabled={wahooLoading}
-              />
-              <span className="text-sm">Auto-sync workouts to Wahoo SYSTM</span>
-            </label>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleWahooDisconnect}
-              disabled={wahooLoading}
-              className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
-            >
-              {wahooLoading ? 'Disconnecting...' : 'Disconnect Wahoo'}
-            </Button>
-          </div>
-        ) : (
-          <Button
-            type="button"
-            onClick={handleWahooConnect}
-            disabled={wahooLoading}
-            className="bg-blue-600 hover:bg-blue-700 text-white"
-          >
-            {wahooLoading ? 'Connecting...' : 'Connect Wahoo'}
-          </Button>
-        )}
+        <Button type="button" disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
+          Connect Wahoo
+        </Button>
+        <p className="text-xs text-gray-400 mt-1">Coming soon</p>
+      </div>
+
+      {/* Garmin Integration */}
+      <div className="pt-2">
+        <h3 className="text-sm font-medium mb-3">Garmin</h3>
+        <Button type="button" disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
+          Connect Garmin
+        </Button>
+        <p className="text-xs text-gray-400 mt-1">Coming soon</p>
       </div>
 
       {message && (
