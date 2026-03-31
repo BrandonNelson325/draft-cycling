@@ -523,7 +523,9 @@ export default function SettingsScreen({ navigation }: any) {
 
         {/* Wahoo Section */}
         <View style={styles.stravaTitleRow}>
-          <Ionicons name="bicycle-outline" size={18} color="#64748b" />
+          <View style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: '#1d4ed8', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>W</Text>
+          </View>
           <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Wahoo</Text>
         </View>
         <View style={styles.section}>
@@ -538,7 +540,9 @@ export default function SettingsScreen({ navigation }: any) {
 
         {/* Garmin Section */}
         <View style={styles.stravaTitleRow}>
-          <Ionicons name="watch-outline" size={18} color="#64748b" />
+          <View style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>G</Text>
+          </View>
           <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Garmin</Text>
         </View>
         <View style={styles.section}>

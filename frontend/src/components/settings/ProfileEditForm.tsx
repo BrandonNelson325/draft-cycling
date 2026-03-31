@@ -349,24 +349,6 @@ export function ProfileEditForm() {
         </select>
       </div>
 
-      {/* Wahoo Integration */}
-      <div className="pt-2">
-        <h3 className="text-sm font-medium mb-3">Wahoo</h3>
-        <Button type="button" disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
-          Connect Wahoo
-        </Button>
-        <p className="text-xs text-gray-400 mt-1">Coming soon</p>
-      </div>
-
-      {/* Garmin Integration */}
-      <div className="pt-2">
-        <h3 className="text-sm font-medium mb-3">Garmin</h3>
-        <Button type="button" disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
-          Connect Garmin
-        </Button>
-        <p className="text-xs text-gray-400 mt-1">Coming soon</p>
-      </div>
-
       {message && (
         <div
           className={`p-3 rounded-md text-sm ${

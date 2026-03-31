@@ -42,6 +42,44 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Wahoo Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <img src="/wahoo-logo.svg" alt="Wahoo" className="w-6 h-6" />
+              <div>
+                <CardTitle>Wahoo</CardTitle>
+                <CardDescription>Push structured workouts to your Wahoo ELEMNT head unit</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Button disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
+              Connect Wahoo
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
+          </CardContent>
+        </Card>
+
+        {/* Garmin Section */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <img src="/garmin-logo.svg" alt="Garmin" className="w-6 h-6" />
+              <div>
+                <CardTitle>Garmin</CardTitle>
+                <CardDescription>Sync workouts to your Garmin device</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Button disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
+              Connect Garmin
+            </Button>
+            <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
+          </CardContent>
+        </Card>
+
         {/* Account Section */}
         <Card>
           <CardHeader>
