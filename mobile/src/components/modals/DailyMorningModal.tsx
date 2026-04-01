@@ -113,6 +113,7 @@ export default function DailyMorningModal({
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 60 : 0}
       >
         <View style={styles.header}>
           <Text style={styles.title}>
@@ -248,7 +249,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
   close: { fontSize: 18, color: '#64748b' },
-  content: { padding: 20, gap: 16 },
+  content: { padding: 20, paddingBottom: 60, gap: 16 },
   question: {
     fontSize: 16,
     fontWeight: '600',
