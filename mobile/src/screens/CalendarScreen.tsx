@@ -487,9 +487,25 @@ export default function CalendarScreen() {
     ]);
   };
 
-  const completeEntry = async (entryId: string) => {
-    await calendarService.completeWorkout(entryId);
-    await loadCalendar();
+  const completeEntry = (entryId: string, workoutName: string) => {
+    Alert.alert(
+      'Mark Complete',
+      `Mark "${workoutName}" as complete?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Mark Complete',
+          onPress: async () => {
+            try {
+              await calendarService.completeWorkout(entryId);
+              await loadCalendar();
+            } catch {
+              Alert.alert('Error', 'Failed to mark workout as complete.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const selectedWorkouts = selectedDate ? workoutsByDate[selectedDate] || [] : [];
@@ -635,14 +651,15 @@ export default function CalendarScreen() {
                     </Text>
                   </View>
                   <View style={styles.entryActions}>
-                    {!entry.completed && (
+                    {!entry.completed && selectedDate && selectedDate <= new Date().toISOString().split('T')[0] && (
                       <Pressable
                         style={styles.actionBtn}
-                        onPress={() => {
-                          completeEntry(entry.id);
+                        onPress={(e) => {
+                          e.stopPropagation();
+                          completeEntry(entry.id, entry.workouts?.name || 'Workout');
                         }}
                       >
-                        <Text style={styles.actionBtnText}>Complete</Text>
+                        <Text style={styles.actionBtnText}>Mark Complete</Text>
                       </Pressable>
                     )}
                     <Pressable
