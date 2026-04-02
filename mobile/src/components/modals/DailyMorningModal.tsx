@@ -124,7 +124,7 @@ export default function DailyMorningModal({
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
           {step === 1 ? (
             <>
               <Text style={styles.question}>How did you sleep?</Text>

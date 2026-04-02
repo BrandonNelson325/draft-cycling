@@ -98,7 +98,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
           {/* Activity info */}
           <View style={styles.activityCard}>
             <Text style={styles.activityName} numberOfLines={2}>{activity.name || 'Ride'}</Text>
