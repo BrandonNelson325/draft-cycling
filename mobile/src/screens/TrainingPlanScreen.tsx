@@ -23,9 +23,15 @@ const PHASE_COLORS: Record<string, { bg: string; text: string }> = {
   taper: { bg: '#2d1f00', text: '#fbbf24' },
 };
 
-function WeekAccordion({ week }: { week: TrainingWeek }) {
+function WeekAccordion({ week, planStartDate }: { week: TrainingWeek; planStartDate: string }) {
   const [open, setOpen] = useState(false);
   const phase = PHASE_COLORS[week.phase] || { bg: '#1e293b', text: '#94a3b8' };
+
+  const getWorkoutDayName = (dayOfWeek: number) => {
+    const date = parseLocalDate(planStartDate);
+    date.setDate(date.getDate() + (week.week_number - 1) * 7 + dayOfWeek);
+    return ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
+  };
 
   return (
     <View style={styles.weekCard}>
@@ -54,7 +60,7 @@ function WeekAccordion({ week }: { week: TrainingWeek }) {
           {week.workouts.map((w, i) => (
             <View key={i} style={styles.workoutRow}>
               <Text style={styles.workoutDay}>
-                {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][w.day_of_week]}
+                {getWorkoutDayName(w.day_of_week)}
               </Text>
               <View style={{ flex: 1 }}>
                 <Text style={styles.workoutName}>{w.name}</Text>
@@ -171,7 +177,7 @@ export default function TrainingPlanScreen({ navigation }: any) {
 
         {/* Week accordions */}
         {plan.weeks.map(week => (
-          <WeekAccordion key={week.week_number} week={week} />
+          <WeekAccordion key={week.week_number} week={week} planStartDate={plan.start_date} />
         ))}
 
         {/* Cancel button */}

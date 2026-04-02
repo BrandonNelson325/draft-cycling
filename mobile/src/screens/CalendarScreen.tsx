@@ -67,6 +67,12 @@ function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
     };
   };
 
+  const getWorkoutDayName = (weekNumber: number, dayOfWeek: number) => {
+    const date = parseLocalDate(plan.start_date);
+    date.setDate(date.getDate() + (weekNumber - 1) * 7 + dayOfWeek);
+    return dayNames[date.getDay()];
+  };
+
   const toggleWeek = (weekNum: number) => {
     setExpandedWeeks(prev => {
       const next = new Set(prev);
@@ -173,7 +179,7 @@ function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
                     <View style={planStyles.woCardHeader}>
                       <View style={{ flex: 1 }}>
                         <Text style={planStyles.woName}>{wo.name}</Text>
-                        <Text style={planStyles.woDay}>{dayNames[wo.day_of_week]}</Text>
+                        <Text style={planStyles.woDay}>{getWorkoutDayName(week.week_number, wo.day_of_week)}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={planStyles.woDuration}>{wo.duration_minutes} min</Text>
