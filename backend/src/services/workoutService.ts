@@ -36,12 +36,13 @@ export const workoutService = {
     // Calculate TSS
     const tss = await this.calculateTSS(data.intervals, athlete.ftp);
 
-    // Insert workout
+    // Insert workout — prefix name with "Draft - " if not already prefixed
+    const workoutName = data.name.startsWith('Draft - ') ? data.name : `Draft - ${data.name}`;
     const { data: workout, error } = await supabaseAdmin
       .from('workouts')
       .insert({
         athlete_id: athleteId,
-        name: data.name,
+        name: workoutName,
         description: data.description,
         workout_type: data.workout_type,
         duration_minutes: data.duration_minutes,

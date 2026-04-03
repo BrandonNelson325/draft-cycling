@@ -75,7 +75,7 @@ async function cloneTemplateToWorkout(templateId: string, athleteId: string): Pr
     .from('workouts')
     .insert({
       athlete_id: athleteId,
-      name: template.name,
+      name: template.name.startsWith('Draft - ') ? template.name : `Draft - ${template.name}`,
       description: template.description,
       workout_type: template.workout_type,
       duration_minutes: template.duration_minutes,
