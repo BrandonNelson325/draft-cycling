@@ -4,7 +4,8 @@ import { zwoGenerator } from './fileGenerators/zwoGenerator';
 import { logger } from '../utils/logger';
 
 const INTERVALS_ICU_BASE_URL = 'https://intervals.icu/api/v1';
-const INTERVALS_ICU_OAUTH_URL = 'https://intervals.icu/api/oauth';
+const INTERVALS_ICU_OAUTH_AUTHORIZE_URL = 'https://intervals.icu/oauth';
+const INTERVALS_ICU_OAUTH_TOKEN_URL = 'https://intervals.icu/api/oauth';
 
 interface IntervalsIcuConfig {
   clientId: string;
@@ -35,7 +36,7 @@ class IntervalsIcuService {
       state: state || '',
     });
 
-    return `${INTERVALS_ICU_OAUTH_URL}/authorize?${params.toString()}`;
+    return `${INTERVALS_ICU_OAUTH_AUTHORIZE_URL}/authorize?${params.toString()}`;
   }
 
   /**
@@ -44,7 +45,7 @@ class IntervalsIcuService {
   async handleCallback(code: string, athleteId: string): Promise<void> {
     try {
       const response = await axios.post(
-        `${INTERVALS_ICU_OAUTH_URL}/token`,
+        `${INTERVALS_ICU_OAUTH_TOKEN_URL}/token`,
         new URLSearchParams({
           grant_type: 'authorization_code',
           code: code,
@@ -108,7 +109,7 @@ class IntervalsIcuService {
 
     try {
       const response = await axios.post(
-        `${INTERVALS_ICU_OAUTH_URL}/token`,
+        `${INTERVALS_ICU_OAUTH_TOKEN_URL}/token`,
         new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token: athlete.intervals_icu_refresh_token,
