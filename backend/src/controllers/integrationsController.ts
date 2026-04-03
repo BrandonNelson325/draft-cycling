@@ -75,11 +75,11 @@ export const getIntervalsIcuStatus = async (req: AuthRequest, res: Response): Pr
 
     const { data: athlete } = await supabaseAdmin
       .from('athletes')
-      .select('intervals_icu_athlete_id, intervals_icu_auto_sync, intervals_icu_token_expires_at')
+      .select('intervals_icu_athlete_id, intervals_icu_access_token, intervals_icu_auto_sync, intervals_icu_token_expires_at')
       .eq('id', req.user.id)
       .single();
 
-    const isConnected = !!athlete?.intervals_icu_athlete_id;
+    const isConnected = !!athlete?.intervals_icu_access_token;
 
     res.json({
       connected: isConnected,
