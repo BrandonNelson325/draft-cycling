@@ -114,7 +114,7 @@ export function IntervalsIcuConnect() {
             </p>
           </div>
 
-          <Button onClick={handleConnect} disabled={loading} className="w-full">
+          <Button onClick={handleConnect} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700 text-white">
             {loading ? 'Connecting...' : 'Connect with Intervals.icu'}
           </Button>
         </div>
