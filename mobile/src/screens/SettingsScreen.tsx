@@ -628,6 +628,9 @@ export default function SettingsScreen({ navigation }: any) {
                 <Text style={styles.btnText}>Connect Intervals.icu</Text>
               )}
             </TouchableOpacity>
+            <Text style={{ color: '#64748b', fontSize: 11, marginTop: 8, lineHeight: 16 }}>
+              Set up a free account at intervals.icu and link your Zwift account in their settings to get workouts automatically synced to Zwift.
+            </Text>
           )}
         </View>
 

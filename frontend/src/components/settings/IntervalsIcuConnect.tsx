@@ -102,9 +102,16 @@ export function IntervalsIcuConnect() {
             <p className="text-sm text-gray-700">Connect Intervals.icu to:</p>
             <ul className="text-xs text-gray-600 mt-2 space-y-1 ml-4 list-disc">
               <li>Sync planned workouts to your calendar</li>
-              <li>Push workouts to Zwift via Intervals.icu</li>
+              <li>Automatically push workouts to Zwift</li>
               <li>Track training across platforms</li>
             </ul>
+            <p className="text-xs text-gray-500 mt-3">
+              Set up a free account at{' '}
+              <a href="https://intervals.icu" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                intervals.icu
+              </a>
+              {' '}and link your Zwift account in their settings to get workouts automatically synced to Zwift.
+            </p>
           </div>
 
           <Button onClick={handleConnect} disabled={loading} className="w-full">
