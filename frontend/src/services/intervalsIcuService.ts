@@ -24,4 +24,12 @@ export const intervalsIcuService = {
     const { error } = await api.post('/api/integrations/intervals-icu/settings', { auto_sync: autoSync }, true);
     if (error) throw new Error(error.error || 'Failed to update settings');
   },
+
+  async syncAll(): Promise<{ synced: number; failed: number; skipped: number; message: string }> {
+    const { data, error } = await api.post<{ synced: number; failed: number; skipped: number; message: string }>(
+      '/api/integrations/intervals-icu/sync-all', {}, true
+    );
+    if (error) throw new Error(error.error || 'Failed to sync workouts');
+    return data!;
+  },
 };

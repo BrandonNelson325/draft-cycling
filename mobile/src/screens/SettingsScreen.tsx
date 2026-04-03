@@ -97,6 +97,7 @@ export default function SettingsScreen({ navigation }: any) {
   const [icuConnected, setIcuConnected] = useState(false);
   const [icuLoading, setIcuLoading] = useState(false);
   const [icuAutoSync, setIcuAutoSync] = useState(false);
+  const [icuSyncing, setIcuSyncing] = useState(false);
 
   useEffect(() => {
     wahooService.getStatus().then((status) => {
@@ -311,7 +312,14 @@ export default function SettingsScreen({ navigation }: any) {
         setIcuConnected(status.connected);
         setIcuAutoSync(status.auto_sync);
         if (status.connected) {
-          Alert.alert('Connected', 'Intervals.icu connected successfully!');
+          Alert.alert(
+            'Connected',
+            'Intervals.icu connected! Would you like to sync your existing scheduled workouts?',
+            [
+              { text: 'Not now', style: 'cancel' },
+              { text: 'Sync now', onPress: handleIcuSyncAll },
+            ]
+          );
         }
       }
     } catch (err: any) {
@@ -347,6 +355,18 @@ export default function SettingsScreen({ navigation }: any) {
     } catch {
       Alert.alert('Error', 'Failed to update Intervals.icu settings.');
       setIcuAutoSync(!value);
+    }
+  };
+
+  const handleIcuSyncAll = async () => {
+    setIcuSyncing(true);
+    try {
+      const result = await intervalsIcuService.syncAll();
+      Alert.alert('Sync Complete', result.message);
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to sync workouts.');
+    } finally {
+      setIcuSyncing(false);
     }
   };
 
@@ -612,9 +632,28 @@ export default function SettingsScreen({ navigation }: any) {
                   thumbColor="#fff"
                 />
               </View>
-              <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnectIntervalsIcu}>
-                <Text style={styles.disconnectText}>Disconnect Intervals.icu</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+                <TouchableOpacity
+                  style={[styles.stravaBtn, icuSyncing && styles.btnDisabled]}
+                  onPress={handleIcuSyncAll}
+                  disabled={icuSyncing}
+                >
+                  {icuSyncing ? (
+                    <ActivityIndicator size="small" color="#60a5fa" />
+                  ) : (
+                    <>
+                      <Ionicons name="sync-outline" size={14} color="#60a5fa" />
+                      <Text style={styles.stravaBtnText}>Sync All</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.stravaBtn, { borderColor: '#ef4444' }]}
+                  onPress={handleDisconnectIntervalsIcu}
+                >
+                  <Text style={[styles.stravaBtnText, { color: '#ef4444' }]}>Disconnect</Text>
+                </TouchableOpacity>
+              </View>
             </>
           ) : (
             <>

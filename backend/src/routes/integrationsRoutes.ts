@@ -9,6 +9,7 @@ router.get('/intervals-icu/auth-url', authenticateJWT, integrationsController.ge
 router.get('/intervals-icu/callback', integrationsController.handleIntervalsIcuCallback);
 router.get('/intervals-icu/status', authenticateJWT, integrationsController.getIntervalsIcuStatus);
 router.post('/intervals-icu/sync', authenticateJWT, integrationsController.syncWorkoutToIntervalsIcu);
+router.post('/intervals-icu/sync-all', authenticateJWT, integrationsController.syncAllToIntervalsIcu);
 router.post('/intervals-icu/settings', authenticateJWT, integrationsController.updateIntervalsIcuSettings);
 router.delete('/intervals-icu', authenticateJWT, integrationsController.disconnectIntervalsIcu);
 

@@ -6,15 +6,18 @@ export function IntervalsIcuConnect() {
   const [connected, setConnected] = useState(false);
   const [autoSync, setAutoSync] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [showSyncPrompt, setShowSyncPrompt] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    // Check URL params for OAuth callback
+    // Check URL params for OAuth callback — offer to sync existing workouts
     const params = new URLSearchParams(window.location.search);
     if (params.get('intervals_icu') === 'connected') {
       const url = new URL(window.location.href);
       url.searchParams.delete('intervals_icu');
       window.history.replaceState({}, '', url.toString());
+      setShowSyncPrompt(true);
     }
 
     checkStatus();
@@ -67,10 +70,38 @@ export function IntervalsIcuConnect() {
     }
   };
 
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    setError('');
+    setShowSyncPrompt(false);
+    try {
+      const result = await intervalsIcuService.syncAll();
+      alert(result.message);
+    } catch (err: any) {
+      setError(err.message || 'Failed to sync workouts');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   return (
     <div>
       {error && (
         <div className="mb-4 p-3 text-sm text-red-600 bg-red-50 rounded-md">{error}</div>
+      )}
+
+      {showSyncPrompt && connected && (
+        <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+          <p className="text-sm text-blue-700 font-medium">Would you like to sync your existing scheduled workouts to Intervals.icu?</p>
+          <div className="flex gap-2 mt-2">
+            <Button onClick={handleSyncAll} disabled={syncing} size="sm" className="bg-blue-600 hover:bg-blue-700 text-white">
+              {syncing ? 'Syncing...' : 'Yes, sync now'}
+            </Button>
+            <Button onClick={() => setShowSyncPrompt(false)} size="sm" variant="outline">
+              No thanks
+            </Button>
+          </div>
+        </div>
       )}
 
       {connected ? (
@@ -92,9 +123,14 @@ export function IntervalsIcuConnect() {
             <span className="text-sm">Auto-sync workouts when scheduled</span>
           </label>
 
-          <Button onClick={handleDisconnect} disabled={loading} variant="destructive">
-            {loading ? 'Disconnecting...' : 'Disconnect'}
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleSyncAll} disabled={syncing} variant="outline">
+              {syncing ? 'Syncing...' : 'Sync All Workouts'}
+            </Button>
+            <Button onClick={handleDisconnect} disabled={loading} className="bg-red-600 hover:bg-red-700 text-white">
+              {loading ? 'Disconnecting...' : 'Disconnect'}
+            </Button>
+          </div>
         </div>
       ) : (
         <div className="space-y-4">

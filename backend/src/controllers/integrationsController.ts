@@ -170,6 +170,76 @@ export const updateIntervalsIcuSettings = async (req: AuthRequest, res: Response
   }
 };
 
+export const syncAllToIntervalsIcu = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // Get all future calendar entries with workouts that haven't been synced to Intervals.icu
+    const { data: entries, error } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id, workout_id, scheduled_date, workouts(name)')
+      .eq('athlete_id', req.user.id)
+      .eq('completed', false)
+      .gte('scheduled_date', today)
+      .not('workout_id', 'is', null);
+
+    if (error) {
+      throw new Error(`Failed to fetch calendar entries: ${error.message}`);
+    }
+
+    if (!entries || entries.length === 0) {
+      res.json({ success: true, synced: 0, message: 'No future workouts to sync' });
+      return;
+    }
+
+    // Check which ones are already synced
+    const { data: existingSyncs } = await supabaseAdmin
+      .from('workout_syncs')
+      .select('calendar_entry_id')
+      .eq('athlete_id', req.user.id)
+      .eq('integration', 'intervals_icu')
+      .eq('sync_status', 'synced')
+      .in('calendar_entry_id', entries.map(e => e.id));
+
+    const alreadySynced = new Set((existingSyncs || []).map(s => s.calendar_entry_id));
+    const toSync = entries.filter(e => !alreadySynced.has(e.id));
+
+    let synced = 0;
+    let failed = 0;
+
+    for (const entry of toSync) {
+      try {
+        await intervalsIcuService.uploadWorkout(
+          req.user.id,
+          entry.workout_id,
+          new Date(entry.scheduled_date + 'T12:00:00'),
+          entry.id
+        );
+        synced++;
+      } catch (err: any) {
+        console.error(`Failed to sync entry ${entry.id}:`, err.message);
+        failed++;
+      }
+    }
+
+    res.json({
+      success: true,
+      synced,
+      failed,
+      skipped: alreadySynced.size,
+      message: `Synced ${synced} workout${synced !== 1 ? 's' : ''} to Intervals.icu${failed ? `, ${failed} failed` : ''}`,
+    });
+  } catch (error: any) {
+    console.error('Error bulk syncing to Intervals.icu:', error);
+    res.status(500).json({ error: error.message || 'Failed to sync workouts' });
+  }
+};
+
 /**
  * Wahoo Integration Controllers
  */

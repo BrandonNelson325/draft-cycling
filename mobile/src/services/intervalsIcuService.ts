@@ -18,4 +18,9 @@ export const intervalsIcuService = {
   async updateSettings(autoSync: boolean): Promise<void> {
     await apiClient.post('/api/integrations/intervals-icu/settings', { auto_sync: autoSync });
   },
+
+  async syncAll(): Promise<{ synced: number; failed: number; skipped: number; message: string }> {
+    const { data } = await apiClient.post('/api/integrations/intervals-icu/sync-all', {});
+    return data;
+  },
 };
