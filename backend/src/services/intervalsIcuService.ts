@@ -64,18 +64,22 @@ class IntervalsIcuService {
 
       logger.info(`[Intervals.icu] OAuth token response for athlete ${athleteId}: has_access_token=${!!access_token}, has_refresh_token=${!!refresh_token}, expires_in=${expires_in}, athlete_id=${athlete?.id}`);
 
-      // Calculate expiration time
-      const expiresAt = new Date();
-      expiresAt.setSeconds(expiresAt.getSeconds() + expires_in);
+      // Calculate expiration time — Intervals.icu tokens may not expire (expires_in undefined)
+      let expiresAtISO: string | null = null;
+      if (expires_in) {
+        const expiresAt = new Date();
+        expiresAt.setSeconds(expiresAt.getSeconds() + expires_in);
+        expiresAtISO = expiresAt.toISOString();
+      }
 
       // Store tokens in database
       const { error, data: updateResult } = await supabaseAdmin
         .from('athletes')
         .update({
           intervals_icu_access_token: access_token,
-          intervals_icu_refresh_token: refresh_token,
-          intervals_icu_token_expires_at: expiresAt.toISOString(),
-          intervals_icu_athlete_id: athlete?.id?.toString(),
+          intervals_icu_refresh_token: refresh_token || null,
+          intervals_icu_token_expires_at: expiresAtISO,
+          intervals_icu_athlete_id: athlete?.id?.toString() || null,
           intervals_icu_auto_sync: true,
         })
         .eq('id', athleteId)
@@ -157,6 +161,11 @@ class IntervalsIcuService {
 
     if (!athlete?.intervals_icu_access_token) {
       throw new Error('Intervals.icu not connected');
+    }
+
+    // Intervals.icu tokens may not expire — if no expiry set, just return the token
+    if (!athlete.intervals_icu_token_expires_at) {
+      return athlete.intervals_icu_access_token;
     }
 
     // Check if token is expired or about to expire (within 5 minutes)
