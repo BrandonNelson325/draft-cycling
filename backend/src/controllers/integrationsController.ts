@@ -15,7 +15,8 @@ export const getIntervalsIcuAuthUrl = async (req: AuthRequest, res: Response): P
       return;
     }
 
-    const state = req.user.id; // Use athlete ID as state for verification
+    const mobile = req.query.mobile === 'true';
+    const state = mobile ? `${req.user.id}:mobile` : req.user.id;
     const authUrl = intervalsIcuService.getAuthUrl(state);
 
     res.json({ authUrl });
@@ -39,16 +40,28 @@ export const handleIntervalsIcuCallback = async (req: AuthRequest, res: Response
       return;
     }
 
-    // Exchange code for tokens
-    console.log(`[Intervals.icu] Callback received: code=${code?.slice(0, 8)}..., state=${state}`);
-    await intervalsIcuService.handleCallback(code, state);
+    // Parse mobile flag from state
+    const isMobile = state.includes(':mobile');
+    const athleteId = state.replace(':mobile', '');
 
-    // Redirect to frontend success page
-    console.log(`[Intervals.icu] Callback success, redirecting to ${process.env.FRONTEND_URL}/settings?intervals_icu=connected`);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?intervals_icu=connected`);
+    // Exchange code for tokens
+    console.log(`[Intervals.icu] Callback received: code=${code?.slice(0, 8)}..., athleteId=${athleteId}, mobile=${isMobile}`);
+    await intervalsIcuService.handleCallback(code, athleteId);
+
+    // Redirect back to app
+    if (isMobile) {
+      res.redirect(`cyclingcoach://intervals-icu/callback?status=connected`);
+    } else {
+      res.redirect(`${process.env.FRONTEND_URL}/settings?intervals_icu=connected`);
+    }
   } catch (error: any) {
     console.error('[Intervals.icu] Callback error:', error.message || error);
-    res.redirect(`${process.env.FRONTEND_URL}/settings?intervals_icu=error`);
+    const isMobile = (req.query.state as string)?.includes(':mobile');
+    if (isMobile) {
+      res.redirect(`cyclingcoach://intervals-icu/callback?status=error`);
+    } else {
+      res.redirect(`${process.env.FRONTEND_URL}/settings?intervals_icu=error`);
+    }
   }
 };
 
