@@ -40,12 +40,14 @@ export const handleIntervalsIcuCallback = async (req: AuthRequest, res: Response
     }
 
     // Exchange code for tokens
+    console.log(`[Intervals.icu] Callback received: code=${code?.slice(0, 8)}..., state=${state}`);
     await intervalsIcuService.handleCallback(code, state);
 
     // Redirect to frontend success page
+    console.log(`[Intervals.icu] Callback success, redirecting to ${process.env.FRONTEND_URL}/settings?intervals_icu=connected`);
     res.redirect(`${process.env.FRONTEND_URL}/settings?intervals_icu=connected`);
   } catch (error: any) {
-    console.error('Intervals.icu callback error:', error);
+    console.error('[Intervals.icu] Callback error:', error.message || error);
     res.redirect(`${process.env.FRONTEND_URL}/settings?intervals_icu=error`);
   }
 };

@@ -61,12 +61,14 @@ class IntervalsIcuService {
 
       const { access_token, refresh_token, expires_in, athlete } = response.data;
 
+      logger.info(`[Intervals.icu] OAuth token response for athlete ${athleteId}: has_access_token=${!!access_token}, has_refresh_token=${!!refresh_token}, expires_in=${expires_in}, athlete_id=${athlete?.id}`);
+
       // Calculate expiration time
       const expiresAt = new Date();
       expiresAt.setSeconds(expiresAt.getSeconds() + expires_in);
 
       // Store tokens in database
-      const { error } = await supabaseAdmin
+      const { error, data: updateResult } = await supabaseAdmin
         .from('athletes')
         .update({
           intervals_icu_access_token: access_token,
@@ -75,13 +77,15 @@ class IntervalsIcuService {
           intervals_icu_athlete_id: athlete?.id?.toString(),
           intervals_icu_auto_sync: true,
         })
-        .eq('id', athleteId);
+        .eq('id', athleteId)
+        .select('id, intervals_icu_access_token');
 
       if (error) {
+        logger.error(`[Intervals.icu] Failed to store tokens for ${athleteId}: ${error.message}`);
         throw new Error(`Failed to store Intervals.icu tokens: ${error.message}`);
       }
 
-      logger.debug(`✅ Intervals.icu connected for athlete ${athleteId}`);
+      logger.info(`[Intervals.icu] Tokens stored for athlete ${athleteId}, verified: ${!!updateResult?.[0]?.intervals_icu_access_token}`);
     } catch (error: any) {
       logger.error('Intervals.icu OAuth callback error:', error.response?.data || error.message);
       throw new Error('Failed to connect Intervals.icu account');
