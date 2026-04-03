@@ -617,20 +617,22 @@ export default function SettingsScreen({ navigation }: any) {
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity
-              style={[styles.btn, { backgroundColor: '#1d4ed8' }, icuLoading && styles.btnDisabled]}
-              onPress={handleConnectIntervalsIcu}
-              disabled={icuLoading}
-            >
-              {icuLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Text style={styles.btnText}>Connect Intervals.icu</Text>
-              )}
-            </TouchableOpacity>
-            <Text style={{ color: '#64748b', fontSize: 11, marginTop: 8, lineHeight: 16 }}>
-              Set up a free account at intervals.icu and link your Zwift account in their settings to get workouts automatically synced to Zwift.
-            </Text>
+            <>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#1d4ed8' }, icuLoading && styles.btnDisabled]}
+                onPress={handleConnectIntervalsIcu}
+                disabled={icuLoading}
+              >
+                {icuLoading ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.btnText}>Connect Intervals.icu</Text>
+                )}
+              </TouchableOpacity>
+              <Text style={{ color: '#64748b', fontSize: 11, marginTop: 8, lineHeight: 16 }}>
+                Set up a free account at intervals.icu and link your Zwift account in their settings to get workouts automatically synced to Zwift.
+              </Text>
+            </>
           )}
         </View>
 
