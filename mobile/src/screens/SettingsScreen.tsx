@@ -22,6 +22,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
 import { wahooService } from '../services/wahooService';
+import { intervalsIcuService } from '../services/intervalsIcuService';
 import { subscriptionService } from '../services/subscriptionService';
 import { getConversionUtils, convertToMetric } from '../utils/units';
 import WelcomeModal from '../components/modals/WelcomeModal';
@@ -92,13 +93,21 @@ export default function SettingsScreen({ navigation }: any) {
   const [wahooLoading, setWahooLoading] = useState(false);
   const [wahooAutoSync, setWahooAutoSync] = useState(false);
 
+  // Intervals.icu
+  const [icuConnected, setIcuConnected] = useState(false);
+  const [icuLoading, setIcuLoading] = useState(false);
+  const [icuAutoSync, setIcuAutoSync] = useState(false);
+
   useEffect(() => {
     wahooService.getStatus().then((status) => {
       setWahooConnected(status.connected);
       setWahooAutoSync(status.auto_sync);
-    }).catch(() => {
-      // silently ignore — not connected
-    });
+    }).catch(() => {});
+
+    intervalsIcuService.getStatus().then((status) => {
+      setIcuConnected(status.connected);
+      setIcuAutoSync(status.auto_sync);
+    }).catch(() => {});
   }, []);
 
   const handleSaveProfile = async () => {
@@ -282,6 +291,62 @@ export default function SettingsScreen({ navigation }: any) {
     } catch {
       Alert.alert('Error', 'Failed to update Wahoo settings.');
       setWahooAutoSync(!value); // revert
+    }
+  };
+
+  const handleConnectIntervalsIcu = async () => {
+    setIcuLoading(true);
+    try {
+      const authUrl = await intervalsIcuService.getAuthUrl();
+      // Intervals.icu OAuth redirects back to the server which redirects to the app
+      const redirectUri = __DEV__
+        ? 'exp://localhost:8081/--/intervals-icu/callback'
+        : 'cyclingcoach://intervals-icu/callback';
+
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type === 'success') {
+        // Re-check connection status after OAuth
+        const status = await intervalsIcuService.getStatus();
+        setIcuConnected(status.connected);
+        setIcuAutoSync(status.auto_sync);
+        if (status.connected) {
+          Alert.alert('Connected', 'Intervals.icu connected successfully!');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to connect Intervals.icu.');
+    } finally {
+      setIcuLoading(false);
+    }
+  };
+
+  const handleDisconnectIntervalsIcu = () => {
+    Alert.alert('Disconnect Intervals.icu', 'Remove Intervals.icu connection? Workouts will no longer sync.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await intervalsIcuService.disconnect();
+            setIcuConnected(false);
+            setIcuAutoSync(false);
+          } catch {
+            Alert.alert('Error', 'Failed to disconnect Intervals.icu.');
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleIcuAutoSyncToggle = async (value: boolean) => {
+    setIcuAutoSync(value);
+    try {
+      await intervalsIcuService.updateSettings(value);
+    } catch {
+      Alert.alert('Error', 'Failed to update Intervals.icu settings.');
+      setIcuAutoSync(!value);
     }
   };
 
@@ -516,6 +581,51 @@ export default function SettingsScreen({ navigation }: any) {
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
                 <Text style={styles.btnText}>Connect Strava</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Intervals.icu Section */}
+        <View style={styles.stravaTitleRow}>
+          <Ionicons name="calendar-outline" size={18} color="#60a5fa" />
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Intervals.icu</Text>
+        </View>
+        <View style={styles.section}>
+          {icuConnected ? (
+            <>
+              <View style={styles.stravaConnected}>
+                <View style={styles.stravaStatus}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.stravaText}>Connected</Text>
+                </View>
+              </View>
+              <View style={styles.notifRow}>
+                <View>
+                  <Text style={styles.notifLabel}>Auto-sync workouts</Text>
+                  <Text style={styles.notifHint}>Push planned workouts to Intervals.icu</Text>
+                </View>
+                <Switch
+                  value={icuAutoSync}
+                  onValueChange={handleIcuAutoSyncToggle}
+                  trackColor={{ false: '#334155', true: '#3b82f6' }}
+                  thumbColor="#fff"
+                />
+              </View>
+              <TouchableOpacity style={styles.disconnectBtn} onPress={handleDisconnectIntervalsIcu}>
+                <Text style={styles.disconnectText}>Disconnect Intervals.icu</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: '#1d4ed8' }, icuLoading && styles.btnDisabled]}
+              onPress={handleConnectIntervalsIcu}
+              disabled={icuLoading}
+            >
+              {icuLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.btnText}>Connect Intervals.icu</Text>
               )}
             </TouchableOpacity>
           )}

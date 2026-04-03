@@ -4,6 +4,7 @@ import { Button } from '../components/ui/button';
 import { ProfileEditForm } from '../components/settings/ProfileEditForm';
 import { AccountInfo } from '../components/settings/AccountInfo';
 import { StravaConnect } from '../components/strava/StravaConnect';
+import { IntervalsIcuConnect } from '../components/settings/IntervalsIcuConnect';
 import { WelcomeModal } from '../components/modals/WelcomeModal';
 import { useAuthStore } from '../stores/useAuthStore';
 
@@ -39,6 +40,19 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent>
             <StravaConnect />
+          </CardContent>
+        </Card>
+
+        {/* Intervals.icu Section */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Intervals.icu</CardTitle>
+            <CardDescription>
+              Sync workouts to Intervals.icu and push them to Zwift
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <IntervalsIcuConnect />
           </CardContent>
         </Card>
 
