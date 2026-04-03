@@ -4,7 +4,7 @@ import { zwoGenerator } from './fileGenerators/zwoGenerator';
 import { logger } from '../utils/logger';
 
 const INTERVALS_ICU_BASE_URL = 'https://intervals.icu/api/v1';
-const INTERVALS_ICU_OAUTH_URL = 'https://intervals.icu/oauth';
+const INTERVALS_ICU_OAUTH_URL = 'https://intervals.icu/api/oauth';
 
 interface IntervalsIcuConfig {
   clientId: string;
