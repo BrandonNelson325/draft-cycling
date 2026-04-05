@@ -538,8 +538,15 @@ USE THIS PROFILE TO:
         return rideDate === isoDate;
       });
       if (todaysRides.length > 0) {
-        prompt += `\n⚠️ ALREADY RODE TODAY: YES — The athlete has completed ${todaysRides.length} ride(s) today (see rides marked "TODAY" above).
-DO NOT suggest or discuss today's scheduled workout as if it still needs to be done. Training for today is DONE. Look ahead to tomorrow or answer their question.\n`;
+        const rideNames = todaysRides.map((r: any) => r.name || 'Ride').join(', ');
+        const rideTSS = todaysRides.reduce((sum: number, r: any) => sum + (r.tss || 0), 0);
+        prompt += `\n⚠️ ALREADY RODE TODAY: YES — The athlete completed ${todaysRides.length} ride(s) today: ${rideNames} (${rideTSS} TSS total).
+CRITICAL RULES when athlete has already ridden today:
+- ALWAYS acknowledge their completed ride first ("Nice work on today's ride" or similar)
+- NEVER prescribe rest for today or tell them to take the day off — they already trained
+- NEVER suggest today's scheduled workout as if it still needs to be done
+- Focus on recovery advice for tonight and preview tomorrow's plan
+- If they ask "what should I do today?" — they mean what ELSE, or they want recovery advice\n`;
       } else {
         prompt += `\nALREADY RODE TODAY: NO — The athlete has not ridden yet today.\n`;
       }
