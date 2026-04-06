@@ -67,10 +67,9 @@ function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
     };
   };
 
-  const getWorkoutDayName = (weekNumber: number, dayOfWeek: number) => {
-    const date = parseLocalDate(plan.start_date);
-    date.setDate(date.getDate() + (weekNumber - 1) * 7 + dayOfWeek);
-    return dayNames[date.getDay()];
+  const getWorkoutDayLabel = (dayOfWeek: number) => {
+    // day_of_week is stored as getDay() result (0=Sun, 6=Sat)
+    return dayNames[dayOfWeek] || '—';
   };
 
   const toggleWeek = (weekNum: number) => {
@@ -179,7 +178,7 @@ function TrainingPlanSummary({ plan }: { plan: TrainingPlan }) {
                     <View style={planStyles.woCardHeader}>
                       <View style={{ flex: 1 }}>
                         <Text style={planStyles.woName}>{wo.name}</Text>
-                        <Text style={planStyles.woDay}>{getWorkoutDayName(week.week_number, wo.day_of_week)}</Text>
+                        <Text style={planStyles.woDay}>{getWorkoutDayLabel(wo.day_of_week)}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end' }}>
                         <Text style={planStyles.woDuration}>{wo.duration_minutes} min</Text>

@@ -52,7 +52,9 @@ export const aiToolExecutor = {
             logger.debug('✅ schedule_workout SUCCESS:', result.success);
             break;
           case 'move_workout':
+            logger.debug(`[move_workout] Attempting: entry_id=${(toolCall.input as any).entry_id}, new_date=${(toolCall.input as any).new_date}`);
             result = await this.moveWorkout(athleteId, toolCall.input);
+            logger.debug(`[move_workout] SUCCESS: ${result.entry?.workout_name} → ${result.entry?.scheduled_date}`);
             break;
           case 'delete_workout_from_calendar':
             result = await this.deleteWorkoutFromCalendar(athleteId, toolCall.input);
