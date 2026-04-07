@@ -620,6 +620,9 @@ export default function SettingsScreen({ navigation }: any) {
                   <Text style={styles.stravaText}>Connected</Text>
                 </View>
               </View>
+              <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 4 }}>
+                Workouts sync to your head unit (Garmin, Wahoo) and training platforms (Zwift, Rouvy) via Intervals.icu. Connect your devices in your Intervals.icu settings.
+              </Text>
               <View style={styles.notifRow}>
                 <View>
                   <Text style={styles.notifLabel}>Auto-sync workouts</Text>
