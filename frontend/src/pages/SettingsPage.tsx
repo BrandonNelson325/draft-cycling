@@ -48,7 +48,7 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle>Intervals.icu</CardTitle>
             <CardDescription>
-              Sync workouts to Intervals.icu and push them to Zwift
+              Sync workouts to your head unit (Garmin, Wahoo) or training platform (Zwift, Rouvy) via Intervals.icu. Create a free account at intervals.icu and connect your devices there.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -71,7 +71,7 @@ export function SettingsPage() {
             <Button disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
               Connect Wahoo
             </Button>
-            <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
+            <p className="text-xs text-muted-foreground mt-2">Coming soon — connect to Intervals.icu above to sync workouts to your Wahoo head unit now.</p>
           </CardContent>
         </Card>
 
@@ -90,7 +90,7 @@ export function SettingsPage() {
             <Button disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
               Connect Garmin
             </Button>
-            <p className="text-xs text-muted-foreground mt-2">Coming soon</p>
+            <p className="text-xs text-muted-foreground mt-2">Coming soon — connect to Intervals.icu above to sync workouts to your Garmin device now.</p>
           </CardContent>
         </Card>
 

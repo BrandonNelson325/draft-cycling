@@ -669,7 +669,7 @@ export default function SettingsScreen({ navigation }: any) {
                 )}
               </TouchableOpacity>
               <Text style={{ color: '#64748b', fontSize: 11, marginTop: 8, lineHeight: 16 }}>
-                Set up a free account at intervals.icu and link your Zwift account in their settings to get workouts automatically synced to Zwift.
+                Sync workouts to your head unit (Garmin, Wahoo) or training platform (Zwift, Rouvy). Create a free account at intervals.icu, then connect your devices there. Workouts will automatically sync to all connected devices.
               </Text>
             </>
           )}
@@ -689,7 +689,7 @@ export default function SettingsScreen({ navigation }: any) {
           >
             <Text style={styles.btnText}>Connect Wahoo</Text>
           </TouchableOpacity>
-          <Text style={{ color: '#64748b', fontSize: 12, marginTop: 6, textAlign: 'center' }}>Coming soon</Text>
+          <Text style={{ color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 }}>Coming soon — connect to Intervals.icu above to sync workouts to your Wahoo head unit now.</Text>
         </View>
 
         {/* Garmin Section */}
@@ -706,7 +706,7 @@ export default function SettingsScreen({ navigation }: any) {
           >
             <Text style={styles.btnText}>Connect Garmin</Text>
           </TouchableOpacity>
-          <Text style={{ color: '#64748b', fontSize: 12, marginTop: 6, textAlign: 'center' }}>Coming soon</Text>
+          <Text style={{ color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 }}>Coming soon — connect to Intervals.icu above to sync workouts to your Garmin device now.</Text>
         </View>
 
         {/* Notifications Section */}
