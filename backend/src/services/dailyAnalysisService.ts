@@ -536,7 +536,9 @@ Format as JSON:
     const recentActivities = recentResult.data || [];
     const todayActivities = todayRidesResult.data || [];
     const hasPlannedWorkout = !!todayEntry.data?.workouts;
+    const isRestDay = todayEntry.data?.entry_type === 'rest';
     const hasTomorrowWorkout = !!tomorrowEntry.data?.workouts;
+    const isTomorrowRestDay = tomorrowEntry.data?.entry_type === 'rest';
 
     // Build normalized list of available workouts for AI to pick from
     const athleteWorkouts: AvailableWorkout[] = (athleteWorkoutsResult.data || []).map((w: any) => ({
@@ -572,6 +574,17 @@ Format as JSON:
         trainingStatus,
         tomorrowEntry.data,
         recentActivities,
+        fatigueProfile,
+        availableWorkouts
+      );
+    } else if (isRestDay) {
+      // Rest day — tell the AI not to suggest a workout
+      context = this.buildSuggestionContext(
+        yesterdayActivities,
+        trainingStatus,
+        todayEntry.data,
+        recentActivities,
+        true, // treat as "has planned workout" so AI doesn't suggest one
         fatigueProfile,
         availableWorkouts
       );

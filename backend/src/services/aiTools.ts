@@ -109,6 +109,25 @@ export const AI_TOOLS: Tool[] = [
   },
 
   {
+    name: 'schedule_rest_day',
+    description: 'Mark a specific date as a planned rest day. Use this when removing a workout for recovery, when the athlete says they cannot ride, or when prescribing rest. This prevents the coach from suggesting workouts on this day.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: {
+          type: 'string',
+          description: 'Date in YYYY-MM-DD format',
+        },
+        reason: {
+          type: 'string',
+          description: 'Why this is a rest day (e.g., "Travel day", "Recovery", "Planned rest")',
+        },
+      },
+      required: ['date'],
+    },
+  },
+
+  {
     name: 'delete_workout_from_calendar',
     description:
       'Remove a scheduled workout from the calendar (does not delete the workout itself, just removes it from the schedule)',

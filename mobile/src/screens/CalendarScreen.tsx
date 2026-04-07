@@ -585,7 +585,9 @@ export default function CalendarScreen() {
           {cells.map((day, i) => {
             if (!day) return <View key={`empty-${i}`} style={styles.cell} />;
             const dateStr = getDateStr(day);
-            const hasWorkouts = !!(workoutsByDate[dateStr]?.length);
+            const entries = workoutsByDate[dateStr] || [];
+            const hasWorkouts = entries.some((e: any) => e.entry_type !== 'rest');
+            const hasRestDay = entries.some((e: any) => e.entry_type === 'rest');
             const hasActivities = !!(activitiesByDate[dateStr]?.length);
             const isToday = dateStr === todayStr;
             const isSelected = dateStr === selectedDate;
@@ -600,8 +602,9 @@ export default function CalendarScreen() {
                 </Text>
                 <View style={styles.dots}>
                   {hasWorkouts ? <View style={[styles.dot, { backgroundColor: '#3b82f6' }]} /> : null}
+                  {hasRestDay ? <View style={[styles.dot, { backgroundColor: '#22c55e' }]} /> : null}
                   {hasActivities ? <View style={[styles.dot, { backgroundColor: '#f97316' }]} /> : null}
-                  {!hasWorkouts && !hasActivities && <View style={[styles.dot, { backgroundColor: 'transparent' }]} />}
+                  {!hasWorkouts && !hasRestDay && !hasActivities && <View style={[styles.dot, { backgroundColor: 'transparent' }]} />}
                 </View>
               </TouchableOpacity>
             );
@@ -636,7 +639,22 @@ export default function CalendarScreen() {
                 <Text style={styles.sheetEmpty}>Nothing scheduled for this day.</Text>
               )}
 
-              {selectedWorkouts.map(entry => (
+              {selectedWorkouts.map(entry => (entry as any).entry_type === 'rest' ? (
+                <View key={entry.id} style={[styles.entryCard, { borderLeftWidth: 3, borderLeftColor: '#22c55e' }]}>
+                  <View style={styles.entryLeft}>
+                    <Text style={[styles.entryName, { color: '#22c55e' }]}>Rest Day</Text>
+                    <Text style={styles.entryMeta}>{(entry as any).ai_rationale || 'Planned rest'}</Text>
+                  </View>
+                  <View style={styles.entryActions}>
+                    <Pressable
+                      style={[styles.actionBtn, styles.actionBtnDanger]}
+                      onPress={() => deleteEntry(entry.id)}
+                    >
+                      <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
                 <Pressable
                   key={entry.id}
                   style={styles.entryCard}

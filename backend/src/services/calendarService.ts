@@ -75,6 +75,43 @@ export const calendarService = {
   },
 
   /**
+   * Schedule a rest day on a specific date
+   */
+  async scheduleRestDay(
+    athleteId: string,
+    scheduledDate: Date,
+    aiRationale?: string
+  ): Promise<CalendarEntry> {
+    const dateStr = scheduledDate.toISOString().split('T')[0];
+
+    // Remove any existing entries for this date first
+    await supabaseAdmin
+      .from('calendar_entries')
+      .delete()
+      .eq('athlete_id', athleteId)
+      .eq('scheduled_date', dateStr);
+
+    const { data, error } = await supabaseAdmin
+      .from('calendar_entries')
+      .insert({
+        athlete_id: athleteId,
+        workout_id: null,
+        scheduled_date: dateStr,
+        entry_type: 'rest',
+        ai_rationale: aiRationale,
+        completed: false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to schedule rest day: ${error.message}`);
+    }
+
+    return data as CalendarEntry;
+  },
+
+  /**
    * Get calendar entries for a date range
    */
   async getCalendarEntries(

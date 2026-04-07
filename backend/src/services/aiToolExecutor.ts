@@ -56,6 +56,10 @@ export const aiToolExecutor = {
             result = await this.moveWorkout(athleteId, toolCall.input);
             logger.debug(`[move_workout] SUCCESS: ${result.entry?.workout_name} → ${result.entry?.scheduled_date}`);
             break;
+          case 'schedule_rest_day':
+            result = await this.scheduleRestDay(athleteId, toolCall.input);
+            logger.debug(`[schedule_rest_day] SUCCESS: ${(toolCall.input as any).date}`);
+            break;
           case 'delete_workout_from_calendar':
             result = await this.deleteWorkoutFromCalendar(athleteId, toolCall.input);
             break;
@@ -324,6 +328,30 @@ export const aiToolExecutor = {
         workout_id: entry.workout_id,
         scheduled_date: `${entry.scheduled_date} (${formatDateWithDay(entry.scheduled_date)})`,
         workout_name: entry.workouts?.name,
+      },
+    };
+  },
+
+  /**
+   * Schedule a rest day
+   */
+  async scheduleRestDay(athleteId: string, input: any): Promise<any> {
+    const [year, month, day] = input.date.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+
+    const entry = await calendarService.scheduleRestDay(
+      athleteId,
+      date,
+      input.reason || 'Planned rest day'
+    );
+
+    return {
+      success: true,
+      entry: {
+        id: entry.id,
+        scheduled_date: `${entry.scheduled_date} (${formatDateWithDay(entry.scheduled_date)})`,
+        entry_type: 'rest',
+        reason: input.reason || 'Planned rest day',
       },
     };
   },

@@ -574,12 +574,24 @@ CRITICAL RULES when athlete has already ridden today:
         return rideDate === isoDate;
       });
 
-      prompt += `UPCOMING SCHEDULED WORKOUTS:\n`;
+      prompt += `UPCOMING SCHEDULE:\n`;
       context.upcomingWorkouts.slice(0, 7).forEach((entry: any) => {
         const isToday = entry.scheduled_date === isoDate;
         const date = new Date(entry.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric', timeZone: athleteTz,
         });
+
+        // Rest day entries
+        if (entry.entry_type === 'rest') {
+          const reason = entry.ai_rationale || 'Planned rest';
+          if (isToday) {
+            prompt += `- ${date}: 🛌 REST DAY (${reason}) ← TODAY — DO NOT suggest any workout\n`;
+          } else {
+            prompt += `- ${date}: 🛌 REST DAY (${reason})\n`;
+          }
+          return;
+        }
+
         if (entry.workouts && entry.workouts.name) {
           if (isToday && alreadyRodeToday) {
             prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ← TODAY — ALREADY COMPLETED (do not suggest this)\n`;
