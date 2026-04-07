@@ -137,8 +137,8 @@ export function IntervalsIcuConnect() {
           <div className="p-3 bg-gray-50 border border-gray-200 rounded-md">
             <p className="text-sm text-gray-700">Connect Intervals.icu to sync workouts to your devices and platforms:</p>
             <ul className="text-xs text-gray-600 mt-2 space-y-1 ml-4 list-disc">
-              <li>Head units — Garmin, Wahoo ELEMNT</li>
-              <li>Training platforms — Zwift, Rouvy</li>
+              <li>Head units — Garmin, Wahoo, and more</li>
+              <li>Training platforms — Zwift, Rouvy, and more</li>
               <li>Track training across all your platforms</li>
             </ul>
             <p className="text-xs text-gray-500 mt-3">
@@ -146,7 +146,7 @@ export function IntervalsIcuConnect() {
               <a href="https://intervals.icu" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
                 intervals.icu
               </a>
-              , then connect your Garmin, Wahoo, Zwift, or Rouvy accounts in their settings. Workouts will automatically sync to all connected devices.
+              , then connect your devices and platforms in their settings. Workouts will automatically sync to all connected devices.
             </p>
           </div>
 

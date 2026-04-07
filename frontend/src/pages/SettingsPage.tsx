@@ -48,7 +48,7 @@ export function SettingsPage() {
           <CardHeader>
             <CardTitle>Intervals.icu</CardTitle>
             <CardDescription>
-              Sync workouts to your head unit (Garmin, Wahoo) or training platform (Zwift, Rouvy) via Intervals.icu. Create a free account at intervals.icu and connect your devices there.
+              Sync workouts to your head unit (Garmin, Wahoo, and more) or training platform (Zwift, Rouvy, and more) via Intervals.icu. Create a free account at intervals.icu and connect your devices there.
             </CardDescription>
           </CardHeader>
           <CardContent>

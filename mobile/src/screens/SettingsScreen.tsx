@@ -621,7 +621,7 @@ export default function SettingsScreen({ navigation }: any) {
                 </View>
               </View>
               <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 4 }}>
-                Workouts sync to your head unit (Garmin, Wahoo) and training platforms (Zwift, Rouvy) via Intervals.icu. Connect your devices in your Intervals.icu settings.
+                Workouts sync to your head unit (Garmin, Wahoo, and more) and training platforms (Zwift, Rouvy, and more) via Intervals.icu. Connect your devices in your Intervals.icu settings.
               </Text>
               <View style={styles.notifRow}>
                 <View>
@@ -672,7 +672,7 @@ export default function SettingsScreen({ navigation }: any) {
                 )}
               </TouchableOpacity>
               <Text style={{ color: '#64748b', fontSize: 11, marginTop: 8, lineHeight: 16 }}>
-                Sync workouts to your head unit (Garmin, Wahoo) or training platform (Zwift, Rouvy). Create a free account at intervals.icu, then connect your devices there. Workouts will automatically sync to all connected devices.
+                Sync workouts to your head unit (Garmin, Wahoo, and more) or training platform (Zwift, Rouvy, and more). Create a free account at intervals.icu, then connect your devices there. Workouts will automatically sync to all connected devices.
               </Text>
             </>
           )}
