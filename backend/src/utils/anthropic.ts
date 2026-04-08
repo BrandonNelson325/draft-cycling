@@ -16,7 +16,8 @@ export const MODEL = HAIKU;
 export type TaskType = 'chat' | 'workout_generation' | 'training_plan';
 
 export function selectModel(task: TaskType): string {
-  // Use Sonnet for workout generation and training plans (more reliable for tool use)
-  // Use Haiku for simple chat (cost savings)
-  return task === 'chat' ? HAIKU : SONNET;
+  // Use Sonnet for all tasks — Haiku is too weak for schedule reasoning,
+  // date math, and multi-turn coaching conversations. The system prompt is
+  // cached so most input tokens cost 10% of normal.
+  return SONNET;
 }
