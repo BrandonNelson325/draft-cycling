@@ -13,7 +13,7 @@
   "license": "ISC",
   "description": "AI Cycling Coach Backend API",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.74.0",
+    "@anthropic-ai/sdk": "^0.87.0",
     "@markw65/fit-file-writer": "^0.1.7",
     "@supabase/supabase-js": "^2.95.3",
     "@types/jsonwebtoken": "^9.0.10",

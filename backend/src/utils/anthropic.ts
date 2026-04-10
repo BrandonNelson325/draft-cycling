@@ -8,6 +8,7 @@ export const anthropic = new Anthropic({
 // Model definitions
 export const HAIKU = 'claude-haiku-4-5-20251001';
 export const SONNET = 'claude-sonnet-4-6';
+export const OPUS = 'claude-opus-4-6';
 
 // Default model for backward compatibility
 export const MODEL = HAIKU;

@@ -1,4 +1,4 @@
-import { anthropic, MODEL, HAIKU, SONNET } from '../utils/anthropic';
+import { anthropic, MODEL, HAIKU, SONNET, OPUS } from '../utils/anthropic';
 import { supabaseAdmin } from '../utils/supabase';
 import { trainingLoadService } from './trainingLoadService';
 import { powerAnalysisService } from './powerAnalysisService';
@@ -8,6 +8,17 @@ import { AI_TOOLS } from './aiTools';
 import { athletePreferencesService, type AthletePreferences } from './athletePreferencesService';
 import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
 import { logger } from '../utils/logger';
+
+// Advisor tool: Opus provides strategic guidance to Sonnet for complex reasoning
+// (schedule conflicts, periodization decisions, workout sequencing).
+// Handled server-side by the API — Sonnet calls Opus when needed, API routes internally.
+const ADVISOR_TOOL = {
+  type: 'advisor_20260301' as const,
+  name: 'advisor' as const,
+  model: OPUS,
+  max_uses: 3,
+  caching: { type: 'ephemeral' as const },
+};
 
 interface PlanDeviation {
   scheduled_date: string;
@@ -1655,24 +1666,27 @@ Format it clearly so I can follow it during my ride.`;
       // and cost 10% of normal input price after the first request in a 5-min window.
       const cachedSystem = [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }];
 
-      // Call AI with tools always available - start cheap with Haiku
-      let response = await anthropic.messages.create({
+      // Sonnet executor + Opus advisor: Sonnet drives the conversation and tools,
+      // Opus provides strategic guidance for complex reasoning (schedule conflicts, etc.)
+      const allTools = [...AI_TOOLS, ADVISOR_TOOL] as any;
+
+      let response = await anthropic.beta.messages.create({
         model,
         max_tokens: 4000,
         system: cachedSystem as any,
         messages,
-        tools: AI_TOOLS,
+        tools: allTools,
+        betas: ['advisor-tool-2026-03-01'],
       });
 
       let conversationMessages = [...messages];
-      let finalResponse = response;
+      let finalResponse = response as any;
 
       // Handle tool use (up to 5 iterations to prevent infinite loops)
-      // Auto-upgrade to Sonnet when tools are invoked (complex work needs better reasoning)
       for (let i = 0; i < 5 && this.hasToolUse(finalResponse); i++) {
-        logger.debug(`Tool calling iteration ${i + 1} (switching to Sonnet for tool execution)`);
+        logger.debug(`Tool calling iteration ${i + 1}`);
 
-        // Extract tool calls
+        // Extract tool calls (only our custom tools, not advisor — that's API-handled)
         const toolCalls = finalResponse.content.filter(
           (block: any) => block.type === 'tool_use'
         ) as any[];
@@ -1697,14 +1711,15 @@ Format it clearly so I can follow it during my ride.`;
           content: toolResults,
         });
 
-        // Continue conversation with Sonnet (timeout 45s)
+        // Continue conversation (timeout 45s)
         finalResponse = await Promise.race([
-          anthropic.messages.create({
+          anthropic.beta.messages.create({
             model: SONNET,
             max_tokens: 4000,
             system: cachedSystem as any,
             messages: conversationMessages,
-            tools: AI_TOOLS,
+            tools: allTools,
+            betas: ['advisor-tool-2026-03-01'],
           }),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('AI response timed out after 45s')), 45000)
@@ -1741,12 +1756,13 @@ Format it clearly so I can follow it during my ride.`;
           ],
         });
 
-        // Get final text response without tools (stay on Sonnet since we're in complex context)
-        finalResponse = await anthropic.messages.create({
+        // Get final text response without tools
+        finalResponse = await anthropic.beta.messages.create({
           model: SONNET,
           max_tokens: 2000,
           system: cachedSystem as any,
           messages: conversationMessages,
+          betas: ['advisor-tool-2026-03-01'],
           // No tools parameter - force text-only response
         });
       }
@@ -1898,13 +1914,16 @@ Format it clearly so I can follow it during my ride.`;
       // and cost 10% of normal input price after the first request in a 5-min window.
       const cachedSystem = [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }];
 
-      // Stream the first response — for pure Q&A this IS the final response
-      const firstStream = anthropic.messages.stream({
+      // Sonnet executor + Opus advisor: stream the first response
+      const allTools = [...AI_TOOLS, ADVISOR_TOOL] as any;
+
+      const firstStream = anthropic.beta.messages.stream({
         model,
         max_tokens: 4000,
         system: cachedSystem as any,
         messages,
-        tools: AI_TOOLS,
+        tools: allTools,
+        betas: ['advisor-tool-2026-03-01'],
       });
 
       let streamedText = '';
@@ -1967,12 +1986,13 @@ Format it clearly so I can follow it during my ride.`;
 
           // Timeout Claude API calls at 45s
           finalResponse = await Promise.race([
-            anthropic.messages.create({
+            anthropic.beta.messages.create({
               model: SONNET,
               max_tokens: 4000,
               system: cachedSystem as any,
               messages: conversationMessages,
-              tools: AI_TOOLS,
+              tools: allTools,
+              betas: ['advisor-tool-2026-03-01'],
             }),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('AI response timed out after 45s')), 45000)
@@ -2017,11 +2037,12 @@ Format it clearly so I can follow it during my ride.`;
       }
 
       // Stream the final summary response
-      const finalStream = anthropic.messages.stream({
+      const finalStream = anthropic.beta.messages.stream({
         model: SONNET,
         max_tokens: 2000,
         system: cachedSystem as any,
         messages: finalMessages,
+        betas: ['advisor-tool-2026-03-01'],
       });
 
       let finalText = '';

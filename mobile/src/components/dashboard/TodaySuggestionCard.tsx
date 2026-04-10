@@ -49,10 +49,22 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
   const actionInfo = ACTION_LABELS[suggestion.suggestedAction] || ACTION_LABELS['proceed-as-planned'];
 
   const handleChatPress = () => {
-    const workout = suggestion.todaysWorkout || suggestion.suggestedWorkout;
-    const msg = workout
-      ? `I'd like to discuss today's plan: ${workout.name}. My TSB is ${suggestion.currentTSB.toFixed(1)} and I'm feeling ${suggestion.status.replace('-', ' ')}. What do you think?`
-      : `I don't have a workout planned today. My TSB is ${suggestion.currentTSB.toFixed(1)} and I'm feeling ${suggestion.status.replace('-', ' ')}. What should I do?`;
+    let msg: string;
+    if (hasRiddenToday) {
+      // Post-ride: discuss today's ride and what's next
+      const rideNames = suggestion.todaysRides.map(r => r.name).join(', ');
+      const totalTSS = suggestion.todaysRides.reduce((sum, r) => sum + r.tss, 0);
+      const tomorrowPart = suggestion.tomorrowsWorkout
+        ? ` Tomorrow I have ${suggestion.tomorrowsWorkout.name} scheduled.`
+        : '';
+      msg = `I rode today: ${rideNames} (${totalTSS} TSS). My TSB is ${suggestion.currentTSB.toFixed(1)}.${tomorrowPart} How did my ride go and what should I focus on next?`;
+    } else {
+      // Pre-ride: discuss today's plan
+      const workout = suggestion.todaysWorkout || suggestion.suggestedWorkout;
+      msg = workout
+        ? `I'd like to discuss today's plan: ${workout.name}. My TSB is ${suggestion.currentTSB.toFixed(1)} and I'm feeling ${suggestion.status.replace('-', ' ')}. What do you think?`
+        : `I don't have a workout planned today. My TSB is ${suggestion.currentTSB.toFixed(1)} and I'm feeling ${suggestion.status.replace('-', ' ')}. What should I do?`;
+    }
     navigation.navigate('Chat', { initialMessage: msg });
   };
 
