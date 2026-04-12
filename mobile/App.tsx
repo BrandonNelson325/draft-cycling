@@ -28,7 +28,25 @@ const linking = {
   },
 };
 
+/**
+ * Gate: only mount AppModalsInner (and its data-fetching hooks) after
+ * the user has passed the subscription/beta gate. This prevents API
+ * calls like /daily-check-in/readiness from firing during registration.
+ */
 function AppModals() {
+  const { user } = useAuthStore();
+
+  const hasBetaOrSubscription =
+    !!user?.beta_access_code ||
+    user?.subscription_status === 'active' ||
+    user?.subscription_status === 'trialing';
+
+  if (!user || !hasBetaOrSubscription) return null;
+
+  return <AppModalsInner />;
+}
+
+function AppModalsInner() {
   const { user } = useAuthStore();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
@@ -58,14 +76,6 @@ function AppModals() {
       (navigationRef as any).navigate('Main', { screen: 'Chat', params: { initialMessage: message } });
     }
   }, []);
-
-  // Don't show modals until user has passed the payment/beta gate
-  const hasBetaOrSubscription =
-    !!user?.beta_access_code ||
-    user?.subscription_status === 'active' ||
-    user?.subscription_status === 'trialing';
-
-  if (!user || !hasBetaOrSubscription) return null;
 
   return (
     <>
