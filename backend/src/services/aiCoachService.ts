@@ -1970,8 +1970,18 @@ Format it clearly so I can follow it during my ride.`;
       onEvent({ type: 'progress', message: 'Working on it...' });
 
       // Send keepalive pings every 10s to prevent SSE connection from timing out
+      // Rotate messages so the user knows it's still actively working
+      const progressMessages = [
+        'Still working — this can take up to a minute...',
+        'Scheduling workouts to your calendar...',
+        'If you need to leave, your plan will still be built. You can check back here or on your calendar.',
+        'Still building — almost there...',
+        'Finishing up...',
+      ];
+      let progressIdx = 0;
       const keepalive = setInterval(() => {
-        onEvent({ type: 'progress', message: 'Still working...' });
+        onEvent({ type: 'progress', message: progressMessages[Math.min(progressIdx, progressMessages.length - 1)] });
+        progressIdx++;
       }, 10000);
 
       let conversationMessages = [...messages];

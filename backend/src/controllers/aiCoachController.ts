@@ -101,8 +101,17 @@ export const chatStream = async (req: AuthRequest, res: Response): Promise<void>
   res.setHeader('X-Accel-Buffering', 'no'); // disable nginx/proxy buffering
   res.flushHeaders();
 
+  // Track client disconnect — server continues plan building but stops writing
+  let clientDisconnected = false;
+  req.on('close', () => { clientDisconnected = true; });
+
   const sendEvent = (data: Record<string, any>) => {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    if (clientDisconnected || !res.writable) return;
+    try {
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      clientDisconnected = true;
+    }
   };
 
   try {
@@ -116,7 +125,7 @@ export const chatStream = async (req: AuthRequest, res: Response): Promise<void>
   } catch (error: any) {
     sendEvent({ type: 'error', error: error.message || 'Chat failed' });
   } finally {
-    res.end();
+    if (!clientDisconnected) res.end();
   }
 };
 

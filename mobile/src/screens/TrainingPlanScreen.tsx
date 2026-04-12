@@ -72,7 +72,7 @@ function WeekAccordion({ week }: { week: TrainingWeek }) {
 }
 
 export default function TrainingPlanScreen({ navigation }: any) {
-  const [plan, setPlan] = useState<TrainingPlan | null>(null);
+  const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -82,25 +82,24 @@ export default function TrainingPlanScreen({ navigation }: any) {
   const load = async () => {
     setLoading(true);
     try {
-      const p = await trainingPlanService.getActivePlan();
-      setPlan(p);
+      const p = await trainingPlanService.getActivePlans();
+      setPlans(p);
     } catch {
-      setPlan(null);
+      setPlans([]);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCancel = () => {
-    if (!plan) return;
-    Alert.alert('Cancel Plan', 'Are you sure you want to cancel your training plan?', [
+  const handleCancel = (plan: TrainingPlan) => {
+    Alert.alert('Cancel Plan', `Are you sure you want to cancel "${plan.goal_event}"?`, [
       { text: 'Keep Plan', style: 'cancel' },
       {
         text: 'Cancel Plan',
         style: 'destructive',
         onPress: async () => {
           await trainingPlanService.deletePlan(plan.id);
-          setPlan(null);
+          setPlans(prev => prev.filter(p => p.id !== plan.id));
         },
       },
     ]);
@@ -114,7 +113,7 @@ export default function TrainingPlanScreen({ navigation }: any) {
     );
   }
 
-  if (!plan) {
+  if (plans.length === 0) {
     return (
       <SafeAreaView style={styles.safe} edges={['bottom']}>
         <EmptyState
@@ -130,55 +129,63 @@ export default function TrainingPlanScreen({ navigation }: any) {
     );
   }
 
-  const totalWorkouts = plan.weeks.reduce((sum, w) => sum + w.workouts.length, 0);
-
   return (
     <SafeAreaView style={styles.safe} edges={['bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Overview */}
-        <Card>
-          <Text style={styles.planGoal}>{plan.goal_event}</Text>
-          <View style={styles.planMeta}>
-            <MetaStat label="Weeks" value={String(plan.weeks.length)} />
-            <MetaStat label="Workouts" value={String(totalWorkouts)} />
-            <MetaStat label="Total TSS" value={String(plan.total_tss)} />
-          </View>
-          <View style={styles.planDates}>
-            <Text style={styles.planDateText}>
-              {parseLocalDate(plan.start_date).toLocaleDateString('en-US', {
-                month: 'short', day: 'numeric', year: 'numeric',
-              })}
-            </Text>
-            <Text style={styles.planDateSep}>→</Text>
-            <Text style={styles.planDateText}>
-              {parseLocalDate(plan.event_date).toLocaleDateString('en-US', {
-                month: 'short', day: 'numeric', year: 'numeric',
-              })}
-            </Text>
-          </View>
+        {plans.map(plan => {
+          const totalWorkouts = plan.weeks.reduce((sum, w) => sum + w.workouts.length, 0);
+          return (
+            <React.Fragment key={plan.id}>
+              {/* Overview */}
+              <Card>
+                <Text style={styles.planGoal}>{plan.goal_event}</Text>
+                <View style={styles.planMeta}>
+                  <MetaStat label="Weeks" value={String(plan.weeks.length)} />
+                  <MetaStat label="Workouts" value={String(totalWorkouts)} />
+                  <MetaStat label="Total TSS" value={String(plan.total_tss)} />
+                </View>
+                <View style={styles.planDates}>
+                  <Text style={styles.planDateText}>
+                    {parseLocalDate(plan.start_date).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                    })}
+                  </Text>
+                  <Text style={styles.planDateSep}>→</Text>
+                  <Text style={styles.planDateText}>
+                    {parseLocalDate(plan.event_date).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric',
+                    })}
+                  </Text>
+                </View>
 
-          {/* Phase badges */}
-          <View style={styles.phases}>
-            {['base', 'build', 'peak', 'taper'].map(phase => {
-              const count = plan.weeks.filter(w => w.phase === phase).length;
-              if (!count) return null;
-              const c = PHASE_COLORS[phase];
-              return (
-                <Badge key={phase} label={`${phase} (${count}w)`} color={c.bg} textColor={c.text} />
-              );
-            })}
-          </View>
-        </Card>
+                {/* Phase badges */}
+                <View style={styles.phases}>
+                  {['base', 'build', 'peak', 'taper'].map(phase => {
+                    const count = plan.weeks.filter(w => w.phase === phase).length;
+                    if (!count) return null;
+                    const c = PHASE_COLORS[phase];
+                    return (
+                      <Badge key={phase} label={`${phase} (${count}w)`} color={c.bg} textColor={c.text} />
+                    );
+                  })}
+                </View>
+              </Card>
 
-        {/* Week accordions */}
-        {plan.weeks.map(week => (
-          <WeekAccordion key={week.week_number} week={week} />
-        ))}
+              {/* Week accordions */}
+              {plan.weeks.map(week => (
+                <WeekAccordion key={week.week_number} week={week} />
+              ))}
 
-        {/* Cancel button */}
-        <TouchableOpacity style={styles.cancelBtn} onPress={handleCancel}>
-          <Text style={styles.cancelText}>Cancel Training Plan</Text>
-        </TouchableOpacity>
+              {/* Cancel button */}
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancel(plan)}>
+                <Text style={styles.cancelText}>Cancel Training Plan</Text>
+              </TouchableOpacity>
+
+              {/* Separator between plans */}
+              {plans.length > 1 && <View style={styles.planSeparator} />}
+            </React.Fragment>
+          );
+        })}
 
         <View style={{ height: 24 }} />
       </ScrollView>
@@ -299,6 +306,11 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     padding: 14,
     alignItems: 'center',
+  },
+  planSeparator: {
+    height: 1,
+    backgroundColor: '#334155',
+    marginVertical: 16,
   },
   cancelText: {
     color: '#ef4444',
