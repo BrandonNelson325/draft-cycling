@@ -601,15 +601,13 @@ Format as JSON:
         availableWorkouts
       );
     } else if (isRestDay) {
-      // Rest day — tell the AI not to suggest a workout
-      context = this.buildSuggestionContext(
+      // Rest day — build a dedicated rest day context
+      context = this.buildRestDayContext(
         yesterdayActivities,
         trainingStatus,
-        todayEntry.data,
         recentActivities,
-        true, // treat as "has planned workout" so AI doesn't suggest one
         fatigueProfile,
-        availableWorkouts
+        isCalendarRestDay ? 'scheduled' : isPreferenceRestDay ? 'preference' : 'plan'
       );
     } else {
       context = this.buildSuggestionContext(
@@ -623,8 +621,8 @@ Format as JSON:
       );
     }
 
-    // Get AI suggestion
-    const aiResult = await this.getSuggestionAIAnalysis(context, riddenToday ? true : hasPlannedWorkout);
+    // Get AI suggestion — rest days and planned workouts both suppress workout suggestions
+    const aiResult = await this.getSuggestionAIAnalysis(context, riddenToday || isRestDay || hasPlannedWorkout);
 
     // If AI picked a workout, resolve the ID (clone template if needed)
     let resolvedWorkoutId: string | undefined;
@@ -805,6 +803,56 @@ Format as JSON:
     "duration": 0,
     "description": "1 sentence description (for rest: why rest is the right call)"
   }
+}`;
+  },
+
+  /**
+   * Build context for a rest day — no workout suggestion, just recovery advice
+   */
+  buildRestDayContext(
+    yesterdayActivities: any[],
+    trainingStatus: any,
+    recentActivities: any[],
+    fatigueProfile: FatigueProfile | null = null,
+    reason: 'scheduled' | 'preference' | 'plan'
+  ): string {
+    const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+    const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
+
+    const reasonText = reason === 'preference'
+      ? 'This is a designated rest day (athlete preference).'
+      : reason === 'scheduled'
+      ? 'This is a scheduled rest day on the calendar.'
+      : 'No workout is scheduled in the training plan — this is a planned rest day.';
+
+    return `You are a cycling coach. Today is a REST DAY for this athlete. ${reasonText}
+Do NOT suggest a workout. Reinforce that rest is valuable.
+
+YESTERDAY'S TRAINING:
+${
+  yesterdayActivities.length > 0
+    ? yesterdayActivities
+        .map((a) => `- ${a.name}: ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS, ${a.average_watts || 0}W avg`)
+        .join('\n')
+    : '- No rides yesterday'
+}
+Total TSS: ${yesterdayTSS}
+
+${buildTrainingStatusBlock(trainingStatus)}
+
+LAST 7 DAYS (${recentActivities.length} rides, ${recentTotalTSS} total TSS):
+${recentActivities.map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`).join('\n') || '  (no rides)'}
+
+${fatigueProfileService.formatForPrompt(fatigueProfile)}
+
+YOUR TASK:
+Provide a rest day summary. Acknowledge the training load and reinforce why rest matters today.
+
+Format as JSON:
+{
+  "summary": "1 sentence about current training load and why rest is appropriate today",
+  "recommendation": "1 sentence of rest day advice (recovery tips, what to expect tomorrow, etc.)",
+  "suggestedAction": "add-rest"
 }`;
   },
 
