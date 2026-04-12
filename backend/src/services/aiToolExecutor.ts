@@ -666,6 +666,43 @@ export const aiToolExecutor = {
       })
     );
 
+    // Schedule rest days for all dates in the plan range without workouts.
+    // This makes rest days visible on the calendar and prevents the daily suggestion
+    // from recommending workouts on planned off-days.
+    if (goal_event && event_date) {
+      try {
+        const workoutDates = new Set(deduplicatedWorkouts.map(w => w.date));
+        const [sy, sm, sd] = deduplicatedWorkouts.map(w => w.date).sort()[0].split('-').map(Number);
+        const [ey, em, ed] = event_date.split('-').map(Number);
+        const planStartDate = new Date(sy, sm - 1, sd);
+        const planEndDate = new Date(ey, em - 1, ed);
+
+        const restDayEntries: { athlete_id: string; workout_id: null; scheduled_date: string; entry_type: string; ai_rationale: string; completed: boolean }[] = [];
+        const cursor = new Date(planStartDate);
+        while (cursor <= planEndDate) {
+          const dateStr = cursor.toISOString().split('T')[0];
+          if (!workoutDates.has(dateStr)) {
+            restDayEntries.push({
+              athlete_id: athleteId,
+              workout_id: null,
+              scheduled_date: dateStr,
+              entry_type: 'rest',
+              ai_rationale: 'Planned rest day',
+              completed: false,
+            });
+          }
+          cursor.setDate(cursor.getDate() + 1);
+        }
+
+        if (restDayEntries.length > 0) {
+          await supabaseAdmin.from('calendar_entries').insert(restDayEntries);
+          logger.debug(`Scheduled ${restDayEntries.length} rest days for plan ${goal_event}`);
+        }
+      } catch (restErr: any) {
+        logger.error('Failed to schedule rest days (non-blocking):', restErr.message);
+      }
+    }
+
     // Save a training_plans record so the Training Plan page shows the plan
     if (goal_event && event_date) {
       try {

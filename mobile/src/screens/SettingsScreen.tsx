@@ -59,6 +59,7 @@ export default function SettingsScreen({ navigation }: any) {
     user?.experience_level || 'intermediate'
   );
   const [weeklyHours, setWeeklyHours] = useState(String(user?.weekly_training_hours || ''));
+  const [restDays, setRestDays] = useState<string[]>(user?.preferences?.rest_days || []);
   const [timezone, setTimezone] = useState(
     user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
   );
@@ -129,6 +130,7 @@ export default function SettingsScreen({ navigation }: any) {
         max_hr: maxHr ? Number(maxHr) : undefined,
         resting_hr: restingHr ? Number(restingHr) : undefined,
         date_of_birth: dateOfBirth || undefined,
+        rest_days: restDays,
       });
       Alert.alert('Saved', 'Profile updated successfully.');
     } catch {
@@ -528,6 +530,29 @@ export default function SettingsScreen({ navigation }: any) {
             ))}
           </View>
 
+          <Label>Rest Days</Label>
+          <Text style={styles.hint}>Days you don't want workouts scheduled</Text>
+          <View style={styles.dayGrid}>
+            {(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'] as const).map(day => {
+              const isSelected = restDays.includes(day);
+              return (
+                <TouchableOpacity
+                  key={day}
+                  style={[styles.dayChip, isSelected && styles.dayChipActive]}
+                  onPress={() => {
+                    setRestDays(prev =>
+                      isSelected ? prev.filter(d => d !== day) : [...prev, day]
+                    );
+                  }}
+                >
+                  <Text style={[styles.dayChipText, isSelected && styles.dayChipTextActive]}>
+                    {day.slice(0, 3)}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           <Label>Weekly Training Hours</Label>
           <Text style={styles.hint}>Hours per week you can commit to riding</Text>
           <TextInput
@@ -908,6 +933,31 @@ const styles = StyleSheet.create({
   segActive: { backgroundColor: '#1e3a5f' },
   segText: { fontSize: 13, color: '#64748b', fontWeight: '500' },
   segTextActive: { color: '#60a5fa' },
+  dayGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  dayChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  dayChipActive: {
+    backgroundColor: '#1e3a5f',
+    borderColor: '#3b82f6',
+  },
+  dayChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748b',
+  },
+  dayChipTextActive: {
+    color: '#60a5fa',
+  },
   btn: {
     backgroundColor: '#3b82f6',
     borderRadius: 8,

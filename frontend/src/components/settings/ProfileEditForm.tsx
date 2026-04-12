@@ -37,6 +37,7 @@ export function ProfileEditForm() {
   const [weeklyHours, setWeeklyHours] = useState(
     user?.weekly_training_hours?.toString() || ''
   );
+  const [restDays, setRestDays] = useState<string[]>(user?.preferences?.rest_days || []);
   const [timezone, setTimezone] = useState(
     user?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Los_Angeles'
   );
@@ -109,6 +110,12 @@ export function ProfileEditForm() {
 
       if (dateOfBirth && dateOfBirth !== user?.date_of_birth) {
         (updates as any).date_of_birth = dateOfBirth;
+      }
+
+      // Always send rest_days so empty array clears them
+      const currentRestDays = user?.preferences?.rest_days || [];
+      if (JSON.stringify(restDays.sort()) !== JSON.stringify(currentRestDays.sort())) {
+        (updates as any).rest_days = restDays;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -305,6 +312,34 @@ export function ProfileEditForm() {
               <span className="text-xs text-muted-foreground">{opt.desc}</span>
             </label>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium mb-2">Rest Days</label>
+        <p className="text-xs text-muted-foreground mb-2">
+          Days you don't want workouts scheduled. The AI coach will respect these.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+            const isSelected = restDays.includes(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                onClick={() => setRestDays(prev =>
+                  isSelected ? prev.filter(d => d !== day) : [...prev, day]
+                )}
+                className={`px-3 py-1.5 rounded-md text-sm font-medium border-2 transition-colors ${
+                  isSelected
+                    ? 'border-blue-500 bg-blue-500/10 text-blue-600'
+                    : 'border-gray-200 text-gray-500 hover:border-gray-400'
+                }`}
+              >
+                {day.slice(0, 3)}
+              </button>
+            );
+          })}
         </div>
       </div>
 

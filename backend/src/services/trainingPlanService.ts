@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../utils/supabase';
 import { workoutService } from './workoutService';
 import { calendarService } from './calendarService';
 import { athletePreferencesService } from './athletePreferencesService';
+import { logger } from '../utils/logger';
 import {
   TrainingPlanConfig,
   TrainingPlan,
@@ -909,6 +910,42 @@ export const trainingPlanService = {
         );
       })
     );
+
+    // Schedule rest days for all dates in the plan range without workouts
+    try {
+      const workoutDates = new Set<string>();
+      createdWorkouts.forEach((_, i) => {
+        const { week, wt } = items[i];
+        const weekOffset = week.week_number - 1;
+        const d = new Date(startDate);
+        d.setDate(d.getDate() + weekOffset * 7 + wt.day_of_week);
+        workoutDates.add(d.toISOString().split('T')[0]);
+      });
+
+      const endDate = new Date(plan.event_date + 'T12:00:00');
+      const restDayEntries: { athlete_id: string; workout_id: null; scheduled_date: string; entry_type: string; ai_rationale: string; completed: boolean }[] = [];
+      const cursor = new Date(startDate);
+      while (cursor <= endDate) {
+        const dateStr = cursor.toISOString().split('T')[0];
+        if (!workoutDates.has(dateStr)) {
+          restDayEntries.push({
+            athlete_id: athleteId,
+            workout_id: null,
+            scheduled_date: dateStr,
+            entry_type: 'rest',
+            ai_rationale: 'Planned rest day',
+            completed: false,
+          });
+        }
+        cursor.setDate(cursor.getDate() + 1);
+      }
+
+      if (restDayEntries.length > 0) {
+        await supabaseAdmin.from('calendar_entries').insert(restDayEntries);
+      }
+    } catch (err: any) {
+      logger.error('Failed to schedule rest days:', err.message);
+    }
 
     return {
       scheduledCount: createdWorkouts.length,

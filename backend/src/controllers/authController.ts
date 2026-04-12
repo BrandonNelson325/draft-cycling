@@ -254,7 +254,7 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { full_name, ftp, weight_kg, unit_system, display_mode, push_notifications_enabled, morning_checkin_time, timezone, max_hr, resting_hr, date_of_birth, experience_level, weekly_training_hours } = req.body;
+    const { full_name, ftp, weight_kg, unit_system, display_mode, push_notifications_enabled, morning_checkin_time, timezone, max_hr, resting_hr, date_of_birth, experience_level, weekly_training_hours, rest_days } = req.body;
 
     const updateData: any = { updated_at: new Date().toISOString() };
     if (full_name !== undefined) updateData.full_name = full_name;
@@ -270,6 +270,17 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     if (date_of_birth !== undefined) updateData.date_of_birth = date_of_birth;
     if (experience_level !== undefined) updateData.experience_level = experience_level;
     if (weekly_training_hours !== undefined) updateData.weekly_training_hours = weekly_training_hours;
+
+    // rest_days is stored in the JSONB preferences column — merge with existing
+    if (rest_days !== undefined) {
+      const { data: current } = await supabaseAdmin
+        .from('athletes')
+        .select('preferences')
+        .eq('id', req.user.id)
+        .single();
+      const prefs = current?.preferences || {};
+      updateData.preferences = { ...prefs, rest_days };
+    }
 
     const { data: athlete, error } = await supabaseAdmin
       .from('athletes')

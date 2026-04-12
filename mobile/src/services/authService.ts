@@ -74,6 +74,7 @@ export const authService = {
     max_hr?: number;
     resting_hr?: number;
     date_of_birth?: string;
+    rest_days?: string[];
   }) {
     const { data } = await apiClient.put<Athlete>('/api/auth/me', updates);
     useAuthStore.getState().setUser(data);
