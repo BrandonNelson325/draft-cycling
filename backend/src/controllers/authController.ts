@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { supabaseAdmin, supabase } from '../utils/supabase';
 import { AuthRequest } from '../middleware/auth';
+import { logger } from '../utils/logger';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -290,14 +291,14 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
       .single();
 
     if (error) {
-      console.error('Error updating profile:', error);
-      res.status(500).json({ error: 'Failed to update profile' });
+      logger.error('Error updating profile:', error);
+      res.status(500).json({ error: 'Failed to update profile', details: error.message });
       return;
     }
 
     res.json(athlete);
-  } catch (error) {
-    console.error('Update profile error:', error);
-    res.status(500).json({ error: 'Failed to update profile' });
+  } catch (error: any) {
+    logger.error('Update profile error:', error);
+    res.status(500).json({ error: 'Failed to update profile', details: error.message });
   }
 };
