@@ -10,13 +10,13 @@ interface DailyMorningModalProps {
   analysis: DailyAnalysis | null;
   readiness: DailyReadiness;
   onClose: () => void;
-  displayMode?: 'simple' | 'advanced';
+  displayMode?: 'simple' | 'advanced'; // deprecated — always renders full details
 }
 
 type SleepQuality = 'poor' | 'good' | 'great';
 type Feeling = 'tired' | 'normal' | 'energized';
 
-export function DailyMorningModal({ analysis, readiness, onClose, displayMode = 'advanced' }: DailyMorningModalProps) {
+export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorningModalProps) {
   const navigate = useNavigate();
   const [step, setStep] = useState<'checkin' | 'analysis'>('checkin');
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>(null);
@@ -236,7 +236,7 @@ export function DailyMorningModal({ analysis, readiness, onClose, displayMode = 
                   {getStatusIcon()}
                   <div>
                     <div className="font-semibold text-lg">{getStatusText()}</div>
-                    {displayMode === 'advanced' && (
+                    {(
                       <div className="text-sm text-gray-600">
                         Form: {analysis.currentTSB.toFixed(1)} · Fitness: {analysis.currentCTL.toFixed(1)}
                       </div>
@@ -262,7 +262,7 @@ export function DailyMorningModal({ analysis, readiness, onClose, displayMode = 
                         className="flex items-center justify-between text-sm bg-gray-50 rounded-lg p-3"
                       >
                         <span className="font-medium">{ride.name}</span>
-                        {displayMode === 'advanced' && (
+                        {(
                           <div className="flex gap-3 text-gray-500">
                             <span>{ride.duration}min</span>
                             <span>{ride.tss} TSS</span>

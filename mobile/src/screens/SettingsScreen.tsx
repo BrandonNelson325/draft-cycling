@@ -496,7 +496,8 @@ export default function SettingsScreen({ navigation }: any) {
             ))}
           </View>
 
-          <Label>Display Mode</Label>
+          <Label>Chat Style</Label>
+          <Text style={styles.hint}>How detailed the AI coach responses are</Text>
           <View style={styles.segmented}>
             {(['simple', 'advanced'] as const).map(m => (
               <TouchableOpacity
@@ -505,7 +506,7 @@ export default function SettingsScreen({ navigation }: any) {
                 onPress={() => setDisplayMode(m)}
               >
                 <Text style={[styles.segText, displayMode === m && styles.segTextActive]}>
-                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                  {m === 'simple' ? 'Concise' : 'Detailed'}
                 </Text>
               </TouchableOpacity>
             ))}

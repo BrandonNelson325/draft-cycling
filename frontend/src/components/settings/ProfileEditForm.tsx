@@ -246,7 +246,8 @@ export function ProfileEditForm() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium mb-2">App Detail Level</label>
+        <label className="block text-sm font-medium mb-2">Chat Style</label>
+        <p className="text-xs text-muted-foreground mb-2">How detailed the AI coach responses are</p>
         <div className="flex gap-4">
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -257,7 +258,7 @@ export function ProfileEditForm() {
               onChange={(e) => setDisplayMode(e.target.value as 'simple' | 'advanced')}
               className="w-4 h-4"
             />
-            <span className="text-sm">Simple — quick &amp; concise</span>
+            <span className="text-sm">Concise — short, to the point</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
             <input
@@ -268,7 +269,7 @@ export function ProfileEditForm() {
               onChange={(e) => setDisplayMode(e.target.value as 'simple' | 'advanced')}
               className="w-4 h-4"
             />
-            <span className="text-sm">Advanced — full details</span>
+            <span className="text-sm">Detailed — full metrics and analysis</span>
           </label>
         </div>
       </div>

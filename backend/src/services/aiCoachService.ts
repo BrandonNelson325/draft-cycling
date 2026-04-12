@@ -433,7 +433,19 @@ IMPORTANT: The training status above is what the athlete sees on their dashboard
         if (dailyCheckIn.feeling) prompt += `- Feeling: ${dailyCheckIn.feeling} (score: ${dailyCheckIn.feeling_score}/10)\n`;
         if (dailyCheckIn.notes) prompt += `- Notes: ${dailyCheckIn.notes}\n`;
       }
-      prompt += `(Use this as subjective context for coaching — do NOT factor into CTL/ATL calculations)\n\n`;
+      prompt += `(Use this as subjective context for coaching — do NOT factor into CTL/ATL calculations)
+
+**PROACTIVE WORKOUT SWAP WHEN READINESS IS LOW:**
+If the athlete reports poor sleep OR feeling tired AND has a hard workout scheduled today (threshold, VO2max, sweet spot, tempo — anything above endurance):
+1. Acknowledge how they're feeling — don't dismiss it
+2. Recommend swapping today's hard workout for a recovery or easy endurance ride
+3. Offer to MOVE the hard workout to the next suitable day (check the calendar for a day that isn't already hard)
+4. If they agree, use \`move_workout\` to reschedule the hard workout AND \`schedule_workout\` or \`schedule_rest_day\` for today
+5. Don't just say "take it easy" — actually make the calendar change so they don't lose the workout from their plan
+This is what a real coach does: protect the athlete on bad days while preserving the training plan's intent.
+
+`;
+
     }
 
     // Add power records with rider profile analysis

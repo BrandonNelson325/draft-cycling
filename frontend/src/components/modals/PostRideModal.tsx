@@ -5,7 +5,7 @@ import type { UnacknowledgedActivity, ActivityFeedback } from '../../services/ac
 
 interface PostRideModalProps {
   activity: UnacknowledgedActivity;
-  displayMode: 'simple' | 'advanced';
+  displayMode?: 'simple' | 'advanced'; // deprecated — always renders full layout
   onAcknowledge: (feedback: ActivityFeedback) => void;
   onSkip: () => void;
   onNavigateToChat?: (message: string) => void;
@@ -185,82 +185,6 @@ export function PostRideModal({
     setShowAdaptPrompt(false);
   };
 
-  if (displayMode === 'simple') {
-    return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-        <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full max-h-[90vh] overflow-y-auto">
-          {/* Header */}
-          <div className="bg-gradient-to-r from-orange-400 to-rose-500 text-white p-5 rounded-t-2xl relative">
-            <button onClick={onSkip} className="absolute top-4 right-4 text-white/70 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-            <div className="text-xs font-medium text-white/70 mb-1">
-              {totalActivities > 1 ? `Activity ${activityNumber} of ${totalActivities}` : 'New activity'}
-            </div>
-            <h2 className="text-xl font-bold leading-tight">{activity.name}</h2>
-            <p className="text-orange-100 text-sm mt-0.5">{dateStr}</p>
-          </div>
-
-          <div className="p-5 space-y-5">
-            {/* Stats */}
-            <div className="flex gap-4">
-              {distance && (
-                <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
-                  <div className="text-lg font-bold text-gray-800">{distance}</div>
-                  <div className="text-xs text-gray-500">Distance</div>
-                </div>
-              )}
-              {duration && (
-                <div className="flex-1 bg-gray-50 rounded-xl p-3 text-center">
-                  <div className="text-lg font-bold text-gray-800">{duration}</div>
-                  <div className="text-xs text-gray-500">Duration</div>
-                </div>
-              )}
-            </div>
-            {activity.calories != null && (
-              <div className="bg-gray-50 rounded-xl p-3 text-center">
-                <div className="text-lg font-bold text-gray-800">{Math.round(activity.calories)} cal</div>
-                <div className="text-xs text-gray-500">Calories</div>
-              </div>
-            )}
-
-            {/* Planned workout */}
-            <PlannedWorkoutCard activity={activity} wasPlanned={wasPlanned} setWasPlanned={handleSetWasPlanned} showAdaptPrompt={showAdaptPrompt} onAdapt={handleAdapt} onDeclineAdapt={handleDeclineAdapt} />
-
-            {/* RPE */}
-            <div>
-              <p className="text-sm font-semibold text-gray-700 mb-3 text-center">How did that feel?</p>
-              <div className="flex justify-between gap-1">
-                {RPE_OPTIONS.map(({ value, emoji, label }) => (
-                  <button
-                    key={value}
-                    onClick={() => onAcknowledge(buildFeedback(value))}
-                    className="flex-1 flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-orange-50 transition-colors group"
-                    title={label}
-                  >
-                    <span className="text-2xl group-hover:scale-110 transition-transform">{emoji}</span>
-                    <span className="text-xs text-gray-500 leading-tight text-center">{label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Skip */}
-            <div className="text-center">
-              <button
-                onClick={onSkip}
-                className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                Skip
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Advanced mode
   const stats = [
     distance ? { label: 'Distance', value: distance } : null,
     duration ? { label: 'Duration', value: duration } : null,

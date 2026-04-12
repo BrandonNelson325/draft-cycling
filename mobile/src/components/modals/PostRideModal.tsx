@@ -49,7 +49,6 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
   const [saving, setSaving] = useState(false);
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
-  const isAdvanced = user?.display_mode !== 'simple';
 
   if (!activity) return null;
 
@@ -225,10 +224,9 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
             ))}
           </View>
 
-          {isAdvanced && (
-            <>
-              <Text style={styles.question}>Notes (optional)</Text>
-              <TextInput
+          <>
+            <Text style={styles.question}>Notes (optional)</Text>
+            <TextInput
                 style={styles.textArea}
                 value={notes}
                 onChangeText={setNotes}
@@ -237,9 +235,11 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
                 multiline
                 numberOfLines={3}
               />
-            </>
-          )}
+          </>
+        </ScrollView>
 
+        {/* Pinned at bottom — KeyboardAvoidingView keeps it above keyboard */}
+        <View style={styles.bottomBar}>
           <TouchableOpacity
             style={[styles.btn, (!rpe || saving) && styles.btnDisabled]}
             onPress={handleSubmit}
@@ -251,7 +251,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
               <Text style={styles.btnText}>Save Feedback</Text>
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </View>
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
   close: { fontSize: 15, color: '#64748b' },
-  content: { padding: 20, paddingBottom: 60, gap: 16 },
+  content: { padding: 20, paddingBottom: 20, gap: 16 },
   activityCard: {
     backgroundColor: '#1e293b',
     borderRadius: 12,
@@ -400,12 +400,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#334155',
   },
+  bottomBar: {
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+    borderTopWidth: 1,
+    borderTopColor: '#1e293b',
+    backgroundColor: '#0f172a',
+  },
   btn: {
     backgroundColor: '#3b82f6',
     borderRadius: 10,
     padding: 15,
     alignItems: 'center',
-    marginTop: 8,
   },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
