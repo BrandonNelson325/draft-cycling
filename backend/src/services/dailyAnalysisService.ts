@@ -484,7 +484,7 @@ Format as JSON:
     const todayUTC = localDayToUTCRange(todayStr, tz);
     const sevenDaysAgoUTC = localDayToUTCRange(sevenDaysAgo.toISOString().split('T')[0], tz);
 
-    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile, athleteWorkoutsResult, templatesResult] = await Promise.all([
+    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile, athleteWorkoutsResult, templatesResult, athletePrefsResult, activePlansResult] = await Promise.all([
       trainingLoadService.getTrainingStatus(athleteId),
       supabaseAdmin
         .from('strava_activities')
@@ -530,14 +530,37 @@ Format as JSON:
       supabaseAdmin
         .from('workout_templates')
         .select('id, name, workout_type, duration_minutes, tss_estimate'),
+      supabaseAdmin
+        .from('athletes')
+        .select('preferences')
+        .eq('id', athleteId)
+        .single(),
+      supabaseAdmin
+        .from('training_plans')
+        .select('id')
+        .eq('athlete_id', athleteId)
+        .eq('status', 'active')
+        .limit(1),
     ]);
 
     const yesterdayActivities = yesterdayResult.data || [];
     const recentActivities = recentResult.data || [];
     const todayActivities = todayRidesResult.data || [];
     const hasPlannedWorkout = !!todayEntry.data?.workouts;
-    const isRestDay = todayEntry.data?.entry_type === 'rest';
     const hasTomorrowWorkout = !!tomorrowEntry.data?.workouts;
+
+    // Determine if today is a rest day from multiple sources:
+    // 1. Calendar entry explicitly marked as rest
+    const isCalendarRestDay = todayEntry.data?.entry_type === 'rest';
+    // 2. Today's day name is in athlete's preferred rest days
+    const restDayPrefs: string[] = athletePrefsResult.data?.preferences?.rest_days || [];
+    const todayDayName = new Date(todayStr + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' });
+    const isPreferenceRestDay = restDayPrefs.some(d => d.toLowerCase() === todayDayName.toLowerCase());
+    // 3. Active training plan exists but no workout scheduled for today (implied rest)
+    const hasActivePlan = (activePlansResult.data?.length ?? 0) > 0;
+    const isImpliedPlanRestDay = hasActivePlan && !hasPlannedWorkout && !isCalendarRestDay;
+
+    const isRestDay = isCalendarRestDay || isPreferenceRestDay || isImpliedPlanRestDay;
     const isTomorrowRestDay = tomorrowEntry.data?.entry_type === 'rest';
 
     // Build normalized list of available workouts for AI to pick from
