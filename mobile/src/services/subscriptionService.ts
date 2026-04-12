@@ -19,6 +19,7 @@ export const subscriptionService = {
     const { data } = await apiClient.post<{ url: string }>('/api/subscription/checkout', {
       plan,
       promo_code: promoCode,
+      mobile: true,
     });
     return data.url;
   },

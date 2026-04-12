@@ -24,6 +24,7 @@ const linking = {
   config: {
     screens: {
       StravaCallback: 'strava/callback',
+      SubscriptionCallback: 'subscription/:status',
     },
   },
 };

@@ -39,7 +39,8 @@ export const subscriptionService = {
     athleteId: string,
     email: string,
     plan: 'monthly' | 'yearly',
-    promoCode?: string
+    promoCode?: string,
+    mobile?: boolean
   ): Promise<string> {
     const customerId = await this.getOrCreateCustomer(athleteId, email);
 
@@ -47,12 +48,22 @@ export const subscriptionService = {
       ? config.stripe.yearlyPriceId
       : config.stripe.monthlyPriceId;
 
+    // Mobile: redirect to an API endpoint that bounces to the cyclingcoach:// deep link.
+    // Stripe requires HTTPS URLs, so we can't redirect directly to a custom scheme.
+    const apiBase = process.env.API_URL || `${config.frontendUrl}`;
+    const successUrl = mobile
+      ? `${apiBase}/api/subscription/mobile-callback?status=success`
+      : `${config.frontendUrl}/settings?subscription=success`;
+    const cancelUrl = mobile
+      ? `${apiBase}/api/subscription/mobile-callback?status=canceled`
+      : `${config.frontendUrl}/subscribe?canceled=true`;
+
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${config.frontendUrl}/settings?subscription=success`,
-      cancel_url: `${config.frontendUrl}/subscribe?canceled=true`,
+      success_url: successUrl,
+      cancel_url: cancelUrl,
       metadata: { athlete_id: athleteId },
       subscription_data: {
         metadata: { athlete_id: athleteId },

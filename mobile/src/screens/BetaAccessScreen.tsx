@@ -49,9 +49,13 @@ export default function BetaAccessScreen() {
     setCheckoutLoading(plan);
     try {
       const url = await subscriptionService.createCheckout(plan);
-      await WebBrowser.openBrowserAsync(url);
-      // After returning from browser, poll until webhook updates subscription
-      for (let i = 0; i < 15; i++) {
+      // openAuthSessionAsync auto-closes the browser when it redirects to our deep link
+      const redirectUri = __DEV__
+        ? 'exp://localhost:8081/--/subscription/success'
+        : 'cyclingcoach://subscription/success';
+      await WebBrowser.openAuthSessionAsync(url, redirectUri);
+      // Browser closed — poll until webhook updates subscription status
+      for (let i = 0; i < 30; i++) {
         await new Promise((r) => setTimeout(r, 2000));
         try {
           await authService.getProfile();
@@ -85,7 +89,7 @@ export default function BetaAccessScreen() {
       >
         <View style={styles.planInfo}>
           <Text style={styles.planName}>Monthly</Text>
-          <Text style={styles.planDesc}>Cancel anytime</Text>
+          <Text style={styles.planDesc}>7-day free trial, then cancel anytime</Text>
         </View>
         <View style={styles.planPriceWrap}>
           <Text style={styles.planPrice}>$9.99</Text>
@@ -106,7 +110,7 @@ export default function BetaAccessScreen() {
         >
           <View style={styles.planInfo}>
             <Text style={styles.planName}>Yearly</Text>
-            <Text style={styles.planDesc}>Save 34%</Text>
+            <Text style={styles.planDesc}>7-day free trial, save 34%</Text>
           </View>
           <View style={styles.planPriceWrap}>
             <Text style={styles.planPrice}>$79</Text>
@@ -115,6 +119,11 @@ export default function BetaAccessScreen() {
           {checkoutLoading === 'yearly' && <ActivityIndicator color="#3b82f6" style={styles.planSpinner} />}
         </TouchableOpacity>
       </View>
+
+      {/* CTA */}
+      <Text style={styles.trialCta}>
+        Tap a plan to start your 7-day free trial. You won't be charged until the trial ends.
+      </Text>
 
       {/* Promo Code */}
       <Text style={styles.promoLabel}>Have a promo code?</Text>
@@ -177,6 +186,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#94a3b8',
     marginBottom: 12,
+  },
+  trialCta: {
+    fontSize: 13,
+    color: '#60a5fa',
+    textAlign: 'center',
+    marginTop: 4,
+    marginBottom: 8,
+    lineHeight: 18,
   },
   planCard: {
     flexDirection: 'row',

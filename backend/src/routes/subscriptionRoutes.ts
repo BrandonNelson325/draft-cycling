@@ -6,6 +6,7 @@ const router = Router();
 
 // Public
 router.get('/plans', subscriptionController.getPlans);
+router.get('/mobile-callback', subscriptionController.mobileCallback);
 
 // Webhook (no auth — Stripe signature verified in controller)
 router.post('/webhook', subscriptionController.handleWebhook);

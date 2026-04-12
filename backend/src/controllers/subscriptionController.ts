@@ -44,7 +44,7 @@ export const createCheckout = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { plan, promo_code } = req.body;
+    const { plan, promo_code, mobile } = req.body;
 
     if (!plan || !['monthly', 'yearly'].includes(plan)) {
       res.status(400).json({ error: 'Invalid plan. Must be "monthly" or "yearly".' });
@@ -55,7 +55,8 @@ export const createCheckout = async (req: AuthRequest, res: Response): Promise<v
       req.user.id,
       req.user.email,
       plan,
-      promo_code
+      promo_code,
+      !!mobile
     );
 
     res.json({ url });
@@ -63,6 +64,16 @@ export const createCheckout = async (req: AuthRequest, res: Response): Promise<v
     logger.error('[Subscription] Checkout error:', error);
     res.status(500).json({ error: 'Failed to create checkout session' });
   }
+};
+
+/**
+ * GET /api/subscription/mobile-callback
+ * Redirect endpoint for Stripe checkout on mobile.
+ * Stripe requires HTTPS success/cancel URLs, so this bounces to the app's deep link.
+ */
+export const mobileCallback = async (req: Request, res: Response): Promise<void> => {
+  const status = req.query.status === 'success' ? 'success' : 'canceled';
+  res.redirect(`cyclingcoach://subscription/${status}`);
 };
 
 /**
