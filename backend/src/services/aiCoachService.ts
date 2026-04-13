@@ -616,12 +616,13 @@ CRITICAL RULES when athlete has already ridden today:
         }
 
         if (entry.workouts && entry.workouts.name) {
+          const entryMeta = `[entry:${entry.id}, date:${entry.scheduled_date}]`;
           if (isToday && alreadyRodeToday) {
-            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ← TODAY — ALREADY COMPLETED (do not suggest this)\n`;
+            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ${entryMeta} ← TODAY — ALREADY COMPLETED (do not suggest this)\n`;
           } else if (isToday) {
-            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ← TODAY\n`;
+            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ${entryMeta} ← TODAY\n`;
           } else {
-            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS)\n`;
+            prompt += `- ${date}: ${entry.workouts.name} (${entry.workouts.workout_type}, ${entry.workouts.tss} TSS) ${entryMeta}\n`;
           }
         }
       });

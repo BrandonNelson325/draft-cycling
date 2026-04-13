@@ -11,6 +11,7 @@ import { fitGenerator } from './fileGenerators/fitGenerator';
 import { supabaseAdmin } from '../utils/supabase';
 import { CreateWorkoutDTO } from '../types/workout';
 import { logger } from '../utils/logger';
+import { clearSuggestionCache } from './dailyAnalysisService';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -294,6 +295,7 @@ export const aiToolExecutor = {
       scheduledDate,
       input.rationale
     );
+    clearSuggestionCache(athleteId);
 
     return {
       success: true,
@@ -308,18 +310,37 @@ export const aiToolExecutor = {
   },
 
   /**
-   * Move a workout to a different date
+   * Move a workout to a different date.
+   * Accepts entry_id directly OR current_date to look up the entry.
    */
   async moveWorkout(athleteId: string, input: any): Promise<any> {
-    // Parse date as local date to avoid timezone issues
     const [year, month, day] = input.new_date.split('-').map(Number);
     const newDate = new Date(year, month - 1, day);
 
-    const entry = await calendarService.moveWorkout(
-      input.entry_id,
-      athleteId,
-      newDate
-    );
+    // Resolve entry_id: use provided ID, or look up by current_date
+    let entryId = input.entry_id;
+    if (!entryId && input.current_date) {
+      const { data } = await supabaseAdmin
+        .from('calendar_entries')
+        .select('id')
+        .eq('athlete_id', athleteId)
+        .eq('scheduled_date', input.current_date)
+        .neq('entry_type', 'rest')
+        .is('completed_at', null)
+        .limit(1)
+        .single();
+      if (!data) {
+        return { success: false, error: `No workout found on ${formatDateWithDay(input.current_date)}` };
+      }
+      entryId = data.id;
+    }
+
+    if (!entryId) {
+      return { success: false, error: 'Provide either entry_id or current_date to identify the workout' };
+    }
+
+    const entry = await calendarService.moveWorkout(entryId, athleteId, newDate);
+    clearSuggestionCache(athleteId);
 
     return {
       success: true,
@@ -344,6 +365,7 @@ export const aiToolExecutor = {
       date,
       input.reason || 'Planned rest day'
     );
+    clearSuggestionCache(athleteId);
 
     return {
       success: true,
@@ -357,14 +379,44 @@ export const aiToolExecutor = {
   },
 
   /**
-   * Delete a workout from calendar
+   * Delete a workout from calendar.
+   * Accepts entry_id directly OR scheduled_date to look up the entry.
    */
   async deleteWorkoutFromCalendar(athleteId: string, input: any): Promise<any> {
-    await calendarService.deleteEntry(input.entry_id, athleteId);
+    // Resolve entry_id: use provided ID, or look up by scheduled_date
+    let entryId = input.entry_id;
+    if (!entryId && input.scheduled_date) {
+      const { data } = await supabaseAdmin
+        .from('calendar_entries')
+        .select('id, workouts(name)')
+        .eq('athlete_id', athleteId)
+        .eq('scheduled_date', input.scheduled_date)
+        .neq('entry_type', 'rest')
+        .is('completed_at', null)
+        .limit(1)
+        .single();
+      if (!data) {
+        return { success: false, error: `No workout found on ${formatDateWithDay(input.scheduled_date)}` };
+      }
+      entryId = data.id;
+    }
+
+    if (!entryId) {
+      return { success: false, error: 'Provide either entry_id or scheduled_date to identify the workout' };
+    }
+
+    // Verify entry exists before deleting
+    const existing = await calendarService.getEntryById(entryId, athleteId);
+    if (!existing) {
+      return { success: false, error: 'Calendar entry not found — it may have already been removed' };
+    }
+
+    await calendarService.deleteEntry(entryId, athleteId);
+    clearSuggestionCache(athleteId);
 
     return {
       success: true,
-      message: 'Workout removed from calendar',
+      message: `Workout "${existing.workouts?.name || 'entry'}" removed from ${formatDateWithDay(existing.scheduled_date)}`,
     };
   },
 

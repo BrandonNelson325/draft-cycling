@@ -91,20 +91,24 @@ export const AI_TOOLS: Tool[] = [
 
   {
     name: 'move_workout',
-    description: 'Move a scheduled workout to a different date',
+    description: 'Move a scheduled workout to a different date. Provide EITHER entry_id OR current_date to identify the workout.',
     input_schema: {
       type: 'object',
       properties: {
         entry_id: {
           type: 'string',
-          description: 'Calendar entry UUID',
+          description: 'Calendar entry UUID (from get_calendar). Optional if current_date is provided.',
+        },
+        current_date: {
+          type: 'string',
+          description: 'Current date of the workout in YYYY-MM-DD format. Use this if you don\'t have the entry_id.',
         },
         new_date: {
           type: 'string',
           description: 'New date in YYYY-MM-DD format',
         },
       },
-      required: ['entry_id', 'new_date'],
+      required: ['new_date'],
     },
   },
 
@@ -130,16 +134,19 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'delete_workout_from_calendar',
     description:
-      'Remove a scheduled workout from the calendar (does not delete the workout itself, just removes it from the schedule)',
+      'Remove a scheduled workout from the calendar (does not delete the workout itself, just removes it from the schedule). Provide EITHER entry_id OR scheduled_date.',
     input_schema: {
       type: 'object',
       properties: {
         entry_id: {
           type: 'string',
-          description: 'Calendar entry UUID to delete',
+          description: 'Calendar entry UUID (from get_calendar). Optional if scheduled_date is provided.',
+        },
+        scheduled_date: {
+          type: 'string',
+          description: 'Date of the workout to remove in YYYY-MM-DD format. Use this if you don\'t have the entry_id.',
         },
       },
-      required: ['entry_id'],
     },
   },
 

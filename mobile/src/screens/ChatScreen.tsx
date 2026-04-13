@@ -117,21 +117,12 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     <SafeAreaView style={styles.safe} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        {activeConversationId ? (
-          <TouchableOpacity
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            onPress={clearActiveConversation}
-          >
-            <Ionicons name="arrow-back" size={22} color="#f1f5f9" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            onPress={() => navigation.navigate('Dashboard')}
-          >
-            <Ionicons name="arrow-back" size={22} color="#f1f5f9" />
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          onPress={() => navigation.navigate('Dashboard')}
+        >
+          <Ionicons name="arrow-back" size={22} color="#f1f5f9" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>AI Coach</Text>
         <TouchableOpacity
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
