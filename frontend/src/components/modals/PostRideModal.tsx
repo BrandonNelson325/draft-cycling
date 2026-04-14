@@ -142,7 +142,6 @@ function PlannedWorkoutCard({
 
 export function PostRideModal({
   activity,
-  displayMode,
   onAcknowledge,
   onSkip,
   onNavigateToChat,
