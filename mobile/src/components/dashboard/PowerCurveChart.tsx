@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, Dimensions, TouchableOpacity
 import { Canvas, Path, Circle } from '@shopify/react-native-skia';
 import Card from '../ui/Card';
 import { metricsService } from '../../services/metricsService';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 const { width } = Dimensions.get('window');
 const CHART_W = width - 64;
@@ -35,6 +36,8 @@ export default function PowerCurveChart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [period, setPeriod] = useState<'8weeks' | 'all'>('all');
+  const [unit, setUnit] = useState<'watts' | 'wkg'>('watts');
+  const weightKg = useAuthStore(s => s.user?.weight_kg);
 
   useEffect(() => {
     setLoading(true);
@@ -71,7 +74,7 @@ export default function PowerCurveChart() {
   // Sanitize all values — guard against undefined/null from older backend responses.
   // 15s and 30s are estimated from 5sec (same approach as the web chart).
   const p5s = (prs?.power_5sec) || 0;
-  const candidates: { dur: string; val: number }[] = [
+  const rawCandidates: { dur: string; val: number }[] = [
     { dur: '5s',  val: p5s },
     { dur: '15s', val: Math.round(p5s * 0.95) },
     { dur: '30s', val: Math.round(p5s * 0.90) },
@@ -82,9 +85,16 @@ export default function PowerCurveChart() {
     { dur: '20m', val: (prs?.power_20min) || 0 },
   ];
 
+  const showWkg = unit === 'wkg' && weightKg && weightKg > 0;
+  const candidates = rawCandidates.map(p => ({
+    dur: p.dur,
+    val: showWkg ? parseFloat((p.val / weightKg!).toFixed(2)) : p.val,
+    rawWatts: p.val,
+  }));
+
   // Only plot durations where we actually have a value — avoids ugly zero dips
   // and the NaN-in-SVG-path bug when new fields aren't in the backend yet.
-  const points = candidates.filter(p => p.val > 0);
+  const points = candidates.filter(p => p.rawWatts > 0);
 
   if (points.length === 0) {
     return (
@@ -110,6 +120,23 @@ export default function PowerCurveChart() {
       <View style={styles.header}>
         <Text style={styles.title}>Power Curve</Text>
         <View style={styles.toggle}>
+          {weightKg && weightKg > 0 ? (
+            <>
+              <TouchableOpacity
+                style={[styles.toggleBtn, unit === 'watts' && styles.toggleBtnActive]}
+                onPress={() => setUnit('watts')}
+              >
+                <Text style={[styles.toggleText, unit === 'watts' && styles.toggleTextActive]}>W</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.toggleBtn, unit === 'wkg' && styles.toggleBtnActive]}
+                onPress={() => setUnit('wkg')}
+              >
+                <Text style={[styles.toggleText, unit === 'wkg' && styles.toggleTextActive]}>W/kg</Text>
+              </TouchableOpacity>
+              <View style={styles.toggleDivider} />
+            </>
+          ) : null}
           <TouchableOpacity
             style={[styles.toggleBtn, period === '8weeks' && styles.toggleBtnActive]}
             onPress={() => setPeriod('8weeks')}
@@ -146,13 +173,13 @@ export default function PowerCurveChart() {
           ))}
         </Canvas>
 
-        {/* Watt label above each dot */}
+        {/* Value label above each dot */}
         {points.map((p, i) => (
           <Text
             key={`w${i}`}
             style={[styles.wattLabel, { left: toX(i) - 18, top: Math.max(0, pts[i].y - 14) }]}
           >
-            {p.val}w
+            {showWkg ? p.val.toFixed(1) : p.val + 'w'}
           </Text>
         ))}
 
@@ -194,6 +221,13 @@ const styles = StyleSheet.create({
   },
   toggleBtnActive: {
     backgroundColor: '#1e3a5f',
+  },
+  toggleDivider: {
+    width: 1,
+    height: 16,
+    backgroundColor: '#334155',
+    marginHorizontal: 2,
+    alignSelf: 'center' as const,
   },
   toggleText: {
     fontSize: 11,

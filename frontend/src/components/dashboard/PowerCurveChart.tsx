@@ -2,11 +2,14 @@ import { useEffect, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { metricsService } from '../../services/metricsService';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { useAuthStore } from '../../stores/useAuthStore';
 
 export function PowerCurveChart() {
-  const [data, setData] = useState<any[]>([]);
+  const [rawData, setRawData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState<'8weeks' | 'all'>('all');
+  const [unit, setUnit] = useState<'watts' | 'wkg'>('watts');
+  const weightKg = useAuthStore(s => s.user?.weight_kg);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -15,8 +18,6 @@ export function PowerCurveChart() {
         const metrics = await metricsService.getMetrics(period);
         const prs = metrics.power_prs;
 
-        // Format for chart - show multiple durations
-        // Estimate intermediate values for smoother curve
         const p5s = prs.power_5sec || 0;
         const chartData = [
           { duration: '5s',  seconds: 5,    power: p5s },
@@ -29,7 +30,7 @@ export function PowerCurveChart() {
           { duration: '20m', seconds: 1200, power: prs.power_20min || 0 },
         ].filter(d => d.power > 0);
 
-        setData(chartData);
+        setRawData(chartData);
       } catch (err) {
         console.error('Failed to load power records:', err);
       } finally {
@@ -39,6 +40,12 @@ export function PowerCurveChart() {
 
     fetchData();
   }, [period]);
+
+  const showWkg = unit === 'wkg' && weightKg && weightKg > 0;
+  const data = rawData.map(d => ({
+    ...d,
+    power: showWkg ? parseFloat((d.power / weightKg!).toFixed(2)) : d.power,
+  }));
 
   if (loading) {
     return (
@@ -66,27 +73,53 @@ export function PowerCurveChart() {
             <CardTitle className="text-lg">Power Curve</CardTitle>
             <CardDescription className="text-xs">Peak power across durations</CardDescription>
           </div>
-          <div className="flex gap-1 bg-muted rounded-lg p-0.5">
-            <button
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                period === '8weeks'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              onClick={() => setPeriod('8weeks')}
-            >
-              8 Weeks
-            </button>
-            <button
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                period === 'all'
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-              onClick={() => setPeriod('all')}
-            >
-              All Time
-            </button>
+          <div className="flex items-center gap-2">
+            {weightKg && weightKg > 0 ? (
+              <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+                <button
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    unit === 'watts'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setUnit('watts')}
+                >
+                  W
+                </button>
+                <button
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    unit === 'wkg'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setUnit('wkg')}
+                >
+                  W/kg
+                </button>
+              </div>
+            ) : null}
+            <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+              <button
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  period === '8weeks'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setPeriod('8weeks')}
+              >
+                8 Weeks
+              </button>
+              <button
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  period === 'all'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+                onClick={() => setPeriod('all')}
+              >
+                All Time
+              </button>
+            </div>
           </div>
         </div>
       </CardHeader>
@@ -113,7 +146,7 @@ export function PowerCurveChart() {
                 borderRadius: '8px',
                 fontSize: '11px',
               }}
-              formatter={(value: any) => [`${value}W`, 'Power']}
+              formatter={(value: any) => [showWkg ? `${value} W/kg` : `${value}W`, 'Power']}
             />
             <Line
               type="monotone"
