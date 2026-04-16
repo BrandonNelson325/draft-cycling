@@ -509,11 +509,13 @@ USE THIS PROFILE TO:
       prompt += `RECENT RIDES (Last 2 weeks - ${recentRides.length} rides):
 `;
       const todayMidnight = new Date(isoDate + 'T00:00:00');
+      logger.debug(`[buildSystemPrompt] isoDate=${isoDate}, athleteTz=${athleteTz}, todayMidnight=${todayMidnight.toISOString()}`);
       recentRides.slice(0, 10).forEach((ride, i) => {
         // Convert ride date to athlete's local timezone (not UTC!)
         const rideDate = new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date(ride.start_date));
         const rideMidnight = new Date(rideDate + 'T00:00:00');
         const diffDays = Math.round((todayMidnight.getTime() - rideMidnight.getTime()) / (1000 * 60 * 60 * 24));
+        logger.debug(`[buildSystemPrompt] ride="${ride.name}" start_date=${ride.start_date} → rideDate=${rideDate}, rideMidnight=${rideMidnight.toISOString()}, diffDays=${diffDays}`);
         const relativeLabel =
           diffDays === 0 ? 'TODAY' :
           diffDays === 1 ? 'YESTERDAY' :
@@ -1628,6 +1630,55 @@ Format it clearly so I can follow it during my ride.`;
   },
 
   /**
+   * Build message history with date separators so the AI knows when context shifted.
+   * Without this, old messages referencing "today" from 2 days ago confuse the AI
+   * into thinking those rides happened on the current day.
+   */
+  async buildMessageHistory(
+    convId: string,
+    newMessage: string,
+    athleteTz: string,
+    clientDate?: string
+  ): Promise<any[]> {
+    const { data: history } = await supabaseAdmin
+      .from('chat_messages')
+      .select('role, content, created_at')
+      .eq('conversation_id', convId)
+      .order('created_at', { ascending: true })
+      .limit(50);
+
+    const messages: any[] = [];
+    if (history && history.length > 0) {
+      const todayIso = clientDate || new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date());
+      let lastMessageDate = '';
+
+      history.forEach((msg) => {
+        const msgDate = new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date(msg.created_at));
+        if (lastMessageDate && msgDate !== lastMessageDate) {
+          const dateLabel = new Date(msgDate + 'T12:00:00').toLocaleDateString('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+          });
+          messages.push({ role: 'user', content: `[System: The date is now ${dateLabel} (${msgDate}). Previous messages above were from an earlier day. Any references to "today" in older messages are STALE — use the CURRENT DATE from the system prompt for all date reasoning.]` });
+          messages.push({ role: 'assistant', content: `Understood — the date is now ${dateLabel}. I'll use current training data from the system prompt.` });
+        }
+        lastMessageDate = msgDate;
+        messages.push({ role: msg.role, content: msg.content });
+      });
+
+      // Separator if last message was from a different day than today
+      if (lastMessageDate && lastMessageDate !== todayIso) {
+        const todayLabel = new Date(todayIso + 'T12:00:00').toLocaleDateString('en-US', {
+          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
+        });
+        messages.push({ role: 'user', content: `[System: The date is now ${todayLabel} (${todayIso}). Previous messages above were from an earlier day. Any references to "today" in older messages are STALE — use the CURRENT DATE and ride data from the system prompt for all date reasoning.]` });
+        messages.push({ role: 'assistant', content: `Understood — it's now ${todayLabel}. I'll reference today's actual training data from the system prompt.` });
+      }
+    }
+    messages.push({ role: 'user', content: newMessage });
+    return messages;
+  },
+
+  /**
    * Chat with AI coach (with tool calling support)
    */
   async chat(
@@ -1661,19 +1712,8 @@ Format it clearly so I can follow it during my ride.`;
         convId = newConv!.id;
       }
 
-      // Get conversation history (last 50 messages — keeps context for persistent conversations)
-      const { data: history } = await supabaseAdmin
-        .from('chat_messages')
-        .select('role, content')
-        .eq('conversation_id', convId)
-        .order('created_at', { ascending: true })
-        .limit(50);
-
-      const messages: any[] = [];
-      if (history) {
-        history.forEach((msg) => messages.push({ role: msg.role, content: msg.content }));
-      }
-      messages.push({ role: 'user', content: message });
+      const athleteTz = context.athlete.timezone || 'America/Los_Angeles';
+      const messages = await this.buildMessageHistory(convId, message, athleteTz, clientDate);
 
       // Cache the system prompt — cached tokens don't count toward rate limits
       // and cost 10% of normal input price after the first request in a 5-min window.
@@ -1909,19 +1949,8 @@ Format it clearly so I can follow it during my ride.`;
 
       onEvent({ type: 'start', conversation_id: convId });
 
-      // Get conversation history (last 50 messages — keeps context for persistent conversations)
-      const { data: history } = await supabaseAdmin
-        .from('chat_messages')
-        .select('role, content')
-        .eq('conversation_id', convId)
-        .order('created_at', { ascending: true })
-        .limit(50);
-
-      const messages: any[] = [];
-      if (history) {
-        history.forEach((msg) => messages.push({ role: msg.role, content: msg.content }));
-      }
-      messages.push({ role: 'user', content: message });
+      const athleteTz = context.athlete.timezone || 'America/Los_Angeles';
+      const messages = await this.buildMessageHistory(convId, message, athleteTz, clientDate);
 
       // Cache the system prompt — cached tokens don't count toward rate limits
       // and cost 10% of normal input price after the first request in a 5-min window.
