@@ -60,7 +60,12 @@ export default function RegisterScreen({ navigation }: AuthStackScreenProps<'Reg
     try {
       await authService.register(email.trim().toLowerCase(), password, fullName.trim() || undefined, timezone);
     } catch (err: any) {
-      Alert.alert('Registration Failed', err.message || 'Please try again.');
+      const message =
+        err.response?.data?.error ||
+        err.response?.data?.message ||
+        err.message ||
+        'Please try again.';
+      Alert.alert('Registration Failed', message);
     } finally {
       setLoading(false);
     }

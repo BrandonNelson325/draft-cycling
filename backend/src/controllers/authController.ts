@@ -7,7 +7,10 @@ export const register = async (req: Request, res: Response): Promise<void> => {
   try {
     const { email, password, full_name, timezone } = req.body;
 
+    logger.info(`[register] attempt for email=${email || '(missing)'} hasPassword=${!!password} fullName=${!!full_name} tz=${timezone || '(none)'}`);
+
     if (!email || !password) {
+      logger.warn(`[register] 400 missing fields email=${!!email} password=${!!password}`);
       res.status(400).json({ error: 'Email and password are required' });
       return;
     }
@@ -21,27 +24,33 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     });
 
     if (authError || !authData.user) {
+      logger.error(`[register] createUser failed email=${email} status=${(authError as any)?.status} code=${(authError as any)?.code} msg=${authError?.message}`);
       // If user already exists in auth, look them up and reuse
       if (authError?.message?.toLowerCase().includes('already') ||
           authError?.message?.toLowerCase().includes('duplicate') ||
-          authError?.message?.toLowerCase().includes('exists')) {
+          authError?.message?.toLowerCase().includes('exists') ||
+          authError?.message?.toLowerCase().includes('registered')) {
         // User exists in auth — try signing in with the provided password
         // If that works, reuse the existing user. If not, tell them to log in.
-        const { data: signIn } = await supabase.auth.signInWithPassword({ email, password });
+        const { data: signIn, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
         if (signIn?.user) {
+          logger.info(`[register] reusing existing auth user id=${signIn.user.id}`);
           authUser = signIn.user;
         } else {
+          logger.warn(`[register] existing account, wrong password email=${email} signInErr=${signInErr?.message}`);
           res.status(400).json({ error: 'An account with this email already exists. Please log in instead.' });
           return;
         }
       } else {
         const msg = authError?.message || 'Registration failed';
-        console.error('Auth createUser error:', msg);
-        res.status(400).json({ error: msg });
+        const code = (authError as any)?.code;
+        const status = (authError as any)?.status;
+        res.status(400).json({ error: msg, code, status });
         return;
       }
     } else {
       authUser = authData.user;
+      logger.info(`[register] created auth user id=${authUser.id}`);
     }
 
     // Upsert athlete row — handles both cases: trigger already created it, or it doesn't exist yet.
@@ -81,9 +90,9 @@ export const register = async (req: Request, res: Response): Promise<void> => {
     }
 
     if (athleteError) {
-      console.error('Error creating athlete profile:', athleteError.message, athleteError.details, athleteError.hint);
+      logger.error(`[register] athlete upsert failed email=${email} id=${authUser.id} code=${(athleteError as any).code} msg=${athleteError.message} details=${athleteError.details} hint=${athleteError.hint}`);
       await supabaseAdmin.auth.admin.deleteUser(authUser.id);
-      res.status(500).json({ error: 'Failed to create user profile' });
+      res.status(500).json({ error: 'Failed to create user profile', details: athleteError.message });
       return;
     }
 
