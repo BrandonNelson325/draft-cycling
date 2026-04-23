@@ -50,8 +50,9 @@ export default function RecentActivities({ onActivityPress }: RecentActivitiesPr
           const time = activity.moving_time_seconds
             ? `${Math.round(activity.moving_time_seconds / 60)}min`
             : null;
-          const date = activity.start_date
-            ? parseLocalDate(activity.start_date.slice(0, 10)).toLocaleDateString('en-US', {
+          const dateSource = activity.local_date || (activity.start_date ? activity.start_date.slice(0, 10) : '');
+          const date = dateSource
+            ? parseLocalDate(dateSource).toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
               })

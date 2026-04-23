@@ -3,6 +3,7 @@ import { CalendarEntry, ScheduleWorkoutDTO, UpdateCalendarEntryDTO } from '../ty
 import { intervalsIcuService } from './intervalsIcuService';
 import { wahooService } from './wahooService';
 import { logger } from '../utils/logger';
+import { localDayToUTCRange, utcToLocalDate } from '../utils/timezone';
 
 export const calendarService = {
   /**
@@ -335,6 +336,16 @@ export const calendarService = {
     const startStr = startDate.toISOString().split('T')[0];
     const endStr = endDate.toISOString().split('T')[0];
 
+    // Fetch athlete timezone so we can bucket activities by local day, not UTC.
+    // A ride completed 8pm PT is stored as 03:00 UTC the next day; without this
+    // translation the calendar would plot it under the wrong date.
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('timezone')
+      .eq('id', athleteId)
+      .single();
+    const tz = athlete?.timezone || 'America/Los_Angeles';
+
     // Fetch scheduled workouts
     const { data: workouts, error: workoutsError } = await supabaseAdmin
       .from('calendar_entries')
@@ -348,24 +359,31 @@ export const calendarService = {
       throw new Error(`Failed to fetch calendar entries: ${workoutsError.message}`);
     }
 
-    // Fetch Strava activities for the same date range
+    // Query activities using the UTC range that covers [startStr, endStr] LOCALLY.
+    // This catches rides that occurred late on the last local day of the range
+    // (whose UTC timestamp falls into the next calendar day).
+    const { start: rangeStartUtc } = localDayToUTCRange(startStr, tz);
+    const { end: rangeEndUtc } = localDayToUTCRange(endStr, tz);
+
     const { data: activities, error: activitiesError } = await supabaseAdmin
       .from('strava_activities')
       .select('*')
       .eq('athlete_id', athleteId)
-      .gte('start_date', startDate.toISOString())
-      .lte('start_date', endDate.toISOString())
+      .gte('start_date', rangeStartUtc)
+      .lte('start_date', rangeEndUtc)
       .order('start_date', { ascending: true });
 
     if (activitiesError) {
       throw new Error(`Failed to fetch Strava activities: ${activitiesError.message}`);
     }
 
-    // Extract calories/kilojoules from raw_data
+    // Attach local_date (YYYY-MM-DD in athlete's timezone) so clients can bucket
+    // by the correct calendar day without re-doing TZ math.
     const mappedActivities = (activities || []).map((a: any) => {
       const raw = a.raw_data || {};
       return {
         ...a,
+        local_date: a.start_date ? utcToLocalDate(a.start_date, tz) : null,
         kilojoules: raw.kilojoules || a.kilojoules || null,
         calories: raw.kilojoules ? Math.round(raw.kilojoules) : (a.kilojoules ? Math.round(a.kilojoules) : null),
       };

@@ -11,6 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { calendarService, type CalendarData, type CalendarEntry, type StravaActivity } from '../services/calendarService';
@@ -398,15 +399,15 @@ export default function CalendarScreen() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
 
-  useEffect(() => {
-    if (!user) return;
-    loadCalendar();
-  }, [year, month, user?.id]);
-
-  useEffect(() => {
-    if (!user) return;
-    trainingPlanService.getActivePlan().then(setPlan).catch(() => setPlan(null));
-  }, [user?.id]);
+  // Refetch on mount, month change, AND whenever the Calendar tab regains focus
+  // (so AI-coach mutations applied on the Chat tab show up immediately on return).
+  useFocusEffect(
+    useCallback(() => {
+      if (!user) return;
+      loadCalendar();
+      trainingPlanService.getActivePlan().then(setPlan).catch(() => setPlan(null));
+    }, [year, month, user?.id])
+  );
 
   const loadCalendar = async () => {
     setLoading(true);
@@ -444,7 +445,10 @@ export default function CalendarScreen() {
   }, {});
 
   const activitiesByDate = calData.stravaActivities.reduce<Record<string, typeof calData.stravaActivities>>((acc, a) => {
-    const d = a.start_date?.slice(0, 10);
+    // Prefer backend-computed local_date (athlete TZ). Fall back to UTC slice
+    // only if the backend is older than the TZ fix — that avoids a hard break
+    // during a rolling deploy but won't normally be hit.
+    const d = a.local_date || a.start_date?.slice(0, 10);
     if (d) acc[d] = [...(acc[d] || []), a];
     return acc;
   }, {});

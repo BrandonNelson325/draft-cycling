@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { workoutService, type Workout } from '../services/workoutService';
 import WorkoutDetailSheet from '../components/workout/WorkoutDetailSheet';
@@ -48,13 +49,14 @@ export default function WorkoutsScreen() {
   const [activePlans, setActivePlans] = useState<TrainingPlan[]>([]);
   const sheetRef = useRef<BottomSheet>(null);
 
-  useEffect(() => {
-    load();
-  }, []);
-
-  useEffect(() => {
-    trainingPlanService.getActivePlans().then(setActivePlans).catch(() => {});
-  }, []);
+  // Refetch on mount AND whenever the Plans tab regains focus so AI-coach
+  // mutations (new plans, workouts, template applications) show up immediately.
+  useFocusEffect(
+    useCallback(() => {
+      load();
+      trainingPlanService.getActivePlans().then(setActivePlans).catch(() => {});
+    }, [])
+  );
 
   const [error, setError] = useState<string | null>(null);
 

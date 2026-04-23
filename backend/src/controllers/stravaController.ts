@@ -7,6 +7,7 @@ import { ftpEstimationService } from '../services/ftpEstimationService';
 import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
+import { utcToLocalDate } from '../utils/timezone';
 
 export const getAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -208,12 +209,19 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
       return;
     }
 
-    const { data: activities, error, status: dbStatus } = await supabaseAdmin
-      .from('strava_activities')
-      .select('*')
-      .eq('athlete_id', req.user.id)
-      .order('start_date', { ascending: false })
-      .limit(50);
+    // Fetch athlete timezone to compute local_date on each activity, so clients
+    // display the calendar day the ride actually occurred on (not UTC).
+    const [{ data: athlete }, activitiesResult] = await Promise.all([
+      supabaseAdmin.from('athletes').select('timezone').eq('id', req.user.id).single(),
+      supabaseAdmin
+        .from('strava_activities')
+        .select('*')
+        .eq('athlete_id', req.user.id)
+        .order('start_date', { ascending: false })
+        .limit(50),
+    ]);
+    const tz = athlete?.timezone || 'America/Los_Angeles';
+    const { data: activities, error, status: dbStatus } = activitiesResult;
 
     if (error) {
       logger.error('Error fetching activities:', error);
@@ -235,6 +243,7 @@ export const getActivities = async (req: AuthRequest, res: Response): Promise<vo
       const raw = activity.raw_data || {};
       return {
         ...activity,
+        local_date: activity.start_date ? utcToLocalDate(activity.start_date, tz) : null,
         distance: activity.distance_meters,
         moving_time: activity.moving_time_seconds,
         kilojoules: raw.kilojoules || null,

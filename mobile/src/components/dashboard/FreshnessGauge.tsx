@@ -103,7 +103,7 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
       <View style={styles.gaugeWrapper}>
         <LinearGradient
           colors={GRADIENT_COLORS as any}
-          locations={HSL_STOPS.map(s => s.pos)}
+          locations={HSL_STOPS.map(s => s.pos) as [number, number, ...number[]]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
           style={styles.gauge}

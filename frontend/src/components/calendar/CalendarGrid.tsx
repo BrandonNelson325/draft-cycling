@@ -46,9 +46,11 @@ export function CalendarGrid({ activities, onDayClick }: CalendarGridProps) {
 
   const allDays = [...prevMonthDays, ...currentMonthDays, ...nextMonthDays];
 
-  // Group activities by date
+  // Group activities by date. Prefer backend-computed local_date (athlete TZ)
+  // over start_date, which is UTC and mis-buckets late-evening rides.
   const activitiesByDate = activities.reduce((acc, activity) => {
-    const [y, mo, d] = activity.start_date.split('T')[0].split('-').map(Number);
+    const source = (activity as any).local_date || activity.start_date.split('T')[0];
+    const [y, mo, d] = source.split('-').map(Number);
     const date = new Date(y, mo - 1, d).toDateString();
     if (!acc[date]) {
       acc[date] = [];

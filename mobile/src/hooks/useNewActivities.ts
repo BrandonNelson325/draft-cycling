@@ -1,17 +1,11 @@
 import { useState, useEffect } from 'react';
+import { AppState } from 'react-native';
 import {
   activityFeedbackService,
   type UnacknowledgedActivity,
   type ActivityFeedback,
 } from '../services/activityFeedbackService';
 import { useAuthStore } from '../stores/useAuthStore';
-import { appStorage } from '../utils/storage';
-
-// Use date-keyed check: same calendar day = already checked
-function getTodayKey(): string {
-  const now = new Date();
-  return `new_activities_checked_${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
-}
 
 export function useNewActivities() {
   const [activities, setActivities] = useState<UnacknowledgedActivity[]>([]);
@@ -20,22 +14,27 @@ export function useNewActivities() {
 
   useEffect(() => {
     if (!user) return;
-    checkAndFetch();
+    // Fetch on mount, and again every time the app returns to the foreground —
+    // this catches rides that finished while the app was backgrounded (e.g. a
+    // user completes a ride in the evening and reopens the app the same night).
+    // Previously we gated this with a once-per-calendar-day AsyncStorage flag,
+    // which suppressed the post-ride survey if the user had already opened the
+    // app earlier the same day.
+    fetchUnacknowledged();
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') fetchUnacknowledged();
+    });
+    return () => sub.remove();
   }, [user]);
-
-  const checkAndFetch = async () => {
-    const key = getTodayKey();
-    const alreadyChecked = await appStorage.getItem(key);
-    if (alreadyChecked) return;
-
-    await fetchUnacknowledged();
-  };
 
   const fetchUnacknowledged = async () => {
     try {
       const list = await activityFeedbackService.getUnacknowledged();
+      // Reset cursor — otherwise a new ride appearing after the user had
+      // already cleared their queue earlier today would stay past the cursor
+      // (e.g. list length 1, currentIndex 1) and the modal would never show.
+      setCurrentIndex(0);
       setActivities(list);
-      await appStorage.setItem(getTodayKey(), new Date().toISOString());
     } catch (error) {
       console.error('Error fetching unacknowledged activities:', error);
     }

@@ -97,7 +97,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
           {/* Activity info */}
           <View style={styles.activityCard}>
             <Text style={styles.activityName} numberOfLines={2}>{activity.name || 'Ride'}</Text>
@@ -278,6 +278,7 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
   close: { fontSize: 15, color: '#64748b' },
+  scroll: { flex: 1 },
   content: { padding: 20, paddingBottom: 20, gap: 16 },
   activityCard: {
     backgroundColor: '#1e293b',

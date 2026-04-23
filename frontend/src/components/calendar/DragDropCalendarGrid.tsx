@@ -124,9 +124,12 @@ export function DragDropCalendarGrid({
     return acc;
   }, {} as Record<string, CalendarEntry[]>);
 
-  // Group Strava activities by date
+  // Group Strava activities by date. Prefer the backend-computed local_date
+  // (in the athlete's timezone) over start_date, which is UTC and causes
+  // late-evening rides to plot on the following calendar day.
   const activitiesByDate = stravaActivities.reduce((acc, activity) => {
-    const date = parseLocalDate(activity.start_date).toDateString();
+    const dateSource = activity.local_date || activity.start_date;
+    const date = parseLocalDate(dateSource).toDateString();
     if (!acc[date]) {
       acc[date] = [];
     }

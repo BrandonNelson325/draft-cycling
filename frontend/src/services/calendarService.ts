@@ -22,6 +22,8 @@ export interface StravaActivity {
   athlete_id: string;
   name: string;
   start_date: string;
+  /** YYYY-MM-DD in the athlete's timezone. Set by the backend; use this for calendar bucketing. */
+  local_date?: string;
   distance_meters: number;
   moving_time_seconds: number;
   elapsed_time_seconds: number;
