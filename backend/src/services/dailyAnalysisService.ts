@@ -29,6 +29,20 @@ interface DailyAnalysisResult {
   suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more';
 }
 
+export interface AdjustmentSuggestion {
+  kind: 'rest' | 'easier' | 'swap' | 'none';
+  headline: string;
+  reason: string;
+  alternativeWorkout?: {
+    workoutId?: string;
+    name: string;
+    type: string;
+    duration: number;
+    tss: number;
+  };
+  generatedAt: string;
+}
+
 export interface TodaySuggestion {
   hasRiddenToday: boolean;
   suggestion: {
@@ -41,6 +55,7 @@ export interface TodaySuggestion {
     currentTSB: number;
     tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
+    adjustment: AdjustmentSuggestion | null;
   } | null;
 }
 
@@ -676,6 +691,27 @@ Format as JSON:
         }
       : null;
 
+    // Adjustments only apply pre-ride when there's a plan to override.
+    // If the AI flagged an override, suppress it when the user has already dismissed today.
+    let adjustment: AdjustmentSuggestion | null = null;
+    if (hasPlannedWorkout && !riddenToday && aiResult.adjustment && aiResult.adjustment.kind !== 'none') {
+      const { data: dismissal } = await supabaseAdmin
+        .from('adjustment_dismissals')
+        .select('id')
+        .eq('athlete_id', athleteId)
+        .eq('dismissed_date', todayStr)
+        .maybeSingle();
+
+      if (!dismissal) {
+        adjustment = {
+          kind: aiResult.adjustment.kind,
+          headline: aiResult.adjustment.headline,
+          reason: aiResult.adjustment.reason,
+          generatedAt: new Date().toISOString(),
+        };
+      }
+    }
+
     const result: TodaySuggestion = {
       hasRiddenToday: riddenToday,
       suggestion: {
@@ -704,6 +740,7 @@ Format as JSON:
         currentTSB: tsb,
         tomorrowsWorkout,
         todaysRides,
+        adjustment,
       },
     };
 
@@ -767,11 +804,21 @@ YOUR TASK:
 Give a direct, no-fluff assessment that MATCHES the training status above. If Overreaching/Overtraining, recommend rest or easier sessions. If Fresh/Balanced, the athlete can push harder. No greetings or filler.
 Base your description on the ACTUAL ride data — don't guess or assume what the week looked like.
 
+You must also decide whether the planned workout above should be ADJUSTED. Be conservative — only override the plan when the data clearly warrants it:
+- adjustment.kind = "rest" → recent load is high enough that recovery is the better call (e.g. several hard days in a row, ATL well above CTL, fatigued status)
+- adjustment.kind = "easier" → athlete can train but the planned intensity/duration is too much given current readiness
+- adjustment.kind = "none" → keep the plan as-is. This is the default. Use it when the athlete is fresh or balanced.
+
 Format as JSON:
 {
   "summary": "1 sentence: current state referencing actual training data (e.g. 'Carrying fatigue from 5 rides totaling 400 TSS this week.' or 'Well-rested after 2 easy days.')",
   "recommendation": "1 sentence: what to do (e.g. 'Proceed as planned — you're ready for it.' or 'I'd suggest skipping today's workout and resting — your body will benefit more from recovery right now.')",
-  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"
+  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more",
+  "adjustment": {
+    "kind": "rest|easier|none",
+    "headline": "short imperative if kind != none (e.g. 'Take today as a rest day' or 'Swap for a Z2 endurance ride'). Empty string if kind = none.",
+    "reason": "1 short sentence with the load/readiness data that justifies the override. Empty string if kind = none."
+  }
 }`;
     }
 
@@ -948,6 +995,7 @@ Format as JSON:
     recommendation: string;
     suggestedAction: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['suggestedAction'];
     suggestedWorkout?: { workoutId?: string; name: string; type: string; duration: number; description: string };
+    adjustment?: { kind: 'rest' | 'easier' | 'none'; headline: string; reason: string };
   }> {
     try {
       const response = await anthropic.messages.create({

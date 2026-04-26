@@ -24,6 +24,20 @@ export interface DailyAnalysis {
   suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more';
 }
 
+export interface AdjustmentSuggestion {
+  kind: 'rest' | 'easier' | 'swap' | 'none';
+  headline: string;
+  reason: string;
+  alternativeWorkout?: {
+    workoutId?: string;
+    name: string;
+    type: string;
+    duration: number;
+    tss: number;
+  };
+  generatedAt: string;
+}
+
 export interface TodaySuggestion {
   hasRiddenToday: boolean;
   suggestion: {
@@ -36,6 +50,7 @@ export interface TodaySuggestion {
     currentTSB: number;
     tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
+    adjustment: AdjustmentSuggestion | null;
   } | null;
 }
 
@@ -80,5 +95,19 @@ export const dailyAnalysisService = {
     }
 
     return data!;
+  },
+
+  async acceptAdjustment(kind: 'rest' | 'easier', reason?: string): Promise<void> {
+    const { error } = await api.post('/api/daily-analysis/adjustment/accept', { kind, reason }, true);
+    if (error) {
+      throw new Error(error.error || 'Failed to accept adjustment');
+    }
+  },
+
+  async dismissAdjustment(): Promise<void> {
+    const { error } = await api.post('/api/daily-analysis/adjustment/dismiss', {}, true);
+    if (error) {
+      throw new Error(error.error || 'Failed to dismiss adjustment');
+    }
   },
 };

@@ -29,6 +29,38 @@ export function TodaySuggestionCard() {
   const [error, setError] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [loadingWorkoutId, setLoadingWorkoutId] = useState<string | null>(null);
+  const [adjustmentBusy, setAdjustmentBusy] = useState(false);
+
+  const handleAcceptAdjustment = async () => {
+    if (!data?.suggestion?.adjustment || adjustmentBusy) return;
+    setAdjustmentBusy(true);
+    try {
+      await dailyAnalysisService.acceptAdjustment(
+        data.suggestion.adjustment.kind as 'rest' | 'easier',
+        data.suggestion.adjustment.reason
+      );
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setData(fresh);
+    } catch (err) {
+      console.error('Failed to accept adjustment:', err);
+    } finally {
+      setAdjustmentBusy(false);
+    }
+  };
+
+  const handleDismissAdjustment = async () => {
+    if (adjustmentBusy) return;
+    setAdjustmentBusy(true);
+    try {
+      await dailyAnalysisService.dismissAdjustment();
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setData(fresh);
+    } catch (err) {
+      console.error('Failed to dismiss adjustment:', err);
+    } finally {
+      setAdjustmentBusy(false);
+    }
+  };
 
   const handleWorkoutClick = async (workoutId: string | undefined) => {
     if (!workoutId || loadingWorkoutId) return;
@@ -122,14 +154,43 @@ export function TodaySuggestionCard() {
           </div>
         )}
 
-        {/* Today's planned workout (pre-ride) */}
+        {/* Coach override (pre-ride): AI thinks the plan should change */}
+        {!hasRiddenToday && suggestion.todaysWorkout && suggestion.adjustment && suggestion.adjustment.kind !== 'none' && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-1">
+              Suggested
+            </p>
+            <p className="text-sm font-medium text-gray-800">{suggestion.adjustment.headline}</p>
+            <p className="text-xs text-gray-600 mt-1">{suggestion.adjustment.reason}</p>
+            <div className="flex gap-2 mt-3">
+              {suggestion.adjustment.kind === 'rest' && (
+                <button
+                  onClick={handleAcceptAdjustment}
+                  disabled={adjustmentBusy}
+                  className="flex-1 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
+                >
+                  Take rest day
+                </button>
+              )}
+              <button
+                onClick={handleDismissAdjustment}
+                disabled={adjustmentBusy}
+                className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+              >
+                Keep planned
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Today's planned workout (pre-ride) — dimmed when there's an active override */}
         {!hasRiddenToday && suggestion.todaysWorkout && (
           <div
-            className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${suggestion.todaysWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+            className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${suggestion.todaysWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''} ${suggestion.adjustment && suggestion.adjustment.kind !== 'none' ? 'opacity-60' : ''}`}
             onClick={() => handleWorkoutClick(suggestion.todaysWorkout?.workoutId)}
           >
             <p className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-1">
-              Planned
+              {suggestion.adjustment && suggestion.adjustment.kind !== 'none' ? 'Originally Planned' : 'Planned'}
             </p>
             <p className="text-sm font-medium text-gray-800">{suggestion.todaysWorkout.name}</p>
             <p className="text-xs text-gray-500">

@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { dailyReadinessService } from '../services/dailyReadinessService';
+import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import { logger } from '../utils/logger';
 import { supabaseAdmin } from '../utils/supabase';
 import { todayInTimezone } from '../utils/timezone';
@@ -58,6 +59,8 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       feeling,
       notes,
     }, dateToUse);
+
+    clearSuggestionCache(req.user.id);
 
     // Return updated readiness after saving
     const readiness = await dailyReadinessService.getDailyReadiness(req.user.id, dateToUse);
