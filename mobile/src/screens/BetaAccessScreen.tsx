@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
@@ -15,35 +14,8 @@ import { authService } from '../services/authService';
 import { useAuthStore } from '../stores/useAuthStore';
 
 export default function BetaAccessScreen() {
-  const [promoCode, setPromoCode] = useState('');
-  const [promoLoading, setPromoLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
   const { logout } = useAuthStore();
-
-  const handleRedeemCode = async () => {
-    if (!promoCode.trim()) {
-      Alert.alert('Error', 'Please enter a promo code.');
-      return;
-    }
-
-    setPromoLoading(true);
-    try {
-      const result = await subscriptionService.redeemCode(promoCode.trim());
-      Alert.alert('Success', result.message);
-      // Refresh profile to trigger navigation — if this fails, the code was still redeemed
-      try {
-        await authService.getProfile();
-      } catch {
-        // Profile refresh failed (possibly rate limited) — retry once after a short delay
-        await new Promise(r => setTimeout(r, 1000));
-        await authService.getProfile().catch(() => {});
-      }
-    } catch (err: any) {
-      Alert.alert('Invalid Code', err.message || 'That code is not valid.');
-    } finally {
-      setPromoLoading(false);
-    }
-  };
 
   const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
     setCheckoutLoading(plan);
@@ -125,31 +97,9 @@ export default function BetaAccessScreen() {
         Tap a plan to start your 7-day free trial. You won't be charged until the trial ends.
       </Text>
 
-      {/* Promo Code */}
-      <Text style={styles.promoLabel}>Have a promo code?</Text>
-      <View style={styles.promoRow}>
-        <TextInput
-          style={styles.promoInput}
-          value={promoCode}
-          onChangeText={(t) => setPromoCode(t.toUpperCase())}
-          placeholder="Enter code"
-          placeholderTextColor="#64748b"
-          autoCapitalize="characters"
-          returnKeyType="done"
-          onSubmitEditing={handleRedeemCode}
-        />
-        <TouchableOpacity
-          style={[styles.promoBtn, (!promoCode.trim() || promoLoading) && styles.promoBtnDisabled]}
-          onPress={handleRedeemCode}
-          disabled={!promoCode.trim() || promoLoading}
-        >
-          {promoLoading ? (
-            <ActivityIndicator color="#fff" size="small" />
-          ) : (
-            <Text style={styles.promoBtnText}>Apply</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.promoHint}>
+        Have a promo code? You can enter it on the checkout page.
+      </Text>
 
       {/* Sign out */}
       <TouchableOpacity style={styles.logoutLink} onPress={logout}>
@@ -229,33 +179,13 @@ const styles = StyleSheet.create({
   planPrice: { fontSize: 22, fontWeight: '700', color: '#f1f5f9' },
   planInterval: { fontSize: 12, color: '#94a3b8' },
   planSpinner: { marginLeft: 8 },
-  promoLabel: {
-    fontSize: 14,
-    color: '#94a3b8',
-    marginTop: 20,
-    marginBottom: 8,
+  promoHint: {
+    fontSize: 12,
+    color: '#64748b',
+    textAlign: 'center',
+    marginTop: 16,
+    lineHeight: 18,
   },
-  promoRow: { flexDirection: 'row', gap: 10 },
-  promoInput: {
-    flex: 1,
-    backgroundColor: '#1e293b',
-    borderWidth: 1,
-    borderColor: '#334155',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
-    color: '#f1f5f9',
-    letterSpacing: 1,
-  },
-  promoBtn: {
-    backgroundColor: '#3b82f6',
-    borderRadius: 10,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  promoBtnDisabled: { opacity: 0.5 },
-  promoBtnText: { color: '#fff', fontWeight: '600', fontSize: 15 },
   logoutLink: { alignItems: 'center', marginTop: 32 },
   logoutText: { color: '#64748b', fontSize: 14 },
 });

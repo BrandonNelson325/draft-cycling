@@ -132,38 +132,6 @@ export const getStatus = async (req: AuthRequest, res: Response): Promise<void> 
 };
 
 /**
- * POST /api/subscription/redeem
- * Redeem a promo code (beta access, discount, trial).
- */
-export const redeemCode = async (req: AuthRequest, res: Response): Promise<void> => {
-  try {
-    if (!req.user) {
-      res.status(401).json({ error: 'Unauthorized' });
-      return;
-    }
-
-    const { code } = req.body;
-    if (!code) {
-      res.status(400).json({ error: 'Promo code is required' });
-      return;
-    }
-
-    const result = await subscriptionService.redeemPromoCode(req.user.id, code);
-
-    // Refresh the user profile so the client gets updated data
-    const { data: athlete } = await (await import('../utils/supabase')).supabaseAdmin
-      .from('athletes')
-      .select('*')
-      .eq('id', req.user.id)
-      .single();
-
-    res.json({ ...result, athlete });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message || 'Failed to redeem code' });
-  }
-};
-
-/**
  * POST /api/subscription/webhook
  * Stripe webhook handler — must use raw body.
  */

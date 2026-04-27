@@ -39,11 +39,4 @@ export const subscriptionService = {
     return data;
   },
 
-  async redeemCode(code: string) {
-    const { data } = await apiClient.post<{ type: string; message: string; athlete: any }>(
-      '/api/subscription/redeem',
-      { code }
-    );
-    return data;
-  },
 };

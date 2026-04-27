@@ -43,9 +43,4 @@ export const subscriptionService = {
     };
   },
 
-  async redeemCode(code: string) {
-    const { data, error } = await api.post('/api/subscription/redeem', { code }, true);
-    if (error) throw new Error((error as any).error || 'Invalid promo code');
-    return data as { type: string; message: string; athlete: any };
-  },
 };

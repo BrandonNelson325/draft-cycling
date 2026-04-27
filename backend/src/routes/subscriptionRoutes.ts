@@ -15,6 +15,5 @@ router.post('/webhook', subscriptionController.handleWebhook);
 router.post('/checkout', authenticateJWT, subscriptionController.createCheckout);
 router.post('/portal', authenticateJWT, subscriptionController.createPortal);
 router.get('/status', authenticateJWT, subscriptionController.getStatus);
-router.post('/redeem', authenticateJWT, subscriptionController.redeemCode);
 
 export default router;

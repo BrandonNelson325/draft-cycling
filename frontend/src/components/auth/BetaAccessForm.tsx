@@ -2,16 +2,11 @@ import { useState, useEffect } from 'react';
 import { subscriptionService } from '../../services/subscriptionService';
 import { authService } from '../../services/authService';
 import { useAuthStore } from '../../stores/useAuthStore';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 
 export function BetaAccessForm() {
-  const [promoCode, setPromoCode] = useState('');
-  const [promoError, setPromoError] = useState('');
-  const [promoSuccess, setPromoSuccess] = useState('');
-  const [promoLoading, setPromoLoading] = useState(false);
   const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
+  const [checkoutError, setCheckoutError] = useState('');
   const [waitingForWebhook, setWaitingForWebhook] = useState(false);
   const { logout } = useAuthStore();
 
@@ -37,7 +32,7 @@ export function BetaAccessForm() {
         if (attempts >= 15) {
           clearInterval(poll);
           setWaitingForWebhook(false);
-          setPromoError('Subscription is taking longer than expected. Please refresh in a moment.');
+          setCheckoutError('Subscription is taking longer than expected. Please refresh in a moment.');
         }
       }, 2000);
 
@@ -45,40 +40,14 @@ export function BetaAccessForm() {
     }
   }, []);
 
-  const handleRedeemCode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!promoCode.trim()) return;
-
-    setPromoError('');
-    setPromoSuccess('');
-    setPromoLoading(true);
-
-    try {
-      const result = await subscriptionService.redeemCode(promoCode.trim());
-      setPromoSuccess(result.message);
-
-      // Refresh user profile
-      await authService.getProfile();
-
-      // If it was a beta/access code, page will re-render automatically
-      // If it was a discount code, user still needs to subscribe
-      if (result.type === 'beta_access') {
-        setTimeout(() => window.location.reload(), 1000);
-      }
-    } catch (err: any) {
-      setPromoError(err.message || 'Invalid code');
-    } finally {
-      setPromoLoading(false);
-    }
-  };
-
   const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
     setCheckoutLoading(plan);
+    setCheckoutError('');
     try {
       const url = await subscriptionService.createCheckout(plan);
       window.location.href = url;
     } catch (err: any) {
-      setPromoError(err.message || 'Failed to start checkout');
+      setCheckoutError(err.message || 'Failed to start checkout');
       setCheckoutLoading(null);
     }
   };
@@ -155,35 +124,13 @@ export function BetaAccessForm() {
         </CardContent>
       </Card>
 
-      {/* Promo Code */}
-      <Card>
-        <CardContent className="pt-5">
-          <form onSubmit={handleRedeemCode} className="space-y-3">
-            <p className="text-sm font-medium text-muted-foreground">Have a promo code?</p>
+      {checkoutError && (
+        <div className="p-2 text-sm text-red-600 bg-red-50 rounded-md">{checkoutError}</div>
+      )}
 
-            {promoError && (
-              <div className="p-2 text-sm text-red-600 bg-red-50 rounded-md">{promoError}</div>
-            )}
-            {promoSuccess && (
-              <div className="p-2 text-sm text-green-600 bg-green-50 rounded-md">{promoSuccess}</div>
-            )}
-
-            <div className="flex gap-2">
-              <Input
-                type="text"
-                placeholder="Enter code"
-                value={promoCode}
-                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
-                disabled={promoLoading}
-                className="font-mono flex-1"
-              />
-              <Button type="submit" variant="outline" disabled={promoLoading || !promoCode.trim()}>
-                {promoLoading ? '...' : 'Apply'}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+      <p className="text-xs text-muted-foreground text-center">
+        Have a promo code? You can enter it on the checkout page.
+      </p>
 
       {/* Sign out */}
       <div className="text-center">
