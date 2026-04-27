@@ -39,7 +39,6 @@ export const subscriptionService = {
     athleteId: string,
     email: string,
     plan: 'monthly' | 'yearly',
-    promoCode?: string,
     mobile?: boolean
   ): Promise<string> {
     const customerId = await this.getOrCreateCustomer(athleteId, email);
@@ -64,29 +63,13 @@ export const subscriptionService = {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url: successUrl,
       cancel_url: cancelUrl,
+      allow_promotion_codes: true,
       metadata: { athlete_id: athleteId },
       subscription_data: {
         metadata: { athlete_id: athleteId },
         trial_period_days: 7,
       },
     };
-
-    // If there's a promo/discount code, look up the Stripe coupon
-    if (promoCode) {
-      const { data: promo } = await supabaseAdmin
-        .from('promo_codes')
-        .select('stripe_coupon_id, type, trial_days')
-        .eq('code', promoCode.toUpperCase())
-        .eq('is_active', true)
-        .single();
-
-      if (promo?.stripe_coupon_id) {
-        sessionParams.discounts = [{ coupon: promo.stripe_coupon_id }];
-      }
-      if (promo?.trial_days) {
-        sessionParams.subscription_data!.trial_period_days = promo.trial_days;
-      }
-    }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
     return session.url!;

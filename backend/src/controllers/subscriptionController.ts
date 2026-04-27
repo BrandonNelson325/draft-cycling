@@ -44,7 +44,7 @@ export const createCheckout = async (req: AuthRequest, res: Response): Promise<v
       return;
     }
 
-    const { plan, promo_code, mobile } = req.body;
+    const { plan, mobile } = req.body;
 
     if (!plan || !['monthly', 'yearly'].includes(plan)) {
       res.status(400).json({ error: 'Invalid plan. Must be "monthly" or "yearly".' });
@@ -55,7 +55,6 @@ export const createCheckout = async (req: AuthRequest, res: Response): Promise<v
       req.user.id,
       req.user.email,
       plan,
-      promo_code,
       !!mobile
     );
 
