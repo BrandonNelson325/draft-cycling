@@ -51,6 +51,7 @@ export interface TodaySuggestion {
     tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
     adjustment: AdjustmentSuggestion | null;
+    isRestDay: boolean;
   } | null;
 }
 

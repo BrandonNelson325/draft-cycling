@@ -51,6 +51,7 @@ export interface TodaySuggestion {
     tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
     adjustment: AdjustmentSuggestion | null;
+    isRestDay: boolean;
   } | null;
 }
 
@@ -82,5 +83,13 @@ export const dailyAnalysisService = {
   async getTodaySuggestion(): Promise<TodaySuggestion> {
     const { data } = await apiClient.get<TodaySuggestion>('/api/daily-analysis/suggestion');
     return data;
+  },
+
+  async acceptAdjustment(kind: 'rest' | 'easier', reason?: string): Promise<void> {
+    await apiClient.post('/api/daily-analysis/adjustment/accept', { kind, reason });
+  },
+
+  async dismissAdjustment(): Promise<void> {
+    await apiClient.post('/api/daily-analysis/adjustment/dismiss', {});
   },
 };

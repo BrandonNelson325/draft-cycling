@@ -31,6 +31,7 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
   const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [data, setData] = useState<TodaySuggestion | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [adjustmentBusy, setAdjustmentBusy] = useState(false);
 
   useEffect(() => {
     dailyAnalysisService
@@ -41,6 +42,37 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
       })
       .catch(() => setLoaded(true));
   }, []);
+
+  const handleAcceptAdjustment = async () => {
+    if (!data?.suggestion?.adjustment || adjustmentBusy) return;
+    setAdjustmentBusy(true);
+    try {
+      await dailyAnalysisService.acceptAdjustment(
+        data.suggestion.adjustment.kind as 'rest' | 'easier',
+        data.suggestion.adjustment.reason
+      );
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setData(fresh);
+    } catch (err) {
+      console.error('Failed to accept adjustment:', err);
+    } finally {
+      setAdjustmentBusy(false);
+    }
+  };
+
+  const handleDismissAdjustment = async () => {
+    if (adjustmentBusy) return;
+    setAdjustmentBusy(true);
+    try {
+      await dailyAnalysisService.dismissAdjustment();
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setData(fresh);
+    } catch (err) {
+      console.error('Failed to dismiss adjustment:', err);
+    } finally {
+      setAdjustmentBusy(false);
+    }
+  };
 
   if (!loaded || !data?.suggestion) return null;
 
@@ -80,7 +112,7 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
       </View>
 
       <Text style={styles.title}>
-        {hasRiddenToday ? "Today's Recap" : "Today's Plan"}
+        {hasRiddenToday ? "Today's Recap" : suggestion.isRestDay ? "Rest Day" : "Today's Plan"}
       </Text>
       <Text style={styles.summary}>{suggestion.summary}</Text>
 
@@ -99,15 +131,46 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
         </View>
       )}
 
-      {/* Today's planned workout (pre-ride) */}
+      {/* Coach override (pre-ride): AI thinks the plan should change */}
+      {!hasRiddenToday && suggestion.todaysWorkout && suggestion.adjustment && suggestion.adjustment.kind !== 'none' && (
+        <View style={[styles.workoutBox, styles.adjustmentBox]}>
+          <Text style={[styles.workoutLabel, styles.adjustmentLabel]}>Suggested</Text>
+          <Text style={styles.workoutName}>{suggestion.adjustment.headline}</Text>
+          <Text style={styles.workoutDesc}>{suggestion.adjustment.reason}</Text>
+          <View style={styles.adjustmentButtons}>
+            {suggestion.adjustment.kind === 'rest' && (
+              <TouchableOpacity
+                style={[styles.adjustmentButton, styles.adjustmentAccept, adjustmentBusy && styles.adjustmentDisabled]}
+                onPress={handleAcceptAdjustment}
+                disabled={adjustmentBusy}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.adjustmentAcceptText}>Take rest day</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              style={[styles.adjustmentButton, styles.adjustmentDismiss, adjustmentBusy && styles.adjustmentDisabled]}
+              onPress={handleDismissAdjustment}
+              disabled={adjustmentBusy}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.adjustmentDismissText}>Keep planned</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Today's planned workout (pre-ride) — dimmed when there's an active override */}
       {!hasRiddenToday && suggestion.todaysWorkout && (
         <TouchableOpacity
           activeOpacity={suggestion.todaysWorkout.workoutId ? 0.7 : 1}
           onPress={() => suggestion.todaysWorkout?.workoutId && onWorkoutPress?.(suggestion.todaysWorkout.workoutId)}
           disabled={!suggestion.todaysWorkout.workoutId}
         >
-          <View style={styles.workoutBox}>
-            <Text style={styles.workoutLabel}>Planned</Text>
+          <View style={[styles.workoutBox, suggestion.adjustment && suggestion.adjustment.kind !== 'none' && styles.dimmedBox]}>
+            <Text style={styles.workoutLabel}>
+              {suggestion.adjustment && suggestion.adjustment.kind !== 'none' ? 'Originally Planned' : 'Planned'}
+            </Text>
             <Text style={styles.workoutName}>{suggestion.todaysWorkout.name}</Text>
             <Text style={styles.workoutMeta}>
               {suggestion.todaysWorkout.duration} min · {suggestion.todaysWorkout.type} · {suggestion.todaysWorkout.tss} TSS
@@ -116,8 +179,17 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
         </TouchableOpacity>
       )}
 
-      {/* Suggested workout (pre-ride, no plan) */}
-      {!hasRiddenToday && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
+      {/* Rest day (pre-ride) */}
+      {!hasRiddenToday && suggestion.isRestDay && (
+        <View style={[styles.workoutBox, styles.completedBox]}>
+          <Text style={[styles.workoutLabel, styles.completedLabel]}>Today</Text>
+          <Text style={styles.workoutName}>Rest day</Text>
+          <Text style={styles.workoutDesc}>Recovery is part of the plan.</Text>
+        </View>
+      )}
+
+      {/* Suggested workout (pre-ride, no plan, not a rest day) */}
+      {!hasRiddenToday && !suggestion.isRestDay && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
         <TouchableOpacity
           activeOpacity={suggestion.suggestedWorkout.workoutId ? 0.7 : 1}
           onPress={() => suggestion.suggestedWorkout?.workoutId && onWorkoutPress?.(suggestion.suggestedWorkout.workoutId)}
@@ -134,8 +206,8 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
         </TouchableOpacity>
       )}
 
-      {/* Tomorrow's workout preview (post-ride) */}
-      {hasRiddenToday && suggestion.tomorrowsWorkout && (
+      {/* Tomorrow's workout preview (after a ride or on rest days) */}
+      {(hasRiddenToday || suggestion.isRestDay) && suggestion.tomorrowsWorkout && (
         <TouchableOpacity
           activeOpacity={suggestion.tomorrowsWorkout.workoutId ? 0.7 : 1}
           onPress={() => suggestion.tomorrowsWorkout?.workoutId && onWorkoutPress?.(suggestion.tomorrowsWorkout.workoutId)}
@@ -223,6 +295,48 @@ const styles = StyleSheet.create({
   },
   tomorrowLabel: {
     color: '#60a5fa',
+  },
+  adjustmentBox: {
+    borderLeftColor: '#fbbf24',
+    backgroundColor: '#1f1810',
+  },
+  adjustmentLabel: {
+    color: '#fbbf24',
+  },
+  adjustmentButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  adjustmentButton: {
+    flex: 1,
+    borderRadius: 6,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  adjustmentAccept: {
+    backgroundColor: '#d97706',
+  },
+  adjustmentAcceptText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adjustmentDismiss: {
+    borderWidth: 1,
+    borderColor: '#475569',
+    backgroundColor: 'transparent',
+  },
+  adjustmentDismissText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adjustmentDisabled: {
+    opacity: 0.5,
+  },
+  dimmedBox: {
+    opacity: 0.6,
   },
   rideRow: {
     flexDirection: 'row',

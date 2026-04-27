@@ -28,6 +28,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [adjustmentBusy, setAdjustmentBusy] = useState(false);
 
   useEffect(() => {
     let failed = 0;
@@ -41,6 +42,37 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
       setLoading(false);
     });
   }, []);
+
+  const handleAcceptAdjustment = async () => {
+    if (!suggestion?.suggestion?.adjustment || adjustmentBusy) return;
+    setAdjustmentBusy(true);
+    try {
+      await dailyAnalysisService.acceptAdjustment(
+        suggestion.suggestion.adjustment.kind as 'rest' | 'easier',
+        suggestion.suggestion.adjustment.reason
+      );
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setSuggestion(fresh);
+    } catch (err) {
+      console.error('Failed to accept adjustment:', err);
+    } finally {
+      setAdjustmentBusy(false);
+    }
+  };
+
+  const handleDismissAdjustment = async () => {
+    if (adjustmentBusy) return;
+    setAdjustmentBusy(true);
+    try {
+      await dailyAnalysisService.dismissAdjustment();
+      const fresh = await dailyAnalysisService.getTodaySuggestion();
+      setSuggestion(fresh);
+    } catch (err) {
+      console.error('Failed to dismiss adjustment:', err);
+    } finally {
+      setAdjustmentBusy(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -108,15 +140,46 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
             </View>
           )}
 
-          {/* Today's planned workout (pre-ride) */}
+          {/* Coach override (pre-ride): AI thinks the plan should change */}
+          {!hasRidden && s.todaysWorkout && s.adjustment && s.adjustment.kind !== 'none' && (
+            <View style={[styles.workoutBox, styles.adjustmentBox]}>
+              <Text style={[styles.workoutLabel, styles.adjustmentLabel]}>Suggested</Text>
+              <Text style={styles.workoutName}>{s.adjustment.headline}</Text>
+              <Text style={styles.workoutMeta}>{s.adjustment.reason}</Text>
+              <View style={styles.adjustmentButtons}>
+                {s.adjustment.kind === 'rest' && (
+                  <TouchableOpacity
+                    style={[styles.adjustmentButton, styles.adjustmentAccept, adjustmentBusy && styles.adjustmentDisabled]}
+                    onPress={handleAcceptAdjustment}
+                    disabled={adjustmentBusy}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.adjustmentAcceptText}>Take rest day</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={[styles.adjustmentButton, styles.adjustmentDismiss, adjustmentBusy && styles.adjustmentDisabled]}
+                  onPress={handleDismissAdjustment}
+                  disabled={adjustmentBusy}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.adjustmentDismissText}>Keep planned</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Today's planned workout (pre-ride) — dimmed when there's an active override */}
           {!hasRidden && s.todaysWorkout && (
             <TouchableOpacity
               activeOpacity={s.todaysWorkout.workoutId ? 0.7 : 1}
               onPress={() => s.todaysWorkout?.workoutId && onWorkoutPress?.(s.todaysWorkout.workoutId)}
               disabled={!s.todaysWorkout.workoutId}
             >
-              <View style={styles.workoutBox}>
-                <Text style={styles.workoutLabel}>Planned</Text>
+              <View style={[styles.workoutBox, s.adjustment && s.adjustment.kind !== 'none' && styles.dimmedBox]}>
+                <Text style={styles.workoutLabel}>
+                  {s.adjustment && s.adjustment.kind !== 'none' ? 'Originally Planned' : 'Planned'}
+                </Text>
                 <Text style={styles.workoutName}>{s.todaysWorkout.name}</Text>
                 <Text style={styles.workoutMeta}>
                   {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · Load {s.todaysWorkout.tss}
@@ -125,8 +188,17 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
             </TouchableOpacity>
           )}
 
-          {/* Suggested workout or rest day (pre-ride, no plan) */}
-          {!hasRidden && s.suggestedWorkout && !s.todaysWorkout && (
+          {/* Rest day (pre-ride): explicit rest, no workout planned */}
+          {!hasRidden && s.isRestDay && (
+            <View style={[styles.workoutBox, styles.restBox]}>
+              <Text style={[styles.workoutLabel, styles.restLabel]}>Today</Text>
+              <Text style={styles.workoutName}>Rest day</Text>
+              <Text style={styles.workoutMeta}>Recovery is part of the plan.</Text>
+            </View>
+          )}
+
+          {/* Suggested workout or rest day (pre-ride, no plan, not a rest day) */}
+          {!hasRidden && !s.isRestDay && s.suggestedWorkout && !s.todaysWorkout && (
             <TouchableOpacity
               activeOpacity={s.suggestedWorkout.workoutId ? 0.7 : 1}
               onPress={() => s.suggestedWorkout?.workoutId && onWorkoutPress?.(s.suggestedWorkout.workoutId)}
@@ -146,8 +218,8 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
             </TouchableOpacity>
           )}
 
-          {/* Tomorrow's scheduled workout (post-ride) */}
-          {hasRidden && s.tomorrowsWorkout && (
+          {/* Tomorrow's scheduled workout (after a ride or on rest days) */}
+          {(hasRidden || s.isRestDay) && s.tomorrowsWorkout && (
             <TouchableOpacity
               activeOpacity={s.tomorrowsWorkout.workoutId ? 0.7 : 1}
               onPress={() => s.tomorrowsWorkout?.workoutId && onWorkoutPress?.(s.tomorrowsWorkout.workoutId)}
@@ -278,6 +350,48 @@ const styles = StyleSheet.create({
   },
   restLabel: {
     color: '#22c55e',
+  },
+  adjustmentBox: {
+    borderLeftColor: '#fbbf24',
+    backgroundColor: '#1f1810',
+  },
+  adjustmentLabel: {
+    color: '#fbbf24',
+  },
+  adjustmentButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+  },
+  adjustmentButton: {
+    flex: 1,
+    borderRadius: 6,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  adjustmentAccept: {
+    backgroundColor: '#d97706',
+  },
+  adjustmentAcceptText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adjustmentDismiss: {
+    borderWidth: 1,
+    borderColor: '#475569',
+    backgroundColor: 'transparent',
+  },
+  adjustmentDismissText: {
+    color: '#cbd5e1',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  adjustmentDisabled: {
+    opacity: 0.5,
+  },
+  dimmedBox: {
+    opacity: 0.6,
   },
   rideRow: {
     flexDirection: 'row',

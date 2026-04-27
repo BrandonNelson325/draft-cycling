@@ -122,7 +122,7 @@ export function TodaySuggestionCard() {
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">
-            {hasRiddenToday ? "Today's Recap" : "Today's Plan"}
+            {hasRiddenToday ? "Today's Recap" : suggestion.isRestDay ? "Rest Day" : "Today's Plan"}
           </CardTitle>
           <div className="flex items-center gap-2">
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${statusInfo.bg} ${statusInfo.text}`}>
@@ -199,8 +199,19 @@ export function TodaySuggestionCard() {
           </div>
         )}
 
-        {/* Suggested workout (pre-ride, no plan) */}
-        {!hasRiddenToday && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
+        {/* Rest day (pre-ride): explicit rest, no workout planned */}
+        {!hasRiddenToday && suggestion.isRestDay && (
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-1">
+              Today
+            </p>
+            <p className="text-sm font-medium text-gray-800">Rest day</p>
+            <p className="text-xs text-gray-500 mt-1">Recovery is part of the plan.</p>
+          </div>
+        )}
+
+        {/* Suggested workout (pre-ride, no plan, not a rest day) */}
+        {!hasRiddenToday && !suggestion.isRestDay && suggestion.suggestedWorkout && !suggestion.todaysWorkout && (
           <div
             className={`rounded-lg border border-purple-200 bg-purple-50 p-3 ${suggestion.suggestedWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
             onClick={() => handleWorkoutClick(suggestion.suggestedWorkout?.workoutId)}
@@ -216,8 +227,8 @@ export function TodaySuggestionCard() {
           </div>
         )}
 
-        {/* Tomorrow's workout preview */}
-        {hasRiddenToday && suggestion.tomorrowsWorkout && (
+        {/* Tomorrow's workout preview (shown after a ride or on rest days) */}
+        {(hasRiddenToday || suggestion.isRestDay) && suggestion.tomorrowsWorkout && (
           <div
             className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${suggestion.tomorrowsWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
             onClick={() => handleWorkoutClick(suggestion.tomorrowsWorkout?.workoutId)}
