@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { AppState } from 'react-native';
 import { dailyAnalysisService, type DailyAnalysis } from '../services/dailyAnalysisService';
 import { dailyCheckInService, type DailyReadiness } from '../services/dailyCheckInService';
 import { useAuthStore } from '../stores/useAuthStore';
@@ -19,6 +20,13 @@ export function useDailyMorning() {
       return;
     }
     checkAndLoad();
+    // Re-check when app returns to the foreground — catches the case where the
+    // user backgrounds the app overnight and reopens it the next day, which
+    // wouldn't trigger a user-prop change to re-run this effect.
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkAndLoad();
+    });
+    return () => sub.remove();
   }, [user]);
 
   const hasShownTodayLocally = async (): Promise<boolean> => {

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   View,
@@ -58,6 +58,7 @@ export default function DailyMorningModal({
   const [feeling, setFeeling] = useState<Feeling | null>(null);
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const reset = () => {
     setStep(1);
@@ -124,7 +125,11 @@ export default function DailyMorningModal({
           </TouchableOpacity>
         </View>
 
-        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="always"
+        >
           {step === 1 ? (
             <>
               <Text style={styles.question}>How did you sleep?</Text>
@@ -164,6 +169,11 @@ export default function DailyMorningModal({
                 placeholderTextColor="#475569"
                 multiline
                 numberOfLines={3}
+                onFocus={() => {
+                  // Scroll the notes field (and the Check In button below it)
+                  // into view above the keyboard.
+                  setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 250);
+                }}
               />
 
               <TouchableOpacity

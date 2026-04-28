@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Modal,
   View,
@@ -47,6 +47,7 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
   const [wasPlanned, setWasPlanned] = useState<boolean | null>(null);
   const [showAdaptPrompt, setShowAdaptPrompt] = useState(false);
   const [saving, setSaving] = useState(false);
+  const scrollViewRef = useRef<ScrollView>(null);
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
 
@@ -97,7 +98,12 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scroll}
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="always"
+        >
           {/* Activity info */}
           <View style={styles.activityCard}>
             <Text style={styles.activityName} numberOfLines={2}>{activity.name || 'Ride'}</Text>
@@ -234,6 +240,11 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
                 placeholderTextColor="#475569"
                 multiline
                 numberOfLines={3}
+                onFocus={() => {
+                  // Scroll the notes field into view above the keyboard.
+                  // Delay lets the keyboard animation start before we scroll.
+                  setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 250);
+                }}
               />
           </>
         </ScrollView>
