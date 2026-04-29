@@ -240,17 +240,18 @@ export const dailyReadinessService = {
   async saveDailyCheckIn(
     athleteId: string,
     data: {
-      sleepQuality: 'poor' | 'good' | 'great';
-      feeling: 'tired' | 'normal' | 'energized';
+      sleepQuality: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
+      feeling: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
       notes?: string;
     },
     localDate?: string
   ): Promise<void> {
     const today = localDate || todayInTimezone(await getAthleteTz(athleteId));
 
-    // Convert quality to scores
-    const sleepScoreMap = { poor: 3, good: 7, great: 10 };
-    const feelingScoreMap = { tired: 3, normal: 7, energized: 10 };
+    // Convert quality to scores (1=worst, 10=best). Existing values keep their
+    // historical scores; new values fill in below/middle.
+    const sleepScoreMap = { terrible: 1, poor: 3, okay: 5, good: 7, great: 10 };
+    const feelingScoreMap = { exhausted: 1, tired: 3, normal: 5, good: 7, energized: 10 };
 
     const sleep_score = sleepScoreMap[data.sleepQuality];
     const feeling_score = feelingScoreMap[data.feeling];

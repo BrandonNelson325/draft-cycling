@@ -24,18 +24,22 @@ interface DailyMorningModalProps {
   onChatNavigate?: (message: string) => void;
 }
 
-type SleepQuality = 'poor' | 'good' | 'great';
-type Feeling = 'tired' | 'normal' | 'energized';
+type SleepQuality = 'terrible' | 'poor' | 'okay' | 'good' | 'great';
+type Feeling = 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
 
 const SLEEP_OPTIONS: { value: SleepQuality; emoji: string; label: string }[] = [
+  { value: 'terrible', emoji: '😩', label: 'Terrible' },
   { value: 'poor', emoji: '😴', label: 'Poor' },
+  { value: 'okay', emoji: '😐', label: 'Okay' },
   { value: 'good', emoji: '😊', label: 'Good' },
   { value: 'great', emoji: '🌟', label: 'Great' },
 ];
 
 const FEELING_OPTIONS: { value: Feeling; emoji: string; label: string }[] = [
+  { value: 'exhausted', emoji: '😩', label: 'Exhausted' },
   { value: 'tired', emoji: '😓', label: 'Tired' },
   { value: 'normal', emoji: '🙂', label: 'Normal' },
+  { value: 'good', emoji: '😄', label: 'Good' },
   { value: 'energized', emoji: '⚡', label: 'Energized' },
 ];
 
@@ -227,8 +231,8 @@ export default function DailyMorningModal({
                 <Text style={styles.btnText}>Discuss with AI Coach</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={styles.skipBtn} onPress={handleDismiss}>
-                <Text style={styles.skipText}>Dismiss</Text>
+              <TouchableOpacity style={styles.continueBtn} onPress={handleDismiss}>
+                <Text style={styles.continueBtnText}>Continue</Text>
               </TouchableOpacity>
             </>
           )}
@@ -268,16 +272,17 @@ const styles = StyleSheet.create({
   },
   optionsRow: {
     flexDirection: 'row',
-    gap: 10,
+    gap: 6,
     marginBottom: 8,
   },
   option: {
     flex: 1,
     backgroundColor: '#1e293b',
     borderRadius: 10,
-    paddingVertical: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 2,
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     borderWidth: 2,
     borderColor: 'transparent',
   },
@@ -285,8 +290,8 @@ const styles = StyleSheet.create({
     borderColor: '#3b82f6',
     backgroundColor: '#1e3a5f',
   },
-  optionEmoji: { fontSize: 24 },
-  optionLabel: { fontSize: 12, color: '#94a3b8', fontWeight: '500' },
+  optionEmoji: { fontSize: 22 },
+  optionLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '500', textAlign: 'center' },
   textArea: {
     backgroundColor: '#1e293b',
     borderRadius: 10,
@@ -307,8 +312,16 @@ const styles = StyleSheet.create({
   },
   btnDisabled: { opacity: 0.5 },
   btnText: { color: '#fff', fontWeight: '600', fontSize: 16 },
-  skipBtn: { alignItems: 'center', marginTop: 8, padding: 10 },
-  skipText: { color: '#64748b', fontSize: 14 },
+  continueBtn: {
+    backgroundColor: 'transparent',
+    borderRadius: 10,
+    padding: 14,
+    alignItems: 'center',
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  continueBtnText: { color: '#cbd5e1', fontWeight: '600', fontSize: 15 },
   workoutCard: {
     backgroundColor: '#1e3a5f',
     borderRadius: 10,

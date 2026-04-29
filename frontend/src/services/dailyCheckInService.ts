@@ -29,8 +29,8 @@ export interface DailyReadiness {
 }
 
 export interface DailyCheckInData {
-  sleepQuality: 'poor' | 'good' | 'great';
-  feeling: 'tired' | 'normal' | 'energized';
+  sleepQuality: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
+  feeling: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
   notes?: string;
 }
 

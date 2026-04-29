@@ -44,12 +44,12 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    if (!['poor', 'good', 'great'].includes(sleepQuality)) {
+    if (!['terrible', 'poor', 'okay', 'good', 'great'].includes(sleepQuality)) {
       res.status(400).json({ error: 'Invalid sleep quality' });
       return;
     }
 
-    if (!['tired', 'normal', 'energized'].includes(feeling)) {
+    if (!['exhausted', 'tired', 'normal', 'good', 'energized'].includes(feeling)) {
       res.status(400).json({ error: 'Invalid feeling' });
       return;
     }

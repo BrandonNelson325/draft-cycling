@@ -13,8 +13,8 @@ interface DailyMorningModalProps {
   displayMode?: 'simple' | 'advanced'; // deprecated — always renders full details
 }
 
-type SleepQuality = 'poor' | 'good' | 'great';
-type Feeling = 'tired' | 'normal' | 'energized';
+type SleepQuality = 'terrible' | 'poor' | 'okay' | 'good' | 'great';
+type Feeling = 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
 
 export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorningModalProps) {
   const navigate = useNavigate();
@@ -159,21 +159,23 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
               {/* Sleep Quality */}
               <div>
                 <label className="block font-semibold text-gray-800 mb-2">😴 How did you sleep?</label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-5 gap-2">
                   {([
+                    { value: 'terrible', emoji: '😩', label: 'Terrible', active: 'border-red-600 bg-red-50 text-red-700' },
                     { value: 'poor', emoji: '😴', label: 'Poor', active: 'border-red-500 bg-red-50 text-red-700' },
+                    { value: 'okay', emoji: '😐', label: 'Okay', active: 'border-amber-500 bg-amber-50 text-amber-700' },
                     { value: 'good', emoji: '😊', label: 'Good', active: 'border-blue-500 bg-blue-50 text-blue-700' },
-                    { value: 'great', emoji: '😄', label: 'Great', active: 'border-green-500 bg-green-50 text-green-700' },
+                    { value: 'great', emoji: '🌟', label: 'Great', active: 'border-green-500 bg-green-50 text-green-700' },
                   ] as const).map(({ value, emoji, label, active }) => (
                     <button
                       key={value}
                       onClick={() => setSleepQuality(value)}
-                      className={`py-3 px-4 rounded-xl border-2 transition-all ${
+                      className={`py-2 px-1 rounded-xl border-2 transition-all ${
                         sleepQuality === value ? active : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <div className="text-2xl mb-1">{emoji}</div>
-                      <div className="font-medium">{label}</div>
+                      <div className="text-xl mb-1">{emoji}</div>
+                      <div className="text-xs font-medium">{label}</div>
                     </button>
                   ))}
                 </div>
@@ -182,21 +184,23 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
               {/* Feeling */}
               <div>
                 <label className="block font-semibold text-gray-800 mb-2">💪 How are you feeling?</label>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-5 gap-2">
                   {([
-                    { value: 'tired', emoji: '😩', label: 'Tired', active: 'border-orange-500 bg-orange-50 text-orange-700' },
-                    { value: 'normal', emoji: '😐', label: 'Normal', active: 'border-blue-500 bg-blue-50 text-blue-700' },
+                    { value: 'exhausted', emoji: '😩', label: 'Exhausted', active: 'border-red-600 bg-red-50 text-red-700' },
+                    { value: 'tired', emoji: '😓', label: 'Tired', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                    { value: 'normal', emoji: '🙂', label: 'Normal', active: 'border-blue-500 bg-blue-50 text-blue-700' },
+                    { value: 'good', emoji: '😄', label: 'Good', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
                     { value: 'energized', emoji: '⚡', label: 'Energized', active: 'border-green-500 bg-green-50 text-green-700' },
                   ] as const).map(({ value, emoji, label, active }) => (
                     <button
                       key={value}
                       onClick={() => setFeeling(value)}
-                      className={`py-3 px-4 rounded-xl border-2 transition-all ${
+                      className={`py-2 px-1 rounded-xl border-2 transition-all ${
                         feeling === value ? active : 'border-gray-200 hover:border-gray-300'
                       }`}
                     >
-                      <div className="text-2xl mb-1">{emoji}</div>
-                      <div className="font-medium">{label}</div>
+                      <div className="text-xl mb-1">{emoji}</div>
+                      <div className="text-xs font-medium">{label}</div>
                     </button>
                   ))}
                 </div>

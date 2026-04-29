@@ -11,8 +11,8 @@ interface DailyCheckInModalProps {
 
 export function DailyCheckInModal({ readiness, onClose }: DailyCheckInModalProps) {
   const navigate = useNavigate();
-  const [sleepQuality, setSleepQuality] = useState<'poor' | 'good' | 'great' | null>(null);
-  const [feeling, setFeeling] = useState<'tired' | 'normal' | 'energized' | null>(null);
+  const [sleepQuality, setSleepQuality] = useState<'terrible' | 'poor' | 'okay' | 'good' | 'great' | null>(null);
+  const [feeling, setFeeling] = useState<'exhausted' | 'tired' | 'normal' | 'good' | 'energized' | null>(null);
   const [saving, setSaving] = useState(false);
 
   const handleTalkToCoach = async () => {
@@ -180,40 +180,25 @@ export function DailyCheckInModal({ readiness, onClose }: DailyCheckInModalProps
               <label className="block font-semibold text-gray-800 mb-2">
                 😴 How did you sleep?
               </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => setSleepQuality('poor')}
-                  className={`py-3 px-4 rounded-lg border-2 transition-all ${
-                    sleepQuality === 'poor'
-                      ? 'border-red-500 bg-red-50 text-red-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">😴</div>
-                  <div className="font-medium">Poor</div>
-                </button>
-                <button
-                  onClick={() => setSleepQuality('good')}
-                  className={`py-3 px-4 rounded-lg border-2 transition-all ${
-                    sleepQuality === 'good'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">😊</div>
-                  <div className="font-medium">Good</div>
-                </button>
-                <button
-                  onClick={() => setSleepQuality('great')}
-                  className={`py-3 px-4 rounded-lg border-2 transition-all ${
-                    sleepQuality === 'great'
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">😄</div>
-                  <div className="font-medium">Great</div>
-                </button>
+              <div className="grid grid-cols-5 gap-2">
+                {([
+                  { value: 'terrible', emoji: '😩', label: 'Terrible', active: 'border-red-600 bg-red-50 text-red-700' },
+                  { value: 'poor', emoji: '😴', label: 'Poor', active: 'border-red-500 bg-red-50 text-red-700' },
+                  { value: 'okay', emoji: '😐', label: 'Okay', active: 'border-amber-500 bg-amber-50 text-amber-700' },
+                  { value: 'good', emoji: '😊', label: 'Good', active: 'border-blue-500 bg-blue-50 text-blue-700' },
+                  { value: 'great', emoji: '🌟', label: 'Great', active: 'border-green-500 bg-green-50 text-green-700' },
+                ] as const).map(({ value, emoji, label, active }) => (
+                  <button
+                    key={value}
+                    onClick={() => setSleepQuality(value)}
+                    className={`py-2 px-1 rounded-lg border-2 transition-all ${
+                      sleepQuality === value ? active : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-xl mb-1">{emoji}</div>
+                    <div className="text-xs font-medium">{label}</div>
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -222,40 +207,25 @@ export function DailyCheckInModal({ readiness, onClose }: DailyCheckInModalProps
               <label className="block font-semibold text-gray-800 mb-2">
                 💪 How are you feeling?
               </label>
-              <div className="grid grid-cols-3 gap-3">
-                <button
-                  onClick={() => setFeeling('tired')}
-                  className={`py-3 px-4 rounded-lg border-2 transition-all ${
-                    feeling === 'tired'
-                      ? 'border-orange-500 bg-orange-50 text-orange-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">😩</div>
-                  <div className="font-medium">Tired</div>
-                </button>
-                <button
-                  onClick={() => setFeeling('normal')}
-                  className={`py-3 px-4 rounded-lg border-2 transition-all ${
-                    feeling === 'normal'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">😐</div>
-                  <div className="font-medium">Normal</div>
-                </button>
-                <button
-                  onClick={() => setFeeling('energized')}
-                  className={`py-3 px-4 rounded-lg border-2 transition-all ${
-                    feeling === 'energized'
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-gray-200 hover:border-gray-300'
-                  }`}
-                >
-                  <div className="text-2xl mb-1">⚡</div>
-                  <div className="font-medium">Energized</div>
-                </button>
+              <div className="grid grid-cols-5 gap-2">
+                {([
+                  { value: 'exhausted', emoji: '😩', label: 'Exhausted', active: 'border-red-600 bg-red-50 text-red-700' },
+                  { value: 'tired', emoji: '😓', label: 'Tired', active: 'border-orange-500 bg-orange-50 text-orange-700' },
+                  { value: 'normal', emoji: '🙂', label: 'Normal', active: 'border-blue-500 bg-blue-50 text-blue-700' },
+                  { value: 'good', emoji: '😄', label: 'Good', active: 'border-emerald-500 bg-emerald-50 text-emerald-700' },
+                  { value: 'energized', emoji: '⚡', label: 'Energized', active: 'border-green-500 bg-green-50 text-green-700' },
+                ] as const).map(({ value, emoji, label, active }) => (
+                  <button
+                    key={value}
+                    onClick={() => setFeeling(value)}
+                    className={`py-2 px-1 rounded-lg border-2 transition-all ${
+                      feeling === value ? active : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <div className="text-xl mb-1">{emoji}</div>
+                    <div className="text-xs font-medium">{label}</div>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
