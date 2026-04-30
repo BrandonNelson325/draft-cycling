@@ -19,6 +19,9 @@
     },
     "production": {
       "distribution": "store",
+      "ios": {
+        "image": "latest"
+      },
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.draftcycling.com"
       }
