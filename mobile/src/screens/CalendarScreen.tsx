@@ -586,33 +586,40 @@ export default function CalendarScreen() {
         <ActivityIndicator color="#3b82f6" style={{ marginTop: 40 }} />
       ) : (
         <View style={styles.grid}>
-          {cells.map((day, i) => {
-            if (!day) return <View key={`empty-${i}`} style={styles.cell} />;
-            const dateStr = getDateStr(day);
-            const entries = workoutsByDate[dateStr] || [];
-            const hasWorkouts = entries.some((e: any) => e.entry_type !== 'rest');
-            const hasRestDay = entries.some((e: any) => e.entry_type === 'rest');
-            const hasActivities = !!(activitiesByDate[dateStr]?.length);
-            const isToday = dateStr === todayStr;
-            const isSelected = dateStr === selectedDate;
-            return (
-              <TouchableOpacity
-                key={dateStr}
-                style={[styles.cell, isSelected && styles.cellSelected, isToday && styles.cellToday]}
-                onPress={() => onDayPress(day)}
-              >
-                <Text style={[styles.dayNum, isToday && styles.dayNumToday, isSelected && styles.dayNumSelected]}>
-                  {day}
-                </Text>
-                <View style={styles.dots}>
-                  {hasWorkouts ? <View style={[styles.dot, { backgroundColor: '#3b82f6' }]} /> : null}
-                  {hasRestDay ? <View style={[styles.dot, { backgroundColor: '#22c55e' }]} /> : null}
-                  {hasActivities ? <View style={[styles.dot, { backgroundColor: '#f97316' }]} /> : null}
-                  {!hasWorkouts && !hasRestDay && !hasActivities && <View style={[styles.dot, { backgroundColor: 'transparent' }]} />}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+          {/* Render explicit week rows of 7 flex:1 cells. Avoids the percentage-
+              width rounding bug where 7 × (100/7)% can cumulate just over 100%
+              on some screen widths and push the 7th column to wrap. */}
+          {Array.from({ length: Math.ceil(cells.length / 7) }, (_, rowIdx) => (
+            <View key={`row-${rowIdx}`} style={styles.weekRow}>
+              {cells.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, i) => {
+                if (!day) return <View key={`empty-${rowIdx}-${i}`} style={styles.cell} />;
+                const dateStr = getDateStr(day);
+                const entries = workoutsByDate[dateStr] || [];
+                const hasWorkouts = entries.some((e: any) => e.entry_type !== 'rest');
+                const hasRestDay = entries.some((e: any) => e.entry_type === 'rest');
+                const hasActivities = !!(activitiesByDate[dateStr]?.length);
+                const isToday = dateStr === todayStr;
+                const isSelected = dateStr === selectedDate;
+                return (
+                  <TouchableOpacity
+                    key={dateStr}
+                    style={[styles.cell, isSelected && styles.cellSelected, isToday && styles.cellToday]}
+                    onPress={() => onDayPress(day)}
+                  >
+                    <Text style={[styles.dayNum, isToday && styles.dayNumToday, isSelected && styles.dayNumSelected]}>
+                      {day}
+                    </Text>
+                    <View style={styles.dots}>
+                      {hasWorkouts ? <View style={[styles.dot, { backgroundColor: '#3b82f6' }]} /> : null}
+                      {hasRestDay ? <View style={[styles.dot, { backgroundColor: '#22c55e' }]} /> : null}
+                      {hasActivities ? <View style={[styles.dot, { backgroundColor: '#f97316' }]} /> : null}
+                      {!hasWorkouts && !hasRestDay && !hasActivities && <View style={[styles.dot, { backgroundColor: 'transparent' }]} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
         </View>
       )}
 
@@ -853,12 +860,13 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: 8,
   },
+  weekRow: {
+    flexDirection: 'row',
+  },
   cell: {
-    width: `${100 / 7}%`,
+    flex: 1,
     aspectRatio: 1,
     alignItems: 'center',
     justifyContent: 'center',
