@@ -7,8 +7,8 @@ export const intervalsIcuService = {
     return data!.authUrl;
   },
 
-  async getStatus(): Promise<{ connected: boolean; athlete_id?: string; auto_sync: boolean }> {
-    const { data, error } = await api.get<{ connected: boolean; athlete_id?: string; auto_sync: boolean }>(
+  async getStatus(): Promise<{ connected: boolean; athlete_id?: string; auto_sync: boolean; use_wellness: boolean }> {
+    const { data, error } = await api.get<{ connected: boolean; athlete_id?: string; auto_sync: boolean; use_wellness: boolean }>(
       '/api/integrations/intervals-icu/status', true
     );
     if (error) throw new Error(error.error || 'Failed to get status');
@@ -20,8 +20,8 @@ export const intervalsIcuService = {
     if (error) throw new Error(error.error || 'Failed to disconnect');
   },
 
-  async updateSettings(autoSync: boolean): Promise<void> {
-    const { error } = await api.post('/api/integrations/intervals-icu/settings', { auto_sync: autoSync }, true);
+  async updateSettings(updates: { auto_sync?: boolean; use_wellness?: boolean }): Promise<void> {
+    const { error } = await api.post('/api/integrations/intervals-icu/settings', updates, true);
     if (error) throw new Error(error.error || 'Failed to update settings');
   },
 

@@ -1,5 +1,15 @@
 import apiClient from '../api/client';
 
+export interface WellnessData {
+  source: 'intervals_icu' | 'apple_health' | 'manual';
+  hrv: number | null;
+  rhr: number | null;
+  sleepSeconds: number | null;
+  sleepScore: number | null;
+  readinessScore: number | null;
+  syncedAt: string | null;
+}
+
 export interface DailyReadiness {
   date: string;
   hasCheckedInToday: boolean;
@@ -26,10 +36,11 @@ export interface DailyReadiness {
   readinessScore: number;
   recommendation: 'rest' | 'light' | 'proceed' | 'push';
   reasoning: string;
+  wellness: WellnessData | null;
 }
 
 export interface DailyCheckInData {
-  sleepQuality: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
+  sleepQuality?: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
   feeling: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
   notes?: string;
 }

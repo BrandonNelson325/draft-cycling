@@ -71,8 +71,14 @@ export default function DailyMorningModal({
     setNotes('');
   };
 
+  const wellness = readiness?.wellness ?? null;
+
   const handleSubmitCheckIn = async () => {
-    if (!sleepQuality || !feeling) {
+    if (!feeling) {
+      Alert.alert('Please choose how you feel.');
+      return;
+    }
+    if (!wellness && !sleepQuality) {
       Alert.alert('Please answer both questions.');
       return;
     }
@@ -80,7 +86,8 @@ export default function DailyMorningModal({
     setSaving(true);
     try {
       const checkInData: DailyCheckInData = {
-        sleepQuality,
+        // Skip sleepQuality when we already have objective wellness data.
+        sleepQuality: wellness ? undefined : sleepQuality!,
         feeling,
         notes: notes.trim() || undefined,
       };
@@ -136,19 +143,66 @@ export default function DailyMorningModal({
         >
           {step === 1 ? (
             <>
-              <Text style={styles.question}>How did you sleep?</Text>
-              <View style={styles.optionsRow}>
-                {SLEEP_OPTIONS.map(opt => (
-                  <TouchableOpacity
-                    key={opt.value}
-                    style={[styles.option, sleepQuality === opt.value && styles.optionSelected]}
-                    onPress={() => setSleepQuality(opt.value)}
-                  >
-                    <Text style={styles.optionEmoji}>{opt.emoji}</Text>
-                    <Text style={styles.optionLabel}>{opt.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+              {/* Wellness data (intervals.icu) — shown instead of sleep picker */}
+              {wellness && (
+                <View style={styles.wellnessCard}>
+                  <Text style={styles.wellnessTitle}>🌙 Sleep & Recovery</Text>
+                  <View style={styles.wellnessGrid}>
+                    {wellness.sleepSeconds != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Sleep</Text>
+                        <Text style={styles.wellnessValue}>
+                          {Math.floor(wellness.sleepSeconds / 3600)}h {Math.round((wellness.sleepSeconds % 3600) / 60)}m
+                        </Text>
+                      </View>
+                    )}
+                    {wellness.sleepScore != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Sleep Score</Text>
+                        <Text style={styles.wellnessValue}>{wellness.sleepScore}/100</Text>
+                      </View>
+                    )}
+                    {wellness.hrv != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>HRV</Text>
+                        <Text style={styles.wellnessValue}>{wellness.hrv}ms</Text>
+                      </View>
+                    )}
+                    {wellness.rhr != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Resting HR</Text>
+                        <Text style={styles.wellnessValue}>{wellness.rhr} bpm</Text>
+                      </View>
+                    )}
+                    {wellness.readinessScore != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Readiness</Text>
+                        <Text style={styles.wellnessValue}>{wellness.readinessScore}/100</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.wellnessSource}>From intervals.icu</Text>
+                </View>
+              )}
+
+              {/* Sleep Quality picker — hidden when wellness data is present */}
+              {!wellness && (
+                <>
+                  <Text style={styles.question}>How did you sleep?</Text>
+                  <View style={styles.optionsRow}>
+                    {SLEEP_OPTIONS.map(opt => (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.option, sleepQuality === opt.value && styles.optionSelected]}
+                        onPress={() => setSleepQuality(opt.value)}
+                      >
+                        <Text style={styles.optionEmoji}>{opt.emoji}</Text>
+                        <Text style={styles.optionLabel}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
 
               <Text style={styles.question}>How are you feeling?</Text>
               <View style={styles.optionsRow}>
@@ -181,9 +235,9 @@ export default function DailyMorningModal({
               />
 
               <TouchableOpacity
-                style={[styles.btn, (!sleepQuality || !feeling || saving) && styles.btnDisabled]}
+                style={[styles.btn, ((!wellness && !sleepQuality) || !feeling || saving) && styles.btnDisabled]}
                 onPress={handleSubmitCheckIn}
-                disabled={!sleepQuality || !feeling || saving}
+                disabled={(!wellness && !sleepQuality) || !feeling || saving}
               >
                 {saving ? (
                   <ActivityIndicator color="#fff" />
@@ -292,6 +346,45 @@ const styles = StyleSheet.create({
   },
   optionEmoji: { fontSize: 22 },
   optionLabel: { fontSize: 10, color: '#94a3b8', fontWeight: '500', textAlign: 'center' },
+  wellnessCard: {
+    backgroundColor: '#2a1f3d',
+    borderRadius: 10,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: '#a78bfa',
+    marginBottom: 8,
+  },
+  wellnessTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#e9d5ff',
+    marginBottom: 10,
+  },
+  wellnessGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  wellnessStat: {
+    minWidth: '40%',
+  },
+  wellnessLabel: {
+    fontSize: 10,
+    color: '#a78bfa',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  wellnessValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#f1f5f9',
+  },
+  wellnessSource: {
+    fontSize: 11,
+    color: '#a78bfa',
+    marginTop: 8,
+  },
   textArea: {
     backgroundColor: '#1e293b',
     borderRadius: 10,

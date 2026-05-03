@@ -21,4 +21,9 @@ router.post('/wahoo/sync', authenticateJWT, integrationsController.syncWorkoutTo
 router.post('/wahoo/settings', authenticateJWT, integrationsController.updateWahooSettings);
 router.delete('/wahoo', authenticateJWT, integrationsController.disconnectWahoo);
 
+// Apple Health (HealthKit) — mobile-only, no OAuth (HealthKit is on-device)
+router.get('/apple-health/status', authenticateJWT, integrationsController.getAppleHealthStatus);
+router.post('/apple-health/settings', authenticateJWT, integrationsController.updateAppleHealthSettings);
+router.post('/apple-health/wellness', authenticateJWT, integrationsController.pushAppleHealthWellness);
+
 export default router;

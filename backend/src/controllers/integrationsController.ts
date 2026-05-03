@@ -90,7 +90,7 @@ export const getIntervalsIcuStatus = async (req: AuthRequest, res: Response): Pr
 
     const { data: athlete } = await supabaseAdmin
       .from('athletes')
-      .select('intervals_icu_athlete_id, intervals_icu_access_token, intervals_icu_auto_sync, intervals_icu_token_expires_at')
+      .select('intervals_icu_athlete_id, intervals_icu_access_token, intervals_icu_auto_sync, intervals_icu_use_wellness, intervals_icu_token_expires_at')
       .eq('id', req.user.id)
       .single();
 
@@ -100,6 +100,7 @@ export const getIntervalsIcuStatus = async (req: AuthRequest, res: Response): Pr
       connected: isConnected,
       athlete_id: athlete?.intervals_icu_athlete_id,
       auto_sync: athlete?.intervals_icu_auto_sync || false,
+      use_wellness: athlete?.intervals_icu_use_wellness || false,
       token_expires_at: athlete?.intervals_icu_token_expires_at,
     });
   } catch (error: any) {
@@ -147,23 +148,27 @@ export const updateIntervalsIcuSettings = async (req: AuthRequest, res: Response
       return;
     }
 
-    const { auto_sync } = req.body;
+    const { auto_sync, use_wellness } = req.body;
 
-    if (typeof auto_sync !== 'boolean') {
-      res.status(400).json({ error: 'auto_sync must be a boolean' });
+    const updates: Record<string, boolean> = {};
+    if (typeof auto_sync === 'boolean') updates.intervals_icu_auto_sync = auto_sync;
+    if (typeof use_wellness === 'boolean') updates.intervals_icu_use_wellness = use_wellness;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: 'auto_sync or use_wellness boolean required' });
       return;
     }
 
     const { error } = await supabaseAdmin
       .from('athletes')
-      .update({ intervals_icu_auto_sync: auto_sync })
+      .update(updates)
       .eq('id', req.user.id);
 
     if (error) {
       throw new Error(`Failed to update settings: ${error.message}`);
     }
 
-    res.json({ success: true, auto_sync });
+    res.json({ success: true, ...updates });
   } catch (error: any) {
     console.error('Error updating Intervals.icu settings:', error);
     res.status(500).json({ error: 'Failed to update settings' });
@@ -339,5 +344,120 @@ export const updateWahooSettings = async (req: AuthRequest, res: Response): Prom
   } catch (error: any) {
     console.error('Error updating Wahoo settings:', error);
     res.status(500).json({ error: 'Failed to update settings' });
+  }
+};
+
+/**
+ * Apple Health (HealthKit) Integration Controllers
+ *
+ * Apple Health is mobile-only — the iOS app reads HealthKit on-device and
+ * pushes wellness data here. There's no OAuth or server-to-server pull.
+ */
+
+export const getAppleHealthStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('apple_health_enabled, apple_health_last_sync_at')
+      .eq('id', req.user.id)
+      .single();
+
+    res.json({
+      enabled: athlete?.apple_health_enabled || false,
+      last_sync_at: athlete?.apple_health_last_sync_at || null,
+    });
+  } catch (error: any) {
+    console.error('Error getting Apple Health status:', error);
+    res.status(500).json({ error: 'Failed to get Apple Health status' });
+  }
+};
+
+export const updateAppleHealthSettings = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { enabled } = req.body;
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'enabled boolean required' });
+      return;
+    }
+
+    const { error } = await supabaseAdmin
+      .from('athletes')
+      .update({ apple_health_enabled: enabled })
+      .eq('id', req.user.id);
+
+    if (error) throw new Error(error.message);
+    res.json({ success: true, enabled });
+  } catch (error: any) {
+    console.error('Error updating Apple Health settings:', error);
+    res.status(500).json({ error: 'Failed to update Apple Health settings' });
+  }
+};
+
+/**
+ * Mobile app posts today's HealthKit wellness here. Idempotent — same date can
+ * be pushed repeatedly throughout the day as new data lands in HealthKit.
+ */
+export const pushAppleHealthWellness = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const { date, hrv, rhr, sleep_seconds, sleep_score, readiness_score } = req.body;
+
+    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      res.status(400).json({ error: 'date (YYYY-MM-DD) required' });
+      return;
+    }
+
+    // Treat fields as optional but require at least one to be present.
+    const fields = { hrv, rhr, sleep_seconds, sleep_score, readiness_score };
+    const hasAnyField = Object.values(fields).some(
+      (v) => typeof v === 'number' && !Number.isNaN(v)
+    );
+    if (!hasAnyField) {
+      res.status(400).json({ error: 'at least one wellness field required' });
+      return;
+    }
+
+    const payload: Record<string, any> = {
+      athlete_id: req.user.id,
+      date,
+      wellness_source: 'apple_health',
+      wellness_synced_at: new Date().toISOString(),
+    };
+    if (typeof hrv === 'number') payload.hrv = Math.round(hrv);
+    if (typeof rhr === 'number') payload.rhr = Math.round(rhr);
+    if (typeof sleep_seconds === 'number') payload.sleep_seconds = Math.round(sleep_seconds);
+    if (typeof sleep_score === 'number') payload.wellness_sleep_score = Math.round(sleep_score);
+    if (typeof readiness_score === 'number') payload.readiness_score = Math.round(readiness_score);
+
+    const { error: upsertErr } = await supabaseAdmin
+      .from('daily_metrics')
+      .upsert(payload, { onConflict: 'athlete_id,date' });
+
+    if (upsertErr) throw new Error(upsertErr.message);
+
+    // Stamp last sync time on athlete for the Settings UI.
+    await supabaseAdmin
+      .from('athletes')
+      .update({ apple_health_last_sync_at: new Date().toISOString() })
+      .eq('id', req.user.id);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Error pushing Apple Health wellness:', error);
+    res.status(500).json({ error: 'Failed to save Apple Health wellness' });
   }
 };

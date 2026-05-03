@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { AppState } from 'react-native';
 import { dailyAnalysisService, type DailyAnalysis } from '../services/dailyAnalysisService';
 import { dailyCheckInService, type DailyReadiness } from '../services/dailyCheckInService';
+import { appleHealthService } from '../services/appleHealthService';
 import { useAuthStore } from '../stores/useAuthStore';
 import { appStorage } from '../utils/storage';
 
@@ -48,6 +49,20 @@ export function useDailyMorning() {
       if (!skipLocalCheck && await hasShownTodayLocally()) {
         setLoading(false);
         return;
+      }
+
+      // Push today's HealthKit data to the backend before fetching readiness so
+      // the response includes wellness data. Best-effort: failures are silent
+      // and the modal falls back to manual pickers.
+      if (appleHealthService.isAvailable()) {
+        try {
+          const status = await appleHealthService.getStatus();
+          if (status.enabled) {
+            await appleHealthService.syncToday();
+          }
+        } catch {
+          // ignore
+        }
       }
 
       const readinessData = await dailyCheckInService.getDailyReadiness();

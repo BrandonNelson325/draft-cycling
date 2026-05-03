@@ -429,7 +429,19 @@ IMPORTANT: The training status above is what the athlete sees on their dashboard
         if (healthData.readiness_score) prompt += `- Readiness Score: ${healthData.readiness_score}/100\n`;
       }
       if (dailyCheckIn) {
-        if (dailyCheckIn.sleep_quality) prompt += `- Check-in Sleep: ${dailyCheckIn.sleep_quality} (score: ${dailyCheckIn.sleep_score}/10)\n`;
+        // Objective wellness data (intervals.icu or Apple Health) — prefer when present.
+        if (dailyCheckIn.wellness_source === 'intervals_icu' || dailyCheckIn.wellness_source === 'apple_health') {
+          const sourceLabel = dailyCheckIn.wellness_source === 'apple_health' ? 'Apple Health' : 'intervals.icu';
+          if (dailyCheckIn.sleep_seconds) {
+            const hours = (dailyCheckIn.sleep_seconds / 3600).toFixed(1);
+            prompt += `- Sleep: ${hours}h${dailyCheckIn.wellness_sleep_score ? ` (score ${dailyCheckIn.wellness_sleep_score}/100)` : ''} [from ${sourceLabel}]\n`;
+          }
+          if (dailyCheckIn.hrv) prompt += `- HRV: ${dailyCheckIn.hrv}ms [from ${sourceLabel}]\n`;
+          if (dailyCheckIn.rhr) prompt += `- Resting HR: ${dailyCheckIn.rhr} bpm [from ${sourceLabel}]\n`;
+          if (dailyCheckIn.readiness_score) prompt += `- Readiness: ${dailyCheckIn.readiness_score}/100 [from ${sourceLabel}]\n`;
+        } else if (dailyCheckIn.sleep_quality) {
+          prompt += `- Check-in Sleep: ${dailyCheckIn.sleep_quality} (score: ${dailyCheckIn.sleep_score}/10)\n`;
+        }
         if (dailyCheckIn.feeling) prompt += `- Feeling: ${dailyCheckIn.feeling} (score: ${dailyCheckIn.feeling_score}/10)\n`;
         if (dailyCheckIn.notes) prompt += `- Notes: ${dailyCheckIn.notes}\n`;
       }

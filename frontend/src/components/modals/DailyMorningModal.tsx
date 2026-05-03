@@ -25,14 +25,24 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
 
   // ── Step 1: Check-in ─────────────────────────────────────────────────────
 
+  const wellness = readiness.wellness;
+
   const handleCheckInNext = async () => {
-    if (!sleepQuality || !feeling) {
+    if (!feeling) {
+      toast.error('Please choose how you feel before continuing');
+      return;
+    }
+    if (!wellness && !sleepQuality) {
       toast.error('Please answer both questions before continuing');
       return;
     }
     try {
       setSaving(true);
-      await dailyCheckInService.saveDailyCheckIn({ sleepQuality, feeling });
+      // When wellness data was already pulled, skip sleepQuality.
+      const payload = wellness
+        ? { sleepQuality: undefined, feeling }
+        : { sleepQuality, feeling };
+      await dailyCheckInService.saveDailyCheckIn(payload as any);
       if (analysis) {
         setStep('analysis');
       } else {
@@ -156,30 +166,74 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </div>
               )}
 
-              {/* Sleep Quality */}
-              <div>
-                <label className="block font-semibold text-gray-800 mb-2">😴 How did you sleep?</label>
-                <div className="grid grid-cols-5 gap-2">
-                  {([
-                    { value: 'terrible', emoji: '😩', label: 'Terrible', active: 'border-red-600 bg-red-50 text-red-700' },
-                    { value: 'poor', emoji: '😴', label: 'Poor', active: 'border-red-500 bg-red-50 text-red-700' },
-                    { value: 'okay', emoji: '😐', label: 'Okay', active: 'border-amber-500 bg-amber-50 text-amber-700' },
-                    { value: 'good', emoji: '😊', label: 'Good', active: 'border-blue-500 bg-blue-50 text-blue-700' },
-                    { value: 'great', emoji: '🌟', label: 'Great', active: 'border-green-500 bg-green-50 text-green-700' },
-                  ] as const).map(({ value, emoji, label, active }) => (
-                    <button
-                      key={value}
-                      onClick={() => setSleepQuality(value)}
-                      className={`py-2 px-1 rounded-xl border-2 transition-all ${
-                        sleepQuality === value ? active : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="text-xl mb-1">{emoji}</div>
-                      <div className="text-xs font-medium">{label}</div>
-                    </button>
-                  ))}
+              {/* Wellness data (intervals.icu) — replaces sleep quality picker */}
+              {wellness && (
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                  <h3 className="font-semibold text-purple-900 mb-2">🌙 Sleep & Recovery</h3>
+                  <div className="grid grid-cols-2 gap-3 text-sm">
+                    {wellness.sleepSeconds != null && (
+                      <div>
+                        <div className="text-purple-700 text-xs uppercase tracking-wide">Sleep</div>
+                        <div className="text-purple-900 font-semibold">
+                          {Math.floor(wellness.sleepSeconds / 3600)}h {Math.round((wellness.sleepSeconds % 3600) / 60)}m
+                        </div>
+                      </div>
+                    )}
+                    {wellness.sleepScore != null && (
+                      <div>
+                        <div className="text-purple-700 text-xs uppercase tracking-wide">Sleep Score</div>
+                        <div className="text-purple-900 font-semibold">{wellness.sleepScore}/100</div>
+                      </div>
+                    )}
+                    {wellness.hrv != null && (
+                      <div>
+                        <div className="text-purple-700 text-xs uppercase tracking-wide">HRV</div>
+                        <div className="text-purple-900 font-semibold">{wellness.hrv}ms</div>
+                      </div>
+                    )}
+                    {wellness.rhr != null && (
+                      <div>
+                        <div className="text-purple-700 text-xs uppercase tracking-wide">Resting HR</div>
+                        <div className="text-purple-900 font-semibold">{wellness.rhr} bpm</div>
+                      </div>
+                    )}
+                    {wellness.readinessScore != null && (
+                      <div className="col-span-2">
+                        <div className="text-purple-700 text-xs uppercase tracking-wide">Readiness</div>
+                        <div className="text-purple-900 font-semibold">{wellness.readinessScore}/100</div>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-purple-600 mt-2">From intervals.icu</p>
                 </div>
-              </div>
+              )}
+
+              {/* Sleep Quality — hidden when wellness data is present */}
+              {!wellness && (
+                <div>
+                  <label className="block font-semibold text-gray-800 mb-2">😴 How did you sleep?</label>
+                  <div className="grid grid-cols-5 gap-2">
+                    {([
+                      { value: 'terrible', emoji: '😩', label: 'Terrible', active: 'border-red-600 bg-red-50 text-red-700' },
+                      { value: 'poor', emoji: '😴', label: 'Poor', active: 'border-red-500 bg-red-50 text-red-700' },
+                      { value: 'okay', emoji: '😐', label: 'Okay', active: 'border-amber-500 bg-amber-50 text-amber-700' },
+                      { value: 'good', emoji: '😊', label: 'Good', active: 'border-blue-500 bg-blue-50 text-blue-700' },
+                      { value: 'great', emoji: '🌟', label: 'Great', active: 'border-green-500 bg-green-50 text-green-700' },
+                    ] as const).map(({ value, emoji, label, active }) => (
+                      <button
+                        key={value}
+                        onClick={() => setSleepQuality(value)}
+                        className={`py-2 px-1 rounded-xl border-2 transition-all ${
+                          sleepQuality === value ? active : 'border-gray-200 hover:border-gray-300'
+                        }`}
+                      >
+                        <div className="text-xl mb-1">{emoji}</div>
+                        <div className="text-xs font-medium">{label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Feeling */}
               <div>
@@ -213,7 +267,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </Button>
                 <Button
                   onClick={handleCheckInNext}
-                  disabled={!sleepQuality || !feeling || saving}
+                  disabled={(!wellness && !sleepQuality) || !feeling || saving}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
                 >
                   {saving ? 'Saving...' : analysis ? 'See My Analysis →' : '💬 Talk to Coach'}

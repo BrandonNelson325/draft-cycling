@@ -39,12 +39,28 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
     const { sleepQuality, feeling, notes, localDate } = req.body;
     const dateToUse = await resolveLocalDate(req.user.id, localDate);
 
-    if (!sleepQuality || !feeling) {
+    // sleepQuality is optional when objective wellness data has already been
+    // pulled for today (intervals.icu cron). The morning modal hides the
+    // sleep-quality picker in that case and only collects "feeling" + notes.
+    let sleepQualityRequired = true;
+    if (!sleepQuality) {
+      const { data: existing } = await supabaseAdmin
+        .from('daily_metrics')
+        .select('wellness_source')
+        .eq('athlete_id', req.user.id)
+        .eq('date', dateToUse)
+        .maybeSingle();
+      if (existing?.wellness_source === 'intervals_icu') {
+        sleepQualityRequired = false;
+      }
+    }
+
+    if ((sleepQualityRequired && !sleepQuality) || !feeling) {
       res.status(400).json({ error: 'Sleep quality and feeling are required' });
       return;
     }
 
-    if (!['terrible', 'poor', 'okay', 'good', 'great'].includes(sleepQuality)) {
+    if (sleepQuality && !['terrible', 'poor', 'okay', 'good', 'great'].includes(sleepQuality)) {
       res.status(400).json({ error: 'Invalid sleep quality' });
       return;
     }

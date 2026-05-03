@@ -6,7 +6,7 @@ export const intervalsIcuService = {
     return data.authUrl;
   },
 
-  async getStatus(): Promise<{ connected: boolean; athlete_id?: string; auto_sync: boolean }> {
+  async getStatus(): Promise<{ connected: boolean; athlete_id?: string; auto_sync: boolean; use_wellness: boolean }> {
     const { data } = await apiClient.get('/api/integrations/intervals-icu/status');
     return data;
   },
@@ -15,8 +15,8 @@ export const intervalsIcuService = {
     await apiClient.delete('/api/integrations/intervals-icu');
   },
 
-  async updateSettings(autoSync: boolean): Promise<void> {
-    await apiClient.post('/api/integrations/intervals-icu/settings', { auto_sync: autoSync });
+  async updateSettings(updates: { auto_sync?: boolean; use_wellness?: boolean }): Promise<void> {
+    await apiClient.post('/api/integrations/intervals-icu/settings', updates);
   },
 
   async syncAll(): Promise<{ synced: number; failed: number; skipped: number; message: string }> {

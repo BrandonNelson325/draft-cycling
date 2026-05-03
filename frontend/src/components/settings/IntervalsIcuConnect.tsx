@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 export function IntervalsIcuConnect() {
   const [connected, setConnected] = useState(false);
   const [autoSync, setAutoSync] = useState(false);
+  const [useWellness, setUseWellness] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showSyncPrompt, setShowSyncPrompt] = useState(false);
@@ -28,6 +29,7 @@ export function IntervalsIcuConnect() {
       const status = await intervalsIcuService.getStatus();
       setConnected(status.connected);
       setAutoSync(status.auto_sync);
+      setUseWellness(status.use_wellness);
     } catch {
       // not connected
     }
@@ -53,6 +55,7 @@ export function IntervalsIcuConnect() {
       await intervalsIcuService.disconnect();
       setConnected(false);
       setAutoSync(false);
+      setUseWellness(false);
     } catch (err: any) {
       setError(err.message || 'Failed to disconnect');
     } finally {
@@ -63,9 +66,19 @@ export function IntervalsIcuConnect() {
   const handleAutoSyncToggle = async (enabled: boolean) => {
     setAutoSync(enabled);
     try {
-      await intervalsIcuService.updateSettings(enabled);
+      await intervalsIcuService.updateSettings({ auto_sync: enabled });
     } catch (err: any) {
       setAutoSync(!enabled);
+      setError(err.message || 'Failed to update settings');
+    }
+  };
+
+  const handleUseWellnessToggle = async (enabled: boolean) => {
+    setUseWellness(enabled);
+    try {
+      await intervalsIcuService.updateSettings({ use_wellness: enabled });
+    } catch (err: any) {
+      setUseWellness(!enabled);
       setError(err.message || 'Failed to update settings');
     }
   };
@@ -121,6 +134,22 @@ export function IntervalsIcuConnect() {
               className="w-4 h-4"
             />
             <span className="text-sm">Auto-sync workouts when scheduled</span>
+          </label>
+
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={useWellness}
+              onChange={(e) => handleUseWellnessToggle(e.target.checked)}
+              className="w-4 h-4 mt-0.5"
+            />
+            <span className="text-sm">
+              Use sleep & recovery data from intervals.icu
+              <span className="block text-xs text-gray-500 mt-0.5">
+                Pulls HRV, sleep, and resting HR from your connected device. The morning check-in
+                will show these stats instead of asking how you slept.
+              </span>
+            </span>
           </label>
 
           <div className="flex gap-2">

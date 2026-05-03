@@ -302,6 +302,75 @@ class IntervalsIcuService {
   }
 
   /**
+   * Pull wellness data for a single date from intervals.icu and upsert into
+   * daily_metrics. Returns true if data was found and stored, false otherwise.
+   *
+   * intervals.icu wellness API: GET /api/v1/athlete/0/wellness/{YYYY-MM-DD}
+   * Returns fields like: sleepSecs, sleepScore, restingHR, hrv, readiness.
+   * A 200 with mostly-null fields is normal when the device didn't sync that
+   * day — we treat "all key fields null" as "no data" and return false.
+   */
+  async pullWellnessForDate(athleteId: string, dateStr: string): Promise<boolean> {
+    try {
+      const accessToken = await this.getAccessToken(athleteId);
+      if (!accessToken) {
+        logger.debug(`[Intervals.icu] Wellness pull skipped — no token for ${athleteId}`);
+        return false;
+      }
+
+      const response = await axios.get(
+        `${INTERVALS_ICU_BASE_URL}/athlete/0/wellness/${dateStr}`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      const w = response.data || {};
+      const hrv = typeof w.hrv === 'number' ? Math.round(w.hrv) : null;
+      const rhr = typeof w.restingHR === 'number' ? Math.round(w.restingHR) : null;
+      const sleepSecs = typeof w.sleepSecs === 'number' ? Math.round(w.sleepSecs) : null;
+      const sleepScore = typeof w.sleepScore === 'number' ? Math.round(w.sleepScore) : null;
+      const readiness = typeof w.readiness === 'number' ? Math.round(w.readiness) : null;
+
+      // If every objective field is null, intervals.icu has nothing for this day.
+      if (hrv === null && rhr === null && sleepSecs === null && sleepScore === null && readiness === null) {
+        return false;
+      }
+
+      const { error } = await supabaseAdmin.from('daily_metrics').upsert(
+        {
+          athlete_id: athleteId,
+          date: dateStr,
+          hrv,
+          rhr,
+          sleep_seconds: sleepSecs,
+          wellness_sleep_score: sleepScore,
+          readiness_score: readiness,
+          wellness_source: 'intervals_icu',
+          wellness_synced_at: new Date().toISOString(),
+        },
+        { onConflict: 'athlete_id,date' }
+      );
+
+      if (error) {
+        logger.error('[Intervals.icu] Failed to upsert wellness:', error.message);
+        return false;
+      }
+
+      logger.debug(`[Intervals.icu] Wellness synced for ${athleteId} on ${dateStr}`);
+      return true;
+    } catch (error: any) {
+      // 404 = no record for that day, which is normal early-morning before sync.
+      if (error.response?.status === 404) {
+        return false;
+      }
+      logger.warn(
+        `[Intervals.icu] Wellness pull failed for ${athleteId} on ${dateStr}:`,
+        error.response?.data || error.message
+      );
+      return false;
+    }
+  }
+
+  /**
    * Disconnect Intervals.icu
    */
   async disconnect(athleteId: string): Promise<void> {

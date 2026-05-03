@@ -28,6 +28,7 @@ import { supabaseAdmin } from './utils/supabase';
 import { stravaCronService } from './services/stravaCronService';
 import { startMorningCheckInCron } from './services/morningCheckInCronService';
 import { startActivityReminderCron } from './services/activityReminderCronService';
+import { startWellnessSyncCron } from './services/wellnessSyncCronService';
 
 // Catch unhandled errors so background tasks (crons, fire-and-forget) don't crash the server
 process.on('uncaughtException', (err) => {
@@ -264,6 +265,9 @@ app.listen(config.port, async () => {
 
   // Start activity feedback reminder cron (runs every 5 minutes)
   startActivityReminderCron();
+
+  // Start wellness sync cron (runs every 15 minutes, pulls intervals.icu wellness)
+  startWellnessSyncCron();
 
   // Self-monitoring: log health every 10 minutes to catch degradation
   setInterval(async () => {

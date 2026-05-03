@@ -11,6 +11,16 @@ async function getAthleteTz(athleteId: string): Promise<string> {
   return data?.timezone || 'America/Los_Angeles';
 }
 
+export interface WellnessData {
+  source: 'intervals_icu' | 'apple_health' | 'manual';
+  hrv: number | null;
+  rhr: number | null;
+  sleepSeconds: number | null;
+  sleepScore: number | null;
+  readinessScore: number | null;
+  syncedAt: string | null;
+}
+
 export interface DailyReadiness {
   date: string;
   hasCheckedInToday: boolean;
@@ -25,6 +35,7 @@ export interface DailyReadiness {
   readinessScore: number; // 1-10
   recommendation: 'rest' | 'light' | 'proceed' | 'push';
   reasoning: string;
+  wellness: WellnessData | null;
 }
 
 export const dailyReadinessService = {
@@ -57,12 +68,33 @@ export const dailyReadinessService = {
       todayMetrics
     );
 
+    // Build wellness object only when there's an objective source. The manual
+    // sleep_quality/feeling fields stay separate — they're consumed via the
+    // existing readiness calculation and don't need to be surfaced as
+    // "wellness" data on the modal.
+    let wellness: WellnessData | null = null;
+    if (
+      todayMetrics?.wellness_source === 'intervals_icu' ||
+      todayMetrics?.wellness_source === 'apple_health'
+    ) {
+      wellness = {
+        source: todayMetrics.wellness_source,
+        hrv: todayMetrics.hrv ?? null,
+        rhr: todayMetrics.rhr ?? null,
+        sleepSeconds: todayMetrics.sleep_seconds ?? null,
+        sleepScore: todayMetrics.wellness_sleep_score ?? null,
+        readinessScore: todayMetrics.readiness_score ?? null,
+        syncedAt: todayMetrics.wellness_synced_at ?? null,
+      };
+    }
+
     return {
       date: today,
       hasCheckedInToday,
       todaysWorkout,
       recentActivity,
       ...readinessAnalysis,
+      wellness,
     };
   },
 
@@ -240,7 +272,7 @@ export const dailyReadinessService = {
   async saveDailyCheckIn(
     athleteId: string,
     data: {
-      sleepQuality: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
+      sleepQuality?: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
       feeling: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
       notes?: string;
     },
@@ -253,26 +285,32 @@ export const dailyReadinessService = {
     const sleepScoreMap = { terrible: 1, poor: 3, okay: 5, good: 7, great: 10 };
     const feelingScoreMap = { exhausted: 1, tired: 3, normal: 5, good: 7, energized: 10 };
 
-    const sleep_score = sleepScoreMap[data.sleepQuality];
+    const sleep_score = data.sleepQuality ? sleepScoreMap[data.sleepQuality] : null;
     const feeling_score = feelingScoreMap[data.feeling];
 
     // Get recent activity for training load calculation
     const recentActivity = await this.getRecentActivity(athleteId);
 
-    // Upsert daily metrics
+    // Upsert. When sleepQuality is omitted (wellness data already pulled), we
+    // skip the sleep_quality / sleep_score fields so we don't clobber whatever
+    // was there or null out nothing useful.
+    const upsertPayload: Record<string, any> = {
+      athlete_id: athleteId,
+      date: today,
+      feeling: data.feeling,
+      feeling_score,
+      notes: data.notes || null,
+      check_in_completed: true,
+      check_in_at: new Date().toISOString(),
+      training_load_last_7_days: Math.round(recentActivity.last7DaysTSS),
+    };
+    if (data.sleepQuality) {
+      upsertPayload.sleep_quality = data.sleepQuality;
+      upsertPayload.sleep_score = sleep_score;
+    }
+
     const { error } = await supabaseAdmin.from('daily_metrics').upsert(
-      {
-        athlete_id: athleteId,
-        date: today,
-        sleep_quality: data.sleepQuality,
-        sleep_score,
-        feeling: data.feeling,
-        feeling_score,
-        notes: data.notes || null,
-        check_in_completed: true,
-        check_in_at: new Date().toISOString(),
-        training_load_last_7_days: Math.round(recentActivity.last7DaysTSS),
-      },
+      upsertPayload,
       {
         onConflict: 'athlete_id,date',
       }

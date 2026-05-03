@@ -23,6 +23,7 @@ import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
 import { wahooService } from '../services/wahooService';
 import { intervalsIcuService } from '../services/intervalsIcuService';
+import { appleHealthService } from '../services/appleHealthService';
 import { subscriptionService } from '../services/subscriptionService';
 import { getConversionUtils, convertToMetric } from '../utils/units';
 import WelcomeModal from '../components/modals/WelcomeModal';
@@ -98,7 +99,12 @@ export default function SettingsScreen({ navigation }: any) {
   const [icuConnected, setIcuConnected] = useState(false);
   const [icuLoading, setIcuLoading] = useState(false);
   const [icuAutoSync, setIcuAutoSync] = useState(false);
+  const [icuUseWellness, setIcuUseWellness] = useState(false);
   const [icuSyncing, setIcuSyncing] = useState(false);
+  const [ahEnabled, setAhEnabled] = useState(false);
+  const [ahLastSync, setAhLastSync] = useState<string | null>(null);
+  const [ahBusy, setAhBusy] = useState(false);
+  const ahAvailable = appleHealthService.isAvailable();
 
   useEffect(() => {
     wahooService.getStatus().then((status) => {
@@ -109,8 +115,48 @@ export default function SettingsScreen({ navigation }: any) {
     intervalsIcuService.getStatus().then((status) => {
       setIcuConnected(status.connected);
       setIcuAutoSync(status.auto_sync);
+      setIcuUseWellness(status.use_wellness);
     }).catch(() => {});
+
+    if (ahAvailable) {
+      appleHealthService.getStatus().then((s) => {
+        setAhEnabled(s.enabled);
+        setAhLastSync(s.last_sync_at);
+      }).catch(() => {});
+    }
   }, []);
+
+  const handleAppleHealthToggle = async (value: boolean) => {
+    if (ahBusy) return;
+    setAhBusy(true);
+    try {
+      if (value) {
+        const granted = await appleHealthService.requestPermissions();
+        if (!granted) {
+          Alert.alert(
+            'Permission Denied',
+            "Couldn't access Apple Health. Open the iOS Settings app, go to Health → Data Access & Devices → Draft, and grant access there."
+          );
+          setAhBusy(false);
+          return;
+        }
+        await appleHealthService.updateSettings(true);
+        setAhEnabled(true);
+        // Try an immediate sync so the user sees data right away
+        const ok = await appleHealthService.syncToday();
+        if (ok) {
+          setAhLastSync(new Date().toISOString());
+        }
+      } else {
+        await appleHealthService.updateSettings(false);
+        setAhEnabled(false);
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update Apple Health settings.');
+    } finally {
+      setAhBusy(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     setSaving(true);
@@ -313,6 +359,7 @@ export default function SettingsScreen({ navigation }: any) {
         const status = await intervalsIcuService.getStatus();
         setIcuConnected(status.connected);
         setIcuAutoSync(status.auto_sync);
+        setIcuUseWellness(status.use_wellness);
         if (status.connected) {
           Alert.alert(
             'Connected',
@@ -342,6 +389,7 @@ export default function SettingsScreen({ navigation }: any) {
             await intervalsIcuService.disconnect();
             setIcuConnected(false);
             setIcuAutoSync(false);
+            setIcuUseWellness(false);
           } catch {
             Alert.alert('Error', 'Failed to disconnect Intervals.icu.');
           }
@@ -353,10 +401,20 @@ export default function SettingsScreen({ navigation }: any) {
   const handleIcuAutoSyncToggle = async (value: boolean) => {
     setIcuAutoSync(value);
     try {
-      await intervalsIcuService.updateSettings(value);
+      await intervalsIcuService.updateSettings({ auto_sync: value });
     } catch {
       Alert.alert('Error', 'Failed to update Intervals.icu settings.');
       setIcuAutoSync(!value);
+    }
+  };
+
+  const handleIcuUseWellnessToggle = async (value: boolean) => {
+    setIcuUseWellness(value);
+    try {
+      await intervalsIcuService.updateSettings({ use_wellness: value });
+    } catch {
+      Alert.alert('Error', 'Failed to update Intervals.icu settings.');
+      setIcuUseWellness(!value);
     }
   };
 
@@ -661,6 +719,21 @@ export default function SettingsScreen({ navigation }: any) {
                   thumbColor="#fff"
                 />
               </View>
+              <View style={styles.notifRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.notifLabel}>Use sleep & recovery data</Text>
+                  <Text style={styles.notifHint}>
+                    Pull HRV, sleep, and resting HR from your device. The morning check-in shows
+                    these stats instead of asking how you slept.
+                  </Text>
+                </View>
+                <Switch
+                  value={icuUseWellness}
+                  onValueChange={handleIcuUseWellnessToggle}
+                  trackColor={{ false: '#334155', true: '#3b82f6' }}
+                  thumbColor="#fff"
+                />
+              </View>
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                 <TouchableOpacity
                   style={[styles.stravaBtn, icuSyncing && styles.btnDisabled]}
@@ -737,6 +810,43 @@ export default function SettingsScreen({ navigation }: any) {
           </TouchableOpacity>
           <Text style={{ color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 }}>Coming soon — connect to Intervals.icu above to sync workouts to your Garmin device now.</Text>
         </View>
+
+        {/* Apple Health Section (iOS only) */}
+        {ahAvailable && (
+          <>
+            <View style={styles.stravaTitleRow}>
+              <Ionicons name="heart-outline" size={18} color="#fb7185" />
+              <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Apple Health</Text>
+            </View>
+            <View style={styles.section}>
+              <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 8 }}>
+                Read sleep, HRV, and resting heart rate directly from Apple Health (Apple Watch,
+                or any device that writes to Health). The morning check-in shows these stats
+                instead of asking how you slept.
+              </Text>
+              <View style={styles.notifRow}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <Text style={styles.notifLabel}>Use Apple Health</Text>
+                  {ahEnabled && ahLastSync && (
+                    <Text style={styles.notifHint}>
+                      Last sync: {new Date(ahLastSync).toLocaleString()}
+                    </Text>
+                  )}
+                  {ahEnabled && !ahLastSync && (
+                    <Text style={styles.notifHint}>Waiting for first sync</Text>
+                  )}
+                </View>
+                <Switch
+                  value={ahEnabled}
+                  onValueChange={handleAppleHealthToggle}
+                  disabled={ahBusy}
+                  trackColor={{ false: '#334155', true: '#3b82f6' }}
+                  thumbColor="#fff"
+                />
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Notifications Section */}
         <Text style={styles.sectionTitle}>Notifications</Text>

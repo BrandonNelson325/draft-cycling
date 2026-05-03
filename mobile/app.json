@@ -15,9 +15,15 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.draftcycling.app",
-      "buildNumber": "92",
+      "buildNumber": "93",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSHealthShareUsageDescription": "Draft reads your sleep, heart rate, and HRV data from Apple Health to give your coach a more accurate picture of your recovery.",
+        "NSHealthUpdateUsageDescription": "Draft does not write to Apple Health."
+      },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
       }
     },
     "android": {
@@ -64,6 +70,12 @@
         {
           "icon": "./assets/icon.png",
           "color": "#3b82f6"
+        }
+      ],
+      [
+        "@kingstinct/react-native-healthkit",
+        {
+          "NSHealthShareUsageDescription": "Draft reads your sleep, heart rate, and HRV data from Apple Health to give your coach a more accurate picture of your recovery."
         }
       ],
       "@react-native-community/datetimepicker"
