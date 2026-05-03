@@ -98,21 +98,17 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const hasRidden = suggestion?.hasRiddenToday ?? false;
 
   const handleChatPress = () => {
+    // Keep the seed message short and conversational — the AI already has full
+    // context (TSB, readiness, today's rides, planned workout) via
+    // buildAthleteContext on the backend, so repeating those stats here is
+    // redundant and reads as canned.
     let msg: string;
     if (hasRidden && s?.todaysRides && s.todaysRides.length > 0) {
-      // Post-ride: discuss today's ride and what's next
-      const rideNames = s.todaysRides.map(r => r.name).join(', ');
-      const totalTSS = s.todaysRides.reduce((sum, r) => sum + r.tss, 0);
-      const tomorrowPart = s?.tomorrowsWorkout
-        ? ` Tomorrow I have ${s.tomorrowsWorkout.name} scheduled.`
-        : '';
-      msg = `I rode today: ${rideNames} (${totalTSS} TSS). My TSB is ${(s?.currentTSB ?? 0).toFixed(1)}.${tomorrowPart} How did my ride go and what should I focus on next?`;
+      msg = "Let's chat about today's ride.";
+    } else if (s?.todaysWorkout) {
+      msg = "Let's chat about today's workout.";
     } else {
-      // Pre-ride: discuss today's plan
-      const workout = s?.todaysWorkout || s?.suggestedWorkout;
-      msg = workout
-        ? `I'd like to discuss today's plan: ${workout.name}. My TSB is ${(s?.currentTSB ?? 0).toFixed(1)} and I'm feeling ${(s?.status ?? 'well-recovered').replace('-', ' ')}. What do you think?`
-        : `I don't have a workout planned today. My TSB is ${(s?.currentTSB ?? 0).toFixed(1)} and I'm feeling ${(s?.status ?? 'well-recovered').replace('-', ' ')}. What should I do?`;
+      msg = "Let's chat about today.";
     }
     navigation.navigate('Chat', { initialMessage: msg });
   };
