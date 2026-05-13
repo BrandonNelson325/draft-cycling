@@ -85,6 +85,20 @@ export const calendarService = {
   ): Promise<CalendarEntry> {
     const dateStr = scheduledDate.toISOString().split('T')[0];
 
+    // Look up any existing entries on this date so we can mirror their removal
+    // to intervals.icu before the DELETE below cascades the workout_syncs rows.
+    const { data: existing } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id')
+      .eq('athlete_id', athleteId)
+      .eq('scheduled_date', dateStr);
+
+    for (const e of existing || []) {
+      intervalsIcuService
+        .deleteSyncedEventForCalendarEntry(athleteId, e.id)
+        .catch((err) => logger.warn(`[Intervals.icu] Delete on rest day failed: ${err.message}`));
+    }
+
     // Remove any existing entries for this date first
     await supabaseAdmin
       .from('calendar_entries')
@@ -159,6 +173,13 @@ export const calendarService = {
       throw new Error(`Failed to move workout: ${error.message}`);
     }
 
+    // Mirror the move to intervals.icu in the background (no-op when not synced).
+    if (data.workout_id) {
+      intervalsIcuService
+        .resyncCalendarEntryMove(athleteId, data.id, data.workout_id, newDate)
+        .catch((err) => logger.warn(`[Intervals.icu] Move resync failed: ${err.message}`));
+    }
+
     return data as CalendarEntry;
   },
 
@@ -179,6 +200,14 @@ export const calendarService = {
 
     updateData.updated_at = new Date().toISOString();
 
+    // Capture pre-update state to decide whether to re-mirror to intervals.icu.
+    const { data: prior } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('scheduled_date, workout_id')
+      .eq('id', entryId)
+      .eq('athlete_id', athleteId)
+      .maybeSingle();
+
     const { data, error } = await supabaseAdmin
       .from('calendar_entries')
       .update(updateData)
@@ -191,6 +220,17 @@ export const calendarService = {
       throw new Error(`Failed to update calendar entry: ${error.message}`);
     }
 
+    // If date or workout changed, re-mirror to intervals.icu (no-op if unsynced).
+    const dateChanged = prior && updateData.scheduled_date && updateData.scheduled_date !== prior.scheduled_date;
+    const workoutChanged = prior && updateData.workout_id && updateData.workout_id !== prior.workout_id;
+    if ((dateChanged || workoutChanged) && data.workout_id) {
+      const [y, m, d] = (data.scheduled_date as string).split('-').map(Number);
+      const newDate = new Date(y, m - 1, d);
+      intervalsIcuService
+        .resyncCalendarEntryMove(athleteId, data.id, data.workout_id, newDate)
+        .catch((err) => logger.warn(`[Intervals.icu] Update resync failed: ${err.message}`));
+    }
+
     return data as CalendarEntry;
   },
 
@@ -198,6 +238,14 @@ export const calendarService = {
    * Delete a calendar entry
    */
   async deleteEntry(entryId: string, athleteId: string): Promise<void> {
+    // Delete the mirrored intervals.icu event BEFORE deleting our row, since
+    // the workout_syncs FK cascades on calendar_entry deletion and we'd lose
+    // the external_id we need to call intervals.icu with. Fire-and-forget so
+    // a slow / failing third-party doesn't block the user's calendar action.
+    intervalsIcuService
+      .deleteSyncedEventForCalendarEntry(athleteId, entryId)
+      .catch((err) => logger.warn(`[Intervals.icu] Delete on calendar remove failed: ${err.message}`));
+
     const { error } = await supabaseAdmin
       .from('calendar_entries')
       .delete()

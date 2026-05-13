@@ -282,6 +282,71 @@ class IntervalsIcuService {
   }
 
   /**
+   * Delete the intervals.icu event mirrored from a given calendar_entry, if any.
+   * Idempotent: safe to call on entries that were never synced.
+   * Marks the workout_syncs row as 'deleted' so a subsequent re-sync starts fresh.
+   */
+  async deleteSyncedEventForCalendarEntry(
+    athleteId: string,
+    calendarEntryId: string
+  ): Promise<void> {
+    const { data: sync } = await supabaseAdmin
+      .from('workout_syncs')
+      .select('id, external_id')
+      .eq('athlete_id', athleteId)
+      .eq('calendar_entry_id', calendarEntryId)
+      .eq('integration', 'intervals_icu')
+      .eq('sync_status', 'synced')
+      .maybeSingle();
+
+    if (!sync?.external_id) return;
+
+    try {
+      await this.deleteWorkout(athleteId, sync.external_id);
+    } catch (err: any) {
+      // 404 on intervals.icu side means the event was already gone — fine.
+      const status = err?.response?.status;
+      if (status !== 404) {
+        logger.warn(`[Intervals.icu] Failed to delete event ${sync.external_id}: ${err.message}`);
+        // Don't throw — we still want to mark the local sync as deleted to avoid retries.
+      }
+    }
+
+    await supabaseAdmin
+      .from('workout_syncs')
+      .update({ sync_status: 'deleted', last_synced_at: new Date().toISOString() })
+      .eq('id', sync.id);
+  }
+
+  /**
+   * Mirror a calendar move to intervals.icu: delete the old event and re-upload
+   * at the new date. Safe to call when there was no prior sync (no-op).
+   * Only runs when the athlete has `intervals_icu_auto_sync = true`.
+   */
+  async resyncCalendarEntryMove(
+    athleteId: string,
+    calendarEntryId: string,
+    workoutId: string,
+    newDate: Date
+  ): Promise<void> {
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('intervals_icu_auto_sync, intervals_icu_access_token')
+      .eq('id', athleteId)
+      .single();
+
+    if (!athlete?.intervals_icu_auto_sync || !athlete?.intervals_icu_access_token) return;
+
+    // Delete the old event (if it existed) then upload fresh at the new date.
+    await this.deleteSyncedEventForCalendarEntry(athleteId, calendarEntryId);
+    try {
+      await this.uploadWorkout(athleteId, workoutId, newDate, calendarEntryId);
+    } catch (err: any) {
+      logger.warn(`[Intervals.icu] Re-upload on move failed: ${err.message}`);
+    }
+  }
+
+  /**
    * Delete workout from Intervals.icu
    */
   async deleteWorkout(athleteId: string, externalId: string): Promise<void> {
