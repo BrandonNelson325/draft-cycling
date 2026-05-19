@@ -77,9 +77,14 @@ export const trainingPlanJobService = {
       throw new Error(`Failed to enqueue plan job: ${error.message}`);
     }
 
-    // Fire-and-forget. The unhandled rejection handler in server.ts catches
-    // anything that escapes the try/catch inside runJob.
-    void this.runJob(data as PlanJobRow, kind);
+    // Fire-and-forget with a short delay so the AI's "plan is building" ack
+    // message has time to finish streaming + persist before the job posts
+    // its result message. Otherwise a fast-failing job (e.g. missing FTP
+    // check fires in <100ms) lands its error chat message BEFORE the ack,
+    // and the user sees the messages out of order.
+    setTimeout(() => {
+      void this.runJob(data as PlanJobRow, kind);
+    }, 3000);
 
     return data as PlanJobRow;
   },

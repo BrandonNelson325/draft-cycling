@@ -64,36 +64,25 @@ export const trainingPlanService = {
    * Generate a complete training plan
    */
   async generatePlan(athleteId: string, config: TrainingPlanConfig): Promise<TrainingPlan> {
-    // Get athlete's current FTP and training goal
-    const { data: athlete } = await supabaseAdmin
+    // Get athlete's current FTP. (training_goal lives in `preferences` JSONB,
+    // not as a column — selecting it as a column made the whole query return
+    // null, which then surfaced as a misleading "Athlete FTP not set" error.)
+    const { data: athlete, error: athleteErr } = await supabaseAdmin
       .from('athletes')
-      .select('ftp, training_goal, timezone')
+      .select('ftp, timezone')
       .eq('id', athleteId)
       .single();
 
-    if (!athlete || !athlete.ftp) {
+    if (athleteErr || !athlete) {
+      throw new Error(`Failed to load athlete: ${athleteErr?.message || 'not found'}`);
+    }
+    if (!athlete.ftp) {
       throw new Error('Athlete FTP not set');
     }
 
     // Get rest days from athlete preferences
     const preferences = await athletePreferencesService.getPreferences(athleteId);
     const restDays = preferences.rest_days || [];
-
-    // Also check training_goal field for rest day mentions (legacy support)
-    if (athlete.training_goal && restDays.length === 0) {
-      const goalLower = athlete.training_goal.toLowerCase();
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-
-      dayNames.forEach((day, index) => {
-        if ((goalLower.includes(day) || goalLower.includes(day + 's')) &&
-            (goalLower.includes('off') || goalLower.includes('rest'))) {
-          const dayName = day.charAt(0).toUpperCase() + day.slice(1);
-          if (!restDays.includes(dayName)) {
-            restDays.push(dayName);
-          }
-        }
-      });
-    }
 
     // Calculate weeks until event
     const weeksUntilEvent = this.calculateWeeks(config.event_date);

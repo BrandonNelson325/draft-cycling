@@ -274,49 +274,18 @@ export const aiToolExecutor = {
     const scheduledDate = new Date(year, month - 1, day); // month is 0-indexed
     const dayOfWeek = scheduledDate.getDay();
 
-    // Get athlete's rest days preference from training_goal
-    const { data: athlete } = await supabaseAdmin
-      .from('athletes')
-      .select('training_goal')
-      .eq('id', athleteId)
-      .single();
-
-    // Parse rest days from training_goal (ONLY if explicitly mentioned)
-    const restDays: number[] = [];
-
-    if (athlete?.training_goal) {
-      const goalLower = athlete.training_goal.toLowerCase();
-
-      // Check for explicit rest day mentions
-      if ((goalLower.includes('sunday') || goalLower.includes('sundays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(0);
-      }
-      if ((goalLower.includes('monday') || goalLower.includes('mondays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(1);
-      }
-      if ((goalLower.includes('tuesday') || goalLower.includes('tuesdays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(2);
-      }
-      if ((goalLower.includes('wednesday') || goalLower.includes('wednesdays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(3);
-      }
-      if ((goalLower.includes('thursday') || goalLower.includes('thursdays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(4);
-      }
-      if ((goalLower.includes('friday') || goalLower.includes('fridays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(5);
-      }
-      if ((goalLower.includes('saturday') || goalLower.includes('saturdays')) &&
-          (goalLower.includes('off') || goalLower.includes('rest'))) {
-        restDays.push(6);
-      }
-    }
+    // Get athlete's rest days from preferences.rest_days (the real source).
+    // The old version tried to parse free text from athlete.training_goal,
+    // but training_goal is not a column on athletes — it lives inside the
+    // `preferences` JSONB. Reading it caused the SELECT to fail silently.
+    const prefs = await athletePreferencesService.getPreferences(athleteId);
+    const restDayNames = prefs.rest_days || [];
+    const dayNameToIndex: Record<string, number> = {
+      sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6,
+    };
+    const restDays: number[] = restDayNames
+      .map((d) => dayNameToIndex[d.toLowerCase()])
+      .filter((d): d is number => typeof d === 'number');
 
     // Validate: Don't schedule on explicitly stated rest days
     if (restDays.length > 0 && restDays.includes(dayOfWeek)) {

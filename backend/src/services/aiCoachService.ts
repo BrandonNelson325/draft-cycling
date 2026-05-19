@@ -315,7 +315,7 @@ ${athlete.ftp && athlete.weight_kg ? `- Power-to-Weight: ${(athlete.ftp / athlet
 - Weekly Training Hours: ${athlete.weekly_training_hours ? `${athlete.weekly_training_hours} hours/week` : 'Not set — ask the athlete how many hours per week they can train'}
 
 TRAINING GOALS:
-${athlete.training_goal || 'Not set - Ask the athlete about their goals (event, target date, what they want to improve)'}
+${preferences.training_goal || 'Not set - Ask the athlete about their goals (event, target date, what they want to improve)'}
 
 ${this.buildActivePlanSection(context.activePlans, isoDate)}
 ${athletePreferencesService.formatForContext(preferences)}
@@ -323,7 +323,7 @@ ${athletePreferencesService.formatForContext(preferences)}
 **REST DAYS & TRAINING SCHEDULE:**
 ${preferences.rest_days && preferences.rest_days.length > 0
   ? preferences.rest_days.join(', ') + ' - ABSOLUTE REST, NO TRAINING'
-  : this.extractRestDaysFromGoal(athlete.training_goal)}
+  : this.extractRestDaysFromGoal(preferences.training_goal ?? null)}
 
 **IMPORTANT:** Before creating training plans or scheduling multiple workouts, check if you already know their preferences above. Only ask questions if the information is missing:
 1. Experience level — check ATHLETE PROFILE above. If "Not set", ask.
