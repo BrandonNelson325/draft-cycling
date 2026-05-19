@@ -24,7 +24,7 @@ import { sendPushNotification } from './pushNotificationService';
  *   plan-built message.
  */
 
-export type PlanJobKind = 'from_templates' | 'training_plan_template';
+export type PlanJobKind = 'from_templates' | 'training_plan_template' | 'generate_training_plan';
 
 export interface PlanJobRow {
   id: string;

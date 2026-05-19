@@ -232,7 +232,7 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'generate_training_plan',
     description:
-      'Generate a complete multi-week periodized training plan for the athlete. Use this when they want a structured plan leading up to an event.',
+      'Generate a complete multi-week periodized training plan for the athlete (custom plan generation, not from a template). Use this when they want a structured plan leading up to an event. ASYNCHRONOUS — returns immediately with status:"queued" and a job_id; the actual plan generation + scheduling runs in the background (typically 60-120 seconds). The athlete gets a push notification + new chat message when it is ready. When you receive a queued response, do NOT pretend the plan is already on the calendar; tell the athlete it is being built and they will be notified shortly.',
     input_schema: {
       type: 'object',
       properties: {

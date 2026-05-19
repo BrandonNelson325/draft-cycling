@@ -80,9 +80,26 @@ export const aiToolExecutor = {
           case 'update_athlete_ftp':
             result = await this.updateFTP(athleteId, toolCall.input);
             break;
-          case 'generate_training_plan':
-            result = await this.generateTrainingPlan(athleteId, toolCall.input);
+          case 'generate_training_plan': {
+            // This is the biggest of the long-running tools — it makes a fresh
+            // AI call to generate the plan structure, then saves, then schedules
+            // 20-60 workouts. Easily 2-5 minutes total. Enqueue and return
+            // immediately, same pattern as schedule_plan_from_templates.
+            const job = await trainingPlanJobService.enqueue(
+              athleteId,
+              conversationId || null,
+              'generate_training_plan',
+              toolCall.input
+            );
+            result = {
+              success: true,
+              status: 'queued',
+              job_id: job.id,
+              message:
+                'Plan generation started — this typically takes 60-120 seconds. Tell the athlete the plan is being generated in the background and they will be notified (or can refresh the chat) when it is ready. Do not pretend the plan is already on the calendar.',
+            };
             break;
+          }
           case 'get_workout_templates':
             result = await this.getWorkoutTemplates(toolCall.input);
             break;
@@ -1195,4 +1212,7 @@ registerPlanJobExecutor('from_templates', (athleteId, params) =>
 );
 registerPlanJobExecutor('training_plan_template', (athleteId, params) =>
   aiToolExecutor.scheduleTrainingPlanTemplate(athleteId, params)
+);
+registerPlanJobExecutor('generate_training_plan', (athleteId, params) =>
+  aiToolExecutor.generateTrainingPlan(athleteId, params)
 );
