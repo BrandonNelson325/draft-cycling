@@ -1790,6 +1790,30 @@ Format it clearly so I can follow it during my ride.`;
     conversationId: string;
   }> {
     try {
+      // Fast-path: "Create custom plan" button. See chatStream() for the
+      // full rationale. Skips context-build + AI call entirely.
+      const customPlanTrigger = 'I want to create a custom training plan';
+      if (!conversationId && message.trim() === customPlanTrigger) {
+        const { data: newConv } = await supabaseAdmin
+          .from('chat_conversations')
+          .insert({ athlete_id: athleteId, title: 'New training plan' })
+          .select()
+          .single();
+        const convId = newConv!.id;
+        await this.persistUserMessage(convId, athleteId, message);
+
+        const cannedReply = [
+          "Let's get you set up. A few quick questions:",
+          '',
+          "1. **What's your goal?** (e.g. a specific event, raise FTP, general fitness)",
+          '2. **Target / event date?** (if you have one)',
+          '3. **How many weeks** are you looking for?',
+        ].join('\n');
+
+        await this.persistAssistantMessage(convId, athleteId, cannedReply);
+        return { response: cannedReply, conversationId: convId };
+      }
+
       const context = await this.buildAthleteContext(athleteId);
 
       const systemPrompt = this.buildSystemPromptWithTools(context, clientDate);
@@ -2078,6 +2102,44 @@ Format it clearly so I can follow it during my ride.`;
     onEvent: (event: Record<string, any>) => void
   ): Promise<void> {
     try {
+      // Fast-path: the "Create custom plan" button on the Plans tab sends the
+      // exact message below to start a guided plan-setup flow. There is no
+      // useful prior context for this — we know exactly what to ask. Skip the
+      // full athlete-context build + AI call + tool loop and stream a canned
+      // first question immediately. From the user's perspective: tap button,
+      // chat opens, questions appear in < 1s.
+      const customPlanTrigger = 'I want to create a custom training plan';
+      if (!conversationId && message.trim() === customPlanTrigger) {
+        const { data: newConv } = await supabaseAdmin
+          .from('chat_conversations')
+          .insert({ athlete_id: athleteId, title: 'New training plan' })
+          .select()
+          .single();
+        const convId = newConv!.id;
+        onEvent({ type: 'start', conversation_id: convId });
+
+        await this.persistUserMessage(convId, athleteId, message);
+
+        const cannedReply = [
+          "Let's get you set up. A few quick questions:",
+          '',
+          "1. **What's your goal?** (e.g. a specific event, raise FTP, general fitness)",
+          '2. **Target / event date?** (if you have one)',
+          '3. **How many weeks** are you looking for?',
+        ].join('\n');
+
+        // Stream the canned reply character-by-character-ish so the UI shows
+        // it animating in like a normal AI response, instead of slamming the
+        // whole block onscreen.
+        const chunks = cannedReply.match(/.{1,40}(\s|$)/g) || [cannedReply];
+        for (const chunk of chunks) {
+          onEvent({ type: 'token', text: chunk });
+        }
+        await this.persistAssistantMessage(convId, athleteId, cannedReply);
+        onEvent({ type: 'done' });
+        return;
+      }
+
       const context = await this.buildAthleteContext(athleteId);
       const systemPrompt = this.buildSystemPromptWithTools(context, clientDate);
       // Always use Sonnet — coaching requires schedule reasoning, date math,
