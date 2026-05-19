@@ -136,21 +136,9 @@ export function IntervalsIcuConnect() {
             <span className="text-sm">Auto-sync workouts when scheduled</span>
           </label>
 
-          <label className="flex items-start gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useWellness}
-              onChange={(e) => handleUseWellnessToggle(e.target.checked)}
-              className="w-4 h-4 mt-0.5"
-            />
-            <span className="text-sm">
-              Use sleep & recovery data from intervals.icu
-              <span className="block text-xs text-gray-500 mt-0.5">
-                Pulls HRV, sleep, and resting HR from your connected device. The morning check-in
-                will show these stats instead of asking how you slept.
-              </span>
-            </span>
-          </label>
+          {/* Intervals.icu wellness pull is paused — data wasn't coming through
+              reliably from athlete accounts. Apple Health is the active source.
+              The toggle stays in the DB / API for future re-enable. */}
 
           <div className="flex gap-2">
             <Button onClick={handleSyncAll} disabled={syncing} variant="outline">

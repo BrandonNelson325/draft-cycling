@@ -12,6 +12,7 @@ import { supabaseAdmin } from '../utils/supabase';
 import { CreateWorkoutDTO } from '../types/workout';
 import { logger } from '../utils/logger';
 import { clearSuggestionCache } from './dailyAnalysisService';
+import { trainingPlanJobService, registerPlanJobExecutor } from './trainingPlanJobService';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -31,9 +32,15 @@ interface ToolResult {
 
 export const aiToolExecutor = {
   /**
-   * Execute multiple tool calls and return results
+   * Execute multiple tool calls and return results.
+   * conversationId is passed through to long-running tools (plan builds) so
+   * their background job can write its completion message back to the same chat.
    */
-  async executeTools(athleteId: string, toolCalls: ToolUseBlock[]): Promise<ToolResult[]> {
+  async executeTools(
+    athleteId: string,
+    toolCalls: ToolUseBlock[],
+    conversationId?: string | null
+  ): Promise<ToolResult[]> {
     const results: ToolResult[] = [];
 
     for (const toolCall of toolCalls) {
@@ -79,17 +86,48 @@ export const aiToolExecutor = {
           case 'get_workout_templates':
             result = await this.getWorkoutTemplates(toolCall.input);
             break;
-          case 'schedule_plan_from_templates':
-            result = await this.schedulePlanFromTemplates(athleteId, toolCall.input);
+          case 'schedule_plan_from_templates': {
+            // Plan builds are slow (20-60 workouts, often 60-180s end-to-end).
+            // Enqueue as a background job and return immediately so the chat
+            // doesn't block the HTTP request past Railway's 5min upstream
+            // timeout. The job's executor writes a follow-up chat message
+            // when done + sends a push notification.
+            const job = await trainingPlanJobService.enqueue(
+              athleteId,
+              conversationId || null,
+              'from_templates',
+              toolCall.input
+            );
+            result = {
+              success: true,
+              status: 'queued',
+              job_id: job.id,
+              message:
+                'Plan build started — this typically takes 30-90 seconds. Tell the athlete the plan is building in the background and they will be notified (or can refresh the chat) when it is ready. Do not pretend the plan is already on the calendar.',
+            };
             break;
+          }
           case 'get_training_plan_templates':
             result = await this.getTrainingPlanTemplates(toolCall.input);
             logger.debug('✅ get_training_plan_templates SUCCESS');
             break;
-          case 'schedule_training_plan_template':
-            result = await this.scheduleTrainingPlanTemplate(athleteId, toolCall.input);
-            logger.debug('✅ schedule_training_plan_template SUCCESS:', result.success);
+          case 'schedule_training_plan_template': {
+            // Same async pattern as schedule_plan_from_templates — see comment there.
+            const job = await trainingPlanJobService.enqueue(
+              athleteId,
+              conversationId || null,
+              'training_plan_template',
+              toolCall.input
+            );
+            result = {
+              success: true,
+              status: 'queued',
+              job_id: job.id,
+              message:
+                'Plan build started — this typically takes 30-90 seconds. Tell the athlete the plan is building in the background and they will be notified (or can refresh the chat) when it is ready. Do not pretend the plan is already on the calendar.',
+            };
             break;
+          }
           case 'get_recent_activities':
             result = await this.getRecentActivities(athleteId, toolCall.input);
             break;
@@ -1149,3 +1187,12 @@ export const aiToolExecutor = {
     };
   },
 };
+
+// Register the slow plan-build operations as background-job executors.
+// trainingPlanJobService picks these up by `kind` when running a queued job.
+registerPlanJobExecutor('from_templates', (athleteId, params) =>
+  aiToolExecutor.schedulePlanFromTemplates(athleteId, params)
+);
+registerPlanJobExecutor('training_plan_template', (athleteId, params) =>
+  aiToolExecutor.scheduleTrainingPlanTemplate(athleteId, params)
+);

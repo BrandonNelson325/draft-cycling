@@ -266,8 +266,10 @@ app.listen(config.port, async () => {
   // Start activity feedback reminder cron (runs every 5 minutes)
   startActivityReminderCron();
 
-  // Start wellness sync cron (runs every 15 minutes, pulls intervals.icu wellness)
-  startWellnessSyncCron();
+  // Intervals.icu wellness sync disabled — the data wasn't coming through
+  // reliably from athlete accounts and the feature is paused until we revisit.
+  // Apple Health is the active wellness source.
+  // startWellnessSyncCron();
 
   // Self-monitoring: log health every 10 minutes to catch degradation
   setInterval(async () => {

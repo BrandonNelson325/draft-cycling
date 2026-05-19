@@ -429,16 +429,15 @@ IMPORTANT: The training status above is what the athlete sees on their dashboard
         if (healthData.readiness_score) prompt += `- Readiness Score: ${healthData.readiness_score}/100\n`;
       }
       if (dailyCheckIn) {
-        // Objective wellness data (intervals.icu or Apple Health) — prefer when present.
-        if (dailyCheckIn.wellness_source === 'intervals_icu' || dailyCheckIn.wellness_source === 'apple_health') {
-          const sourceLabel = dailyCheckIn.wellness_source === 'apple_health' ? 'Apple Health' : 'intervals.icu';
+        // Objective wellness data (Apple Health) — prefer when present.
+        if (dailyCheckIn.wellness_source === 'apple_health') {
           if (dailyCheckIn.sleep_seconds) {
             const hours = (dailyCheckIn.sleep_seconds / 3600).toFixed(1);
-            prompt += `- Sleep: ${hours}h${dailyCheckIn.wellness_sleep_score ? ` (score ${dailyCheckIn.wellness_sleep_score}/100)` : ''} [from ${sourceLabel}]\n`;
+            prompt += `- Sleep: ${hours}h${dailyCheckIn.wellness_sleep_score ? ` (score ${dailyCheckIn.wellness_sleep_score}/100)` : ''} [from Apple Health]\n`;
           }
-          if (dailyCheckIn.hrv) prompt += `- HRV: ${dailyCheckIn.hrv}ms [from ${sourceLabel}]\n`;
-          if (dailyCheckIn.rhr) prompt += `- Resting HR: ${dailyCheckIn.rhr} bpm [from ${sourceLabel}]\n`;
-          if (dailyCheckIn.readiness_score) prompt += `- Readiness: ${dailyCheckIn.readiness_score}/100 [from ${sourceLabel}]\n`;
+          if (dailyCheckIn.hrv) prompt += `- HRV: ${dailyCheckIn.hrv}ms [from Apple Health]\n`;
+          if (dailyCheckIn.rhr) prompt += `- Resting HR: ${dailyCheckIn.rhr} bpm [from Apple Health]\n`;
+          if (dailyCheckIn.readiness_score) prompt += `- Readiness: ${dailyCheckIn.readiness_score}/100 [from Apple Health]\n`;
         } else if (dailyCheckIn.sleep_quality) {
           prompt += `- Check-in Sleep: ${dailyCheckIn.sleep_quality} (score: ${dailyCheckIn.sleep_score}/10)\n`;
         }
@@ -1815,13 +1814,32 @@ Format it clearly so I can follow it during my ride.`;
       const athleteTz = context.athlete.timezone || 'America/Los_Angeles';
       const messages = await this.buildMessageHistory(convId, message, athleteTz, clientDate);
 
+      // Persist the user message NOW (before any AI work) so it survives a
+      // dropped HTTP connection, AI failure, or backend crash. The assistant
+      // message is persisted at the end of the loop.
+      try {
+        await this.persistUserMessage(convId, athleteId, message);
+      } catch (err) {
+        logger.error('Failed to persist user message early (non-blocking):', err);
+      }
+
       // Cache the system prompt — cached tokens don't count toward rate limits
       // and cost 10% of normal input price after the first request in a 5-min window.
       const cachedSystem = [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }];
 
       // Sonnet executor + Opus advisor: Sonnet drives the conversation and tools,
       // Opus provides strategic guidance for complex reasoning (schedule conflicts, etc.)
-      const allTools = [...AI_TOOLS, ADVISOR_TOOL] as any;
+      // Mark the last tool as a cache boundary — Anthropic caches all tool
+      // definitions up to (and including) the cache_control marker, so a
+      // single tag on the final tool caches the full ~30-tool array. After
+      // the first request in a 5-min window, every subsequent call pays 10%
+      // of normal input price for the tool definitions instead of 100%.
+      const baseTools = [...AI_TOOLS, ADVISOR_TOOL] as any[];
+      const allTools = baseTools.map((t, i) =>
+        i === baseTools.length - 1
+          ? { ...t, cache_control: { type: 'ephemeral' as const } }
+          : t
+      );
 
       let response = await anthropic.beta.messages.create({
         model,
@@ -1846,7 +1864,7 @@ Format it clearly so I can follow it during my ride.`;
 
         // Execute tools with timeout
         const toolResults = await Promise.race([
-          aiToolExecutor.executeTools(athleteId, toolCalls as any),
+          aiToolExecutor.executeTools(athleteId, toolCalls as any, convId),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Tool execution timed out after 60s')), 60000)
           ),
@@ -1889,7 +1907,7 @@ Format it clearly so I can follow it during my ride.`;
           (block: any) => block.type === 'tool_use'
         ) as any[];
 
-        const finalToolResults = await aiToolExecutor.executeTools(athleteId, finalToolCalls as any);
+        const finalToolResults = await aiToolExecutor.executeTools(athleteId, finalToolCalls as any, convId);
 
         // Add the last assistant message with tool calls
         conversationMessages.push({
@@ -1924,8 +1942,8 @@ Format it clearly so I can follow it during my ride.`;
       const textContent = finalResponse.content.filter((block: any) => block.type === 'text');
       const aiResponse = textContent.length > 0 ? textContent.map((block: any) => block.text).join('\n') : 'I completed your request but encountered an issue generating a response. Please check your calendar.';
 
-      // Store messages and update timestamp
-      await this.persistMessages(convId, athleteId, message, aiResponse);
+      // User message was already persisted earlier; only the assistant remains.
+      await this.persistAssistantMessage(convId, athleteId, aiResponse);
 
       // Generate a better title after the first user message in the conversation
       this.maybeGenerateTitle(convId, message, aiResponse).catch((err) =>
@@ -1951,12 +1969,42 @@ Format it clearly so I can follow it during my ride.`;
     userMessage: string,
     aiResponse: string
   ): Promise<void> {
+    await this.persistUserMessage(convId, athleteId, userMessage);
+    await this.persistAssistantMessage(convId, athleteId, aiResponse);
+  },
+
+  /**
+   * Save the user's incoming message immediately. Called BEFORE any AI call
+   * so the message survives crashes / HTTP timeouts / dropped clients.
+   * Idempotent within a single chat turn — buildMessageHistory has already
+   * returned by the time this is called, so we won't double-include it.
+   */
+  async persistUserMessage(
+    convId: string,
+    athleteId: string,
+    userMessage: string
+  ): Promise<void> {
     await supabaseAdmin.from('chat_messages').insert({
       conversation_id: convId,
       athlete_id: athleteId,
       role: 'user',
       content: userMessage,
     });
+    await supabaseAdmin
+      .from('chat_conversations')
+      .update({ last_message_at: new Date().toISOString() })
+      .eq('id', convId);
+  },
+
+  /**
+   * Save the assistant's final response. Called after the AI loop finishes.
+   * If this fails (HTTP died mid-stream), the user message is still saved.
+   */
+  async persistAssistantMessage(
+    convId: string,
+    athleteId: string,
+    aiResponse: string
+  ): Promise<void> {
     await supabaseAdmin.from('chat_messages').insert({
       conversation_id: convId,
       athlete_id: athleteId,
@@ -2052,12 +2100,27 @@ Format it clearly so I can follow it during my ride.`;
       const athleteTz = context.athlete.timezone || 'America/Los_Angeles';
       const messages = await this.buildMessageHistory(convId, message, athleteTz, clientDate);
 
+      // Persist the user message NOW (before any AI work) so it survives a
+      // dropped HTTP connection, AI failure, or backend crash. The assistant
+      // message is persisted at the end of the loop.
+      try {
+        await this.persistUserMessage(convId, athleteId, message);
+      } catch (err) {
+        logger.error('Failed to persist user message early (non-blocking):', err);
+      }
+
       // Cache the system prompt — cached tokens don't count toward rate limits
       // and cost 10% of normal input price after the first request in a 5-min window.
       const cachedSystem = [{ type: 'text' as const, text: systemPrompt, cache_control: { type: 'ephemeral' as const } }];
 
-      // Sonnet executor + Opus advisor: stream the first response
-      const allTools = [...AI_TOOLS, ADVISOR_TOOL] as any;
+      // Sonnet executor + Opus advisor: stream the first response.
+      // Cache the tool array too (see comment in chat() for the rationale).
+      const baseTools = [...AI_TOOLS, ADVISOR_TOOL] as any[];
+      const allTools = baseTools.map((t, i) =>
+        i === baseTools.length - 1
+          ? { ...t, cache_control: { type: 'ephemeral' as const } }
+          : t
+      );
 
       const firstStream = anthropic.beta.messages.stream({
         model,
@@ -2087,8 +2150,9 @@ Format it clearly so I can follow it during my ride.`;
       const firstMessage = await firstStream.finalMessage();
 
       if (!hasTools) {
-        // Pure text response — already streamed above
-        await this.persistMessages(convId, athleteId, message, streamedText);
+        // Pure text response — already streamed above.
+        // User message was persisted earlier; only the assistant remains.
+        await this.persistAssistantMessage(convId, athleteId, streamedText);
         this.maybeGenerateTitle(convId, message, streamedText).catch((err) =>
           logger.error('Title generation failed (non-blocking):', err)
         );
@@ -2127,7 +2191,7 @@ Format it clearly so I can follow it during my ride.`;
 
           // Timeout each tool execution at 60s to prevent infinite hangs
           const toolResults = await Promise.race([
-            aiToolExecutor.executeTools(athleteId, toolCalls),
+            aiToolExecutor.executeTools(athleteId, toolCalls, convId),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('Tool execution timed out after 60s')), 60000)
             ),
@@ -2170,7 +2234,7 @@ Format it clearly so I can follow it during my ride.`;
         const lastToolCalls = finalResponse.content.filter(
           (b: any) => b.type === 'tool_use'
         ) as any[];
-        const lastToolResults = await aiToolExecutor.executeTools(athleteId, lastToolCalls);
+        const lastToolResults = await aiToolExecutor.executeTools(athleteId, lastToolCalls, convId);
         finalMessages.push({ role: 'assistant', content: finalResponse.content });
         finalMessages.push({
           role: 'user',
@@ -2205,7 +2269,8 @@ Format it clearly so I can follow it during my ride.`;
         }
       }
 
-      await this.persistMessages(convId, athleteId, message, finalText);
+      // User message was persisted earlier; only the assistant remains.
+      await this.persistAssistantMessage(convId, athleteId, finalText);
       this.maybeGenerateTitle(convId, message, finalText).catch((err) =>
         logger.error('Title generation failed (non-blocking):', err)
       );

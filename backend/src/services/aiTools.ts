@@ -280,7 +280,7 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'schedule_plan_from_templates',
     description:
-      'Build and schedule a complete training plan in one call by selecting templates and dates. Use this instead of calling create_workout + schedule_workout individually. The server handles all workout creation and scheduling in parallel — far faster than one-by-one. Pass goal_event and event_date so the plan appears on the Training Plan page.',
+      'Build and schedule a complete training plan from selected templates and dates. ASYNCHRONOUS — this tool returns immediately with status:"queued" and a job_id; the actual plan build runs in the background and the athlete gets a push notification + new chat message when it is ready (typically 30-90 seconds later). When you receive a queued response, DO NOT pretend the plan is already on the calendar; tell the athlete the plan is building and they will be notified shortly. Always include goal_event and event_date so the plan appears on the Training Plan page.',
     input_schema: {
       type: 'object',
       properties: {
@@ -372,7 +372,7 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'schedule_training_plan_template',
     description:
-      'Schedule a curated multi-week training plan template to the athlete\'s calendar. This resolves the plan\'s workout references to real workout templates, respects rest days, and creates all workouts + calendar entries in parallel. Always include goal_event and event_date so the plan appears on the Training Plan page.',
+      'Schedule a curated multi-week training plan template to the athlete\'s calendar. ASYNCHRONOUS — returns immediately with status:"queued" and a job_id; the actual plan build runs in the background (typically 30-90 seconds). The athlete gets a push notification + new chat message when it is ready. When you receive a queued response, do NOT pretend the plan is already on the calendar; tell the athlete it is building and they will be notified shortly. Always include goal_event and event_date so the plan appears on the Training Plan page.',
     input_schema: {
       type: 'object',
       properties: {

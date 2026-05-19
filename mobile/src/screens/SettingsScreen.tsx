@@ -719,21 +719,9 @@ export default function SettingsScreen({ navigation }: any) {
                   thumbColor="#fff"
                 />
               </View>
-              <View style={styles.notifRow}>
-                <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.notifLabel}>Use sleep & recovery data</Text>
-                  <Text style={styles.notifHint}>
-                    Pull HRV, sleep, and resting HR from your device. The morning check-in shows
-                    these stats instead of asking how you slept.
-                  </Text>
-                </View>
-                <Switch
-                  value={icuUseWellness}
-                  onValueChange={handleIcuUseWellnessToggle}
-                  trackColor={{ false: '#334155', true: '#3b82f6' }}
-                  thumbColor="#fff"
-                />
-              </View>
+              {/* Intervals.icu wellness pull is paused — data wasn't coming
+                  through reliably. Apple Health is the active source. The
+                  toggle stays in the DB / API for future re-enable. */}
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
                 <TouchableOpacity
                   style={[styles.stravaBtn, icuSyncing && styles.btnDisabled]}
@@ -817,6 +805,9 @@ export default function SettingsScreen({ navigation }: any) {
             <View style={styles.stravaTitleRow}>
               <Ionicons name="heart-outline" size={18} color="#fb7185" />
               <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Apple Health</Text>
+              <View style={styles.betaBadge}>
+                <Text style={styles.betaBadgeText}>BETA</Text>
+              </View>
             </View>
             <View style={styles.section}>
               <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 8 }}>
@@ -1136,6 +1127,19 @@ const styles = StyleSheet.create({
     marginTop: 16,
     marginBottom: 8,
     paddingHorizontal: 4,
+  },
+  betaBadge: {
+    backgroundColor: '#fb7185',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    marginLeft: 4,
+  },
+  betaBadgeText: {
+    color: '#fff',
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.5,
   },
   logoutBtn: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
   logoutText: { color: '#ef4444', fontWeight: '600', fontSize: 14 },
