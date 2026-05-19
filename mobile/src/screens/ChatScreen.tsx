@@ -82,12 +82,12 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     }
   }, [route.params?.initialMessage, loading]);
 
-  // Scroll to bottom on new messages
+  // Scroll to bottom on new messages, streaming tokens, and tool-progress updates
   useEffect(() => {
     if (activeMessages.length > 0) {
       setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
     }
-  }, [activeMessages.length, loading]);
+  }, [activeMessages.length, loading, streamingContent, toolStatus]);
 
   const handleSend = async (overrideText?: string) => {
     const text = overrideText || inputText.trim();
@@ -196,6 +196,13 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             multiline
             maxLength={2000}
             returnKeyType="default"
+            onFocus={() => {
+              // When the keyboard opens, the FlatList shrinks but doesn't
+              // auto-scroll — so the latest message ends up hidden behind
+              // the keyboard. Force a scroll-to-end after the keyboard
+              // animation has had a moment to start.
+              setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 250);
+            }}
           />
           <TouchableOpacity
             style={[styles.sendBtn, (!inputText.trim() || loading) && styles.sendBtnDisabled]}
@@ -306,7 +313,8 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   messages: {
-    paddingVertical: 12,
+    paddingTop: 12,
+    paddingBottom: 24,
     flexGrow: 1,
   },
   inputRow: {
