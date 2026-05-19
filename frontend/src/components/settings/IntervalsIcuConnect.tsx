@@ -5,7 +5,6 @@ import { Button } from '../ui/button';
 export function IntervalsIcuConnect() {
   const [connected, setConnected] = useState(false);
   const [autoSync, setAutoSync] = useState(false);
-  const [useWellness, setUseWellness] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showSyncPrompt, setShowSyncPrompt] = useState(false);
@@ -29,7 +28,6 @@ export function IntervalsIcuConnect() {
       const status = await intervalsIcuService.getStatus();
       setConnected(status.connected);
       setAutoSync(status.auto_sync);
-      setUseWellness(status.use_wellness);
     } catch {
       // not connected
     }
@@ -55,7 +53,6 @@ export function IntervalsIcuConnect() {
       await intervalsIcuService.disconnect();
       setConnected(false);
       setAutoSync(false);
-      setUseWellness(false);
     } catch (err: any) {
       setError(err.message || 'Failed to disconnect');
     } finally {
@@ -69,16 +66,6 @@ export function IntervalsIcuConnect() {
       await intervalsIcuService.updateSettings({ auto_sync: enabled });
     } catch (err: any) {
       setAutoSync(!enabled);
-      setError(err.message || 'Failed to update settings');
-    }
-  };
-
-  const handleUseWellnessToggle = async (enabled: boolean) => {
-    setUseWellness(enabled);
-    try {
-      await intervalsIcuService.updateSettings({ use_wellness: enabled });
-    } catch (err: any) {
-      setUseWellness(!enabled);
       setError(err.message || 'Failed to update settings');
     }
   };
