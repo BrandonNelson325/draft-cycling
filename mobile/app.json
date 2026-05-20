@@ -20,10 +20,6 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "Draft reads your sleep, heart rate, and HRV data from Apple Health to give your coach a more accurate picture of your recovery.",
         "NSHealthUpdateUsageDescription": "Draft does not write to Apple Health."
-      },
-      "entitlements": {
-        "com.apple.developer.healthkit": true,
-        "com.apple.developer.healthkit.access": []
       }
     },
     "android": {
