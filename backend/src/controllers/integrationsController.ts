@@ -175,6 +175,25 @@ export const updateIntervalsIcuSettings = async (req: AuthRequest, res: Response
   }
 };
 
+/**
+ * Wipe + rebuild the athlete's intervals.icu calendar from scratch in the
+ * future date range. Use when the two calendars have drifted (typically from
+ * pre-sync-hook plan rebuilds that left orphan events).
+ */
+export const resyncIntervalsIcu = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const result = await intervalsIcuService.resyncAll(req.user.id);
+    res.json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('Error resyncing intervals.icu:', error);
+    res.status(500).json({ error: error.message || 'Failed to resync intervals.icu' });
+  }
+};
+
 export const syncAllToIntervalsIcu = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     if (!req.user) {

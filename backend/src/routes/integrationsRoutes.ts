@@ -10,6 +10,7 @@ router.get('/intervals-icu/callback', integrationsController.handleIntervalsIcuC
 router.get('/intervals-icu/status', authenticateJWT, integrationsController.getIntervalsIcuStatus);
 router.post('/intervals-icu/sync', authenticateJWT, integrationsController.syncWorkoutToIntervalsIcu);
 router.post('/intervals-icu/sync-all', authenticateJWT, integrationsController.syncAllToIntervalsIcu);
+router.post('/intervals-icu/resync', authenticateJWT, integrationsController.resyncIntervalsIcu);
 router.post('/intervals-icu/settings', authenticateJWT, integrationsController.updateIntervalsIcuSettings);
 router.delete('/intervals-icu', authenticateJWT, integrationsController.disconnectIntervalsIcu);
 

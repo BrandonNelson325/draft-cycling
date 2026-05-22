@@ -430,6 +430,34 @@ export default function SettingsScreen({ navigation }: any) {
     }
   };
 
+  const handleIcuResync = () => {
+    Alert.alert(
+      'Resync intervals.icu',
+      'This wipes every "Draft - " workout on your intervals.icu calendar (from today onward) and re-uploads your current Draft schedule. Use this if the two calendars have drifted out of sync.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Resync',
+          style: 'destructive',
+          onPress: async () => {
+            setIcuSyncing(true);
+            try {
+              const result = await intervalsIcuService.resync();
+              Alert.alert(
+                'Resync Complete',
+                `Deleted ${result.deleted} old events, uploaded ${result.uploaded} workouts.${result.failed ? ` ${result.failed} failed.` : ''}`
+              );
+            } catch (err: any) {
+              Alert.alert('Error', err.message || 'Failed to resync.');
+            } finally {
+              setIcuSyncing(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -722,7 +750,7 @@ export default function SettingsScreen({ navigation }: any) {
               {/* Intervals.icu wellness pull is paused — data wasn't coming
                   through reliably. Apple Health is the active source. The
                   toggle stays in the DB / API for future re-enable. */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8 }}>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
                 <TouchableOpacity
                   style={[styles.stravaBtn, icuSyncing && styles.btnDisabled]}
                   onPress={handleIcuSyncAll}
@@ -736,6 +764,14 @@ export default function SettingsScreen({ navigation }: any) {
                       <Text style={styles.stravaBtnText}>Sync All</Text>
                     </>
                   )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.stravaBtn, icuSyncing && styles.btnDisabled]}
+                  onPress={handleIcuResync}
+                  disabled={icuSyncing}
+                >
+                  <Ionicons name="refresh-outline" size={14} color="#f59e0b" />
+                  <Text style={[styles.stravaBtnText, { color: '#f59e0b' }]}>Resync (Fix Drift)</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.stravaBtn, { borderColor: '#ef4444' }]}

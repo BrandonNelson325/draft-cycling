@@ -23,4 +23,12 @@ export const intervalsIcuService = {
     const { data } = await apiClient.post('/api/integrations/intervals-icu/sync-all', {});
     return data;
   },
+
+  async resync(): Promise<{ deleted: number; uploaded: number; skipped: number; failed: number }> {
+    const { data } = await apiClient.post<{ deleted: number; uploaded: number; skipped: number; failed: number }>(
+      '/api/integrations/intervals-icu/resync',
+      {}
+    );
+    return data;
+  },
 };

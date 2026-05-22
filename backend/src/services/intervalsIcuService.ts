@@ -436,6 +436,107 @@ class IntervalsIcuService {
   }
 
   /**
+   * Full resync: wipe all "Draft -" prefixed events on intervals.icu in the
+   * future date range, then re-upload every current Draft calendar entry.
+   *
+   * Why this exists: plan rebuilds historically created NEW workouts (new
+   * workout_id, new external_id) without deleting the prior intervals.icu
+   * events. Our local workout_syncs rows cascade-deleted with the replaced
+   * calendar entries, so the orphan external_ids are unrecoverable from our
+   * side. The only way to clean them is to ask intervals.icu what it has.
+   *
+   * Returns counts so the UI can show what happened.
+   */
+  async resyncAll(
+    athleteId: string,
+    fromDate?: Date
+  ): Promise<{ deleted: number; uploaded: number; skipped: number; failed: number }> {
+    const accessToken = await this.getAccessToken(athleteId);
+    if (!accessToken) {
+      throw new Error('Not connected to intervals.icu');
+    }
+
+    const start = fromDate || new Date();
+    start.setHours(0, 0, 0, 0);
+    // Bound the window: from today through 1 year out. Anything older we
+    // leave alone — those are historic events the athlete may want to keep.
+    const end = new Date(start);
+    end.setFullYear(end.getFullYear() + 1);
+    const oldest = start.toISOString().split('T')[0];
+    const newest = end.toISOString().split('T')[0];
+
+    // 1. List existing events on intervals.icu in the date range
+    let existingEvents: any[] = [];
+    try {
+      const res = await axios.get(
+        `${INTERVALS_ICU_BASE_URL}/athlete/0/events?oldest=${oldest}&newest=${newest}&category=WORKOUT`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+      existingEvents = Array.isArray(res.data) ? res.data : [];
+    } catch (err: any) {
+      logger.error('[Intervals.icu Resync] Failed to list events:', err.response?.data || err.message);
+      throw new Error('Failed to read events from intervals.icu');
+    }
+
+    // 2. Delete every "Draft -" prefixed event in that window
+    let deleted = 0;
+    let failed = 0;
+    for (const ev of existingEvents) {
+      const name: string = ev.name || '';
+      if (!name.startsWith('Draft -')) continue;
+      if (!ev.id) continue;
+      try {
+        await this.deleteWorkout(athleteId, String(ev.id));
+        deleted++;
+      } catch (err: any) {
+        // 404 means it was already gone — treat as success.
+        if (err?.response?.status !== 404) {
+          failed++;
+          logger.warn(`[Intervals.icu Resync] Failed to delete event ${ev.id}: ${err.message}`);
+        }
+      }
+    }
+
+    // 3. Clear our local sync rows for this athlete so the upload phase doesn't
+    // see stale data and starts fresh.
+    await supabaseAdmin
+      .from('workout_syncs')
+      .delete()
+      .eq('athlete_id', athleteId)
+      .eq('integration', 'intervals_icu');
+
+    // 4. Re-upload every Draft calendar entry in the date range
+    const { data: entries } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id, workout_id, scheduled_date')
+      .eq('athlete_id', athleteId)
+      .gte('scheduled_date', oldest)
+      .lte('scheduled_date', newest)
+      .not('workout_id', 'is', null)
+      .order('scheduled_date', { ascending: true });
+
+    let uploaded = 0;
+    let skipped = 0;
+    for (const entry of entries || []) {
+      if (!entry.workout_id) {
+        skipped++;
+        continue;
+      }
+      const [y, m, d] = (entry.scheduled_date as string).split('-').map(Number);
+      try {
+        await this.uploadWorkout(athleteId, entry.workout_id, new Date(y, m - 1, d), entry.id);
+        uploaded++;
+      } catch (err: any) {
+        failed++;
+        logger.warn(`[Intervals.icu Resync] Upload failed for entry ${entry.id}: ${err.message}`);
+      }
+    }
+
+    logger.info(`[Intervals.icu Resync] athlete=${athleteId} deleted=${deleted} uploaded=${uploaded} skipped=${skipped} failed=${failed}`);
+    return { deleted, uploaded, skipped, failed };
+  }
+
+  /**
    * Disconnect Intervals.icu
    */
   async disconnect(athleteId: string): Promise<void> {

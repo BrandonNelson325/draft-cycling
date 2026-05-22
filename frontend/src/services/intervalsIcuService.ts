@@ -32,4 +32,16 @@ export const intervalsIcuService = {
     if (error) throw new Error(error.error || 'Failed to sync workouts');
     return data!;
   },
+
+  /**
+   * Full resync — wipes "Draft - " events on intervals.icu in the future range
+   * and re-uploads current Draft calendar. Use when calendars have drifted.
+   */
+  async resync(): Promise<{ deleted: number; uploaded: number; skipped: number; failed: number }> {
+    const { data, error } = await api.post<{ deleted: number; uploaded: number; skipped: number; failed: number }>(
+      '/api/integrations/intervals-icu/resync', {}, true
+    );
+    if (error) throw new Error(error.error || 'Failed to resync');
+    return data!;
+  },
 };
