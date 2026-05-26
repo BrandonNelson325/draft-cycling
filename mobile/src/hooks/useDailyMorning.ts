@@ -54,12 +54,17 @@ export function useDailyMorning() {
       // Push today's HealthKit data to the backend before fetching readiness so
       // the response includes wellness data. Best-effort: failures are silent
       // and the modal falls back to manual pickers.
+      let waitForWellnessData = false;
       if (appleHealthService.isAvailable()) {
         try {
           const status = await appleHealthService.getStatus();
           if (status.enabled) {
             await appleHealthService.syncToday();
           }
+          // Only suppress the auto-pop when the athlete explicitly opted
+          // to USE Apple Health as the wellness source — not just for
+          // having the connection on for other reasons.
+          waitForWellnessData = status.enabled && status.use_for_wellness;
         } catch {
           // ignore
         }
@@ -77,7 +82,16 @@ export function useDailyMorning() {
           // Analysis is optional
         }
 
-        setShouldShow(true);
+        // When Apple Health is the chosen wellness source AND data hasn't
+        // landed yet today, don't interrupt the user. The backend's
+        // pushAppleHealthWellness endpoint fires a push when data arrives,
+        // which routes through usePushNotifications → forceShow() to open
+        // the modal at that point.
+        if (waitForWellnessData && !readinessData.wellness && !skipLocalCheck) {
+          setShouldShow(false);
+        } else {
+          setShouldShow(true);
+        }
       } else {
         await appStorage.setItem(LAST_SHOWN_KEY, new Date().toISOString());
       }

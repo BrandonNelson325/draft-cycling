@@ -138,14 +138,14 @@ export const appleHealthService = {
 
   // Settings ---------------------------------------------------------------
 
-  async getStatus(): Promise<{ enabled: boolean; last_sync_at: string | null }> {
-    const { data } = await apiClient.get<{ enabled: boolean; last_sync_at: string | null }>(
+  async getStatus(): Promise<{ enabled: boolean; use_for_wellness: boolean; last_sync_at: string | null }> {
+    const { data } = await apiClient.get<{ enabled: boolean; use_for_wellness: boolean; last_sync_at: string | null }>(
       '/api/integrations/apple-health/status'
     );
     return data;
   },
 
-  async updateSettings(enabled: boolean): Promise<void> {
-    await apiClient.post('/api/integrations/apple-health/settings', { enabled });
+  async updateSettings(updates: { enabled?: boolean; use_for_wellness?: boolean }): Promise<void> {
+    await apiClient.post('/api/integrations/apple-health/settings', updates);
   },
 };

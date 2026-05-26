@@ -15,8 +15,11 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import { useChatStore } from '../stores/useChatStore';
 import { trainingPlanService } from '../services/trainingPlanService';
+import { routeService } from '../services/routeService';
 import MessageBubble from '../components/chat/MessageBubble';
 import LoadingDots from '../components/chat/LoadingDots';
 import type { MainTabScreenProps } from '../navigation/types';
@@ -24,6 +27,7 @@ import type { MainTabScreenProps } from '../navigation/types';
 export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Chat'>) {
   const [inputText, setInputText] = useState('');
   const [hasActivePlan, setHasActivePlan] = useState(false);
+  const [analyzingRoute, setAnalyzingRoute] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const sheetRef = useRef<BottomSheet>(null);
   const initialMessageSent = useRef(false);
@@ -99,6 +103,45 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
       await sendMessage(text);
     } catch {
       Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
+  };
+
+  /**
+   * Pick a GPX file, send it to the backend for analysis, then auto-send
+   * the route summary as a chat message so the AI sees it as context.
+   */
+  const handleAttachGpx = async () => {
+    if (analyzingRoute || loading) return;
+    try {
+      const pick = await DocumentPicker.getDocumentAsync({
+        // GPX files don't have a single universal MIME type — we accept any
+        // and filter by extension after.
+        type: ['application/gpx+xml', 'application/octet-stream', '*/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (pick.canceled || !pick.assets?.[0]) return;
+
+      const asset = pick.assets[0];
+      if (!asset.name.toLowerCase().endsWith('.gpx')) {
+        Alert.alert('Wrong file type', 'Please pick a .gpx route file.');
+        return;
+      }
+
+      setAnalyzingRoute(true);
+      const gpxContent = await FileSystem.readAsStringAsync(asset.uri);
+      const analysis = await routeService.analyzeGpx(gpxContent, asset.name);
+      // Inline the analyzer's summary into the chat. The AI's system prompt
+      // doesn't need an update — the summary is plain text the AI reads
+      // naturally and uses to inform plan building.
+      await sendMessage(analysis.summary);
+    } catch (err: any) {
+      Alert.alert(
+        'Could not analyze route',
+        err?.message || 'Pick a valid GPX file and try again.'
+      );
+    } finally {
+      setAnalyzingRoute(false);
     }
   };
 
@@ -187,6 +230,22 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
 
         {/* Input */}
         <View style={styles.inputRow}>
+          <TouchableOpacity
+            style={styles.attachBtn}
+            onPress={handleAttachGpx}
+            disabled={analyzingRoute || loading}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            {analyzingRoute ? (
+              <ActivityIndicator size="small" color="#60a5fa" />
+            ) : (
+              <Ionicons
+                name="attach"
+                size={24}
+                color={analyzingRoute || loading ? '#475569' : '#94a3b8'}
+              />
+            )}
+          </TouchableOpacity>
           <TextInput
             style={styles.input}
             value={inputText}
@@ -336,6 +395,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#f1f5f9',
     maxHeight: 120,
+  },
+  attachBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sendBtn: {
     width: 40,

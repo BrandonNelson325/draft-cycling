@@ -39,18 +39,29 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
     const { sleepQuality, feeling, notes, localDate } = req.body;
     const dateToUse = await resolveLocalDate(req.user.id, localDate);
 
-    // sleepQuality is optional when objective wellness data has already been
-    // pulled for today (intervals.icu cron). The morning modal hides the
-    // sleep-quality picker in that case and only collects "feeling" + notes.
+    // sleepQuality is optional only when (a) objective wellness data is
+    // populated for today AND (b) the athlete opted to use that source AS
+    // the wellness source. The modal hides the sleep picker in that case.
     let sleepQualityRequired = true;
     if (!sleepQuality) {
-      const { data: existing } = await supabaseAdmin
-        .from('daily_metrics')
-        .select('wellness_source')
-        .eq('athlete_id', req.user.id)
-        .eq('date', dateToUse)
-        .maybeSingle();
-      if (existing?.wellness_source === 'intervals_icu') {
+      const [{ data: existing }, { data: prefs }] = await Promise.all([
+        supabaseAdmin
+          .from('daily_metrics')
+          .select('wellness_source')
+          .eq('athlete_id', req.user.id)
+          .eq('date', dateToUse)
+          .maybeSingle(),
+        supabaseAdmin
+          .from('athletes')
+          .select('intervals_icu_use_wellness, apple_health_use_for_wellness')
+          .eq('id', req.user.id)
+          .single(),
+      ]);
+      const source = existing?.wellness_source;
+      const useThisSource =
+        (source === 'intervals_icu' && prefs?.intervals_icu_use_wellness) ||
+        (source === 'apple_health' && prefs?.apple_health_use_for_wellness);
+      if (useThisSource) {
         sleepQualityRequired = false;
       }
     }

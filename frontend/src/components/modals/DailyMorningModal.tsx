@@ -204,7 +204,9 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                       </div>
                     )}
                   </div>
-                  <p className="text-xs text-purple-600 mt-2">From intervals.icu</p>
+                  <p className="text-xs text-purple-600 mt-2">
+                    From {wellness.source === 'apple_health' ? 'Apple Health' : 'intervals.icu'}
+                  </p>
                 </div>
               )}
 

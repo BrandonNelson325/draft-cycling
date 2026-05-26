@@ -181,7 +181,9 @@ export default function DailyMorningModal({
                       </View>
                     )}
                   </View>
-                  <Text style={styles.wellnessSource}>From intervals.icu</Text>
+                  <Text style={styles.wellnessSource}>
+                    From {wellness.source === 'apple_health' ? 'Apple Health' : 'intervals.icu'}
+                  </Text>
                 </View>
               )}
 

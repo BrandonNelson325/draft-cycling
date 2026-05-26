@@ -382,12 +382,13 @@ export const getAppleHealthStatus = async (req: AuthRequest, res: Response): Pro
 
     const { data: athlete } = await supabaseAdmin
       .from('athletes')
-      .select('apple_health_enabled, apple_health_last_sync_at')
+      .select('apple_health_enabled, apple_health_use_for_wellness, apple_health_last_sync_at')
       .eq('id', req.user.id)
       .single();
 
     res.json({
       enabled: athlete?.apple_health_enabled || false,
+      use_for_wellness: athlete?.apple_health_use_for_wellness || false,
       last_sync_at: athlete?.apple_health_last_sync_at || null,
     });
   } catch (error: any) {
@@ -403,19 +404,23 @@ export const updateAppleHealthSettings = async (req: AuthRequest, res: Response)
       return;
     }
 
-    const { enabled } = req.body;
-    if (typeof enabled !== 'boolean') {
-      res.status(400).json({ error: 'enabled boolean required' });
+    const { enabled, use_for_wellness } = req.body;
+    const updates: Record<string, boolean> = {};
+    if (typeof enabled === 'boolean') updates.apple_health_enabled = enabled;
+    if (typeof use_for_wellness === 'boolean') updates.apple_health_use_for_wellness = use_for_wellness;
+
+    if (Object.keys(updates).length === 0) {
+      res.status(400).json({ error: 'enabled or use_for_wellness boolean required' });
       return;
     }
 
     const { error } = await supabaseAdmin
       .from('athletes')
-      .update({ apple_health_enabled: enabled })
+      .update(updates)
       .eq('id', req.user.id);
 
     if (error) throw new Error(error.message);
-    res.json({ success: true, enabled });
+    res.json({ success: true, ...updates });
   } catch (error: any) {
     console.error('Error updating Apple Health settings:', error);
     res.status(500).json({ error: 'Failed to update Apple Health settings' });
@@ -473,6 +478,58 @@ export const pushAppleHealthWellness = async (req: AuthRequest, res: Response): 
       .from('athletes')
       .update({ apple_health_last_sync_at: new Date().toISOString() })
       .eq('id', req.user.id);
+
+    // Fire-and-forget: if the athlete has Apple Health on and hasn't done their
+    // check-in for this date yet, push them a "morning data ready" notification.
+    // The morning_notif_sent_date column is shared with the regular morning
+    // cron — setting it here also suppresses the cron's scheduled push so the
+    // athlete doesn't get notified twice.
+    void (async () => {
+      try {
+        const { data: athlete } = await supabaseAdmin
+          .from('athletes')
+          .select('apple_health_enabled, apple_health_use_for_wellness, push_token, push_notifications_enabled, morning_notif_sent_date')
+          .eq('id', req.user!.id)
+          .single();
+
+        // Only push the "morning data ready" alert when the user opted into
+        // using Apple Health AS the wellness source. If they just have the
+        // connection on but answer questions manually, the regular morning
+        // cron handles their notification.
+        if (
+          !athlete?.apple_health_enabled ||
+          !athlete?.apple_health_use_for_wellness ||
+          !athlete?.push_token ||
+          !athlete?.push_notifications_enabled
+        ) return;
+        if (athlete.morning_notif_sent_date === date) return;
+
+        const { data: metric } = await supabaseAdmin
+          .from('daily_metrics')
+          .select('check_in_completed')
+          .eq('athlete_id', req.user!.id)
+          .eq('date', date)
+          .maybeSingle();
+        if (metric?.check_in_completed) return;
+
+        const { sendPushNotification } = await import('../services/pushNotificationService');
+        await sendPushNotification(
+          athlete.push_token,
+          'Morning data ready',
+          "Your sleep & recovery data is in. Tap to do today's check-in.",
+          // `screen: 'Home'` makes the tap-handler in usePushNotifications.ts
+          // call onMorningCheckInTap → dailyMorning.forceShow, which opens
+          // the check-in modal directly.
+          { screen: 'Home', type: 'apple_health_data_ready' }
+        );
+        await supabaseAdmin
+          .from('athletes')
+          .update({ morning_notif_sent_date: date })
+          .eq('id', req.user!.id);
+      } catch (err) {
+        console.warn('[AppleHealth] Push on data arrival failed:', err);
+      }
+    })();
 
     res.json({ success: true });
   } catch (error: any) {

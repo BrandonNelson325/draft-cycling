@@ -1808,6 +1808,8 @@ Format it clearly so I can follow it during my ride.`;
           "1. **What's your goal?** (e.g. a specific event, raise FTP, general fitness)",
           '2. **Target / event date?** (if you have one)',
           '3. **How many weeks** are you looking for?',
+          '',
+          'If you have the race route as a **GPX file**, tap the 📎 to attach it and I\'ll build the plan around the actual climbs.',
         ].join('\n');
 
         await this.persistAssistantMessage(convId, athleteId, cannedReply);
@@ -2126,6 +2128,8 @@ Format it clearly so I can follow it during my ride.`;
           "1. **What's your goal?** (e.g. a specific event, raise FTP, general fitness)",
           '2. **Target / event date?** (if you have one)',
           '3. **How many weeks** are you looking for?',
+          '',
+          'If you have the race route as a **GPX file**, tap the 📎 to attach it and I\'ll build the plan around the actual climbs.',
         ].join('\n');
 
         // Stream the canned reply character-by-character-ish so the UI shows

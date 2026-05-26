@@ -102,6 +102,7 @@ export default function SettingsScreen({ navigation }: any) {
   const [icuUseWellness, setIcuUseWellness] = useState(false);
   const [icuSyncing, setIcuSyncing] = useState(false);
   const [ahEnabled, setAhEnabled] = useState(false);
+  const [ahUseForWellness, setAhUseForWellness] = useState(false);
   const [ahLastSync, setAhLastSync] = useState<string | null>(null);
   const [ahBusy, setAhBusy] = useState(false);
   const ahAvailable = appleHealthService.isAvailable();
@@ -121,6 +122,7 @@ export default function SettingsScreen({ navigation }: any) {
     if (ahAvailable) {
       appleHealthService.getStatus().then((s) => {
         setAhEnabled(s.enabled);
+        setAhUseForWellness(s.use_for_wellness);
         setAhLastSync(s.last_sync_at);
       }).catch(() => {});
     }
@@ -140,7 +142,7 @@ export default function SettingsScreen({ navigation }: any) {
           setAhBusy(false);
           return;
         }
-        await appleHealthService.updateSettings(true);
+        await appleHealthService.updateSettings({ enabled: true });
         setAhEnabled(true);
         // Try an immediate sync so the user sees data right away
         const ok = await appleHealthService.syncToday();
@@ -148,13 +150,28 @@ export default function SettingsScreen({ navigation }: any) {
           setAhLastSync(new Date().toISOString());
         }
       } else {
-        await appleHealthService.updateSettings(false);
+        // Turning off the connection also turns off the wellness preference
+        // so we don't leave a dangling state where wellness is "enabled" but
+        // no source is connected.
+        await appleHealthService.updateSettings({ enabled: false, use_for_wellness: false });
         setAhEnabled(false);
+        setAhUseForWellness(false);
       }
     } catch (err) {
       Alert.alert('Error', 'Failed to update Apple Health settings.');
     } finally {
       setAhBusy(false);
+    }
+  };
+
+  const handleAppleHealthUseForWellnessToggle = async (value: boolean) => {
+    if (ahBusy) return;
+    setAhUseForWellness(value);
+    try {
+      await appleHealthService.updateSettings({ use_for_wellness: value });
+    } catch (err) {
+      setAhUseForWellness(!value);
+      Alert.alert('Error', 'Failed to update Apple Health settings.');
     }
   };
 
@@ -847,13 +864,12 @@ export default function SettingsScreen({ navigation }: any) {
             </View>
             <View style={styles.section}>
               <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 8 }}>
-                Read sleep, HRV, and resting heart rate directly from Apple Health (Apple Watch,
-                or any device that writes to Health). The morning check-in shows these stats
-                instead of asking how you slept.
+                Read sleep, HRV, and resting heart rate from Apple Health (Apple Watch, Garmin,
+                Whoop, or any device that writes to Health).
               </Text>
               <View style={styles.notifRow}>
                 <View style={{ flex: 1, paddingRight: 12 }}>
-                  <Text style={styles.notifLabel}>Use Apple Health</Text>
+                  <Text style={styles.notifLabel}>Connect Apple Health</Text>
                   {ahEnabled && ahLastSync && (
                     <Text style={styles.notifHint}>
                       Last sync: {new Date(ahLastSync).toLocaleString()}
@@ -871,6 +887,25 @@ export default function SettingsScreen({ navigation }: any) {
                   thumbColor="#fff"
                 />
               </View>
+              {ahEnabled && (
+                <View style={styles.notifRow}>
+                  <View style={{ flex: 1, paddingRight: 12 }}>
+                    <Text style={styles.notifLabel}>Use for sleep & recovery</Text>
+                    <Text style={styles.notifHint}>
+                      Replace the morning sleep questions with Apple Health data. You'll get a
+                      push notification when each day's data lands instead of an automatic
+                      morning check-in.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={ahUseForWellness}
+                    onValueChange={handleAppleHealthUseForWellnessToggle}
+                    disabled={ahBusy}
+                    trackColor={{ false: '#334155', true: '#3b82f6' }}
+                    thumbColor="#fff"
+                  />
+                </View>
+              )}
             </View>
           </>
         )}

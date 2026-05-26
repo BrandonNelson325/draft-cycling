@@ -72,20 +72,35 @@ export const dailyReadinessService = {
     // sleep_quality/feeling fields stay separate — they're consumed via the
     // existing readiness calculation and don't need to be surfaced as
     // "wellness" data on the modal.
+    // Only surface wellness data to the modal when the athlete opted to use
+    // that integration AS the wellness source. Otherwise data may still be
+    // stored on daily_metrics (for context/charts/AI) but the modal asks the
+    // subjective sleep + feel questions normally.
     let wellness: WellnessData | null = null;
     if (
       todayMetrics?.wellness_source === 'intervals_icu' ||
       todayMetrics?.wellness_source === 'apple_health'
     ) {
-      wellness = {
-        source: todayMetrics.wellness_source,
-        hrv: todayMetrics.hrv ?? null,
-        rhr: todayMetrics.rhr ?? null,
-        sleepSeconds: todayMetrics.sleep_seconds ?? null,
-        sleepScore: todayMetrics.wellness_sleep_score ?? null,
-        readinessScore: todayMetrics.readiness_score ?? null,
-        syncedAt: todayMetrics.wellness_synced_at ?? null,
-      };
+      const { data: prefs } = await supabaseAdmin
+        .from('athletes')
+        .select('intervals_icu_use_wellness, apple_health_use_for_wellness')
+        .eq('id', athleteId)
+        .single();
+      const useThisSource =
+        (todayMetrics.wellness_source === 'intervals_icu' && prefs?.intervals_icu_use_wellness) ||
+        (todayMetrics.wellness_source === 'apple_health' && prefs?.apple_health_use_for_wellness);
+
+      if (useThisSource) {
+        wellness = {
+          source: todayMetrics.wellness_source,
+          hrv: todayMetrics.hrv ?? null,
+          rhr: todayMetrics.rhr ?? null,
+          sleepSeconds: todayMetrics.sleep_seconds ?? null,
+          sleepScore: todayMetrics.wellness_sleep_score ?? null,
+          readinessScore: todayMetrics.readiness_score ?? null,
+          syncedAt: todayMetrics.wellness_synced_at ?? null,
+        };
+      }
     }
 
     return {
