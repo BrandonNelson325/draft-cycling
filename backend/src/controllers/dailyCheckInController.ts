@@ -39,15 +39,18 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
     const { sleepQuality, feeling, notes, localDate } = req.body;
     const dateToUse = await resolveLocalDate(req.user.id, localDate);
 
-    // sleepQuality is optional only when (a) objective wellness data is
+    // sleepQuality is optional only when (a) objective sleep data is
     // populated for today AND (b) the athlete opted to use that source AS
     // the wellness source. The modal hides the sleep picker in that case.
+    // If wellness has HRV/RHR but NO sleep_seconds (e.g. Garmin doesn't
+    // write sleep to Apple Health), the picker is still shown and
+    // sleepQuality remains required.
     let sleepQualityRequired = true;
     if (!sleepQuality) {
       const [{ data: existing }, { data: prefs }] = await Promise.all([
         supabaseAdmin
           .from('daily_metrics')
-          .select('wellness_source')
+          .select('wellness_source, sleep_seconds')
           .eq('athlete_id', req.user.id)
           .eq('date', dateToUse)
           .maybeSingle(),
@@ -61,7 +64,8 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       const useThisSource =
         (source === 'intervals_icu' && prefs?.intervals_icu_use_wellness) ||
         (source === 'apple_health' && prefs?.apple_health_use_for_wellness);
-      if (useThisSource) {
+      const hasObjectiveSleep = existing?.sleep_seconds != null;
+      if (useThisSource && hasObjectiveSleep) {
         sleepQualityRequired = false;
       }
     }

@@ -445,6 +445,7 @@ IMPORTANT: The training status above is what the athlete sees on their dashboard
         if (dailyCheckIn.notes) prompt += `- Notes: ${dailyCheckIn.notes}\n`;
       }
       prompt += `(Use this as subjective context for coaching — do NOT factor into CTL/ATL calculations)
+(Wellness sources don't always provide every field. If HRV is not listed, the device/integration simply doesn't write it — don't comment on its absence, don't ask the athlete to log it, just work with what's there. Same for any other missing wellness field.)
 
 **PROACTIVE WORKOUT SWAP WHEN READINESS IS LOW:**
 If the athlete reports poor sleep OR feeling tired AND has a hard workout scheduled today (threshold, VO2max, sweet spot, tempo — anything above endurance):

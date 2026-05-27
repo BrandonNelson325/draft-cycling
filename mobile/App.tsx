@@ -90,6 +90,12 @@ function AppModalsInner() {
         analysis={dailyMorning.analysis}
         readiness={dailyMorning.readiness}
         onDismiss={dailyMorning.dismiss}
+        awaitingSleepData={dailyMorning.awaitingSleepData}
+        retryCount={dailyMorning.retryCount}
+        maxRetries={dailyMorning.maxRetries}
+        loading={dailyMorning.loading}
+        onRetrySync={dailyMorning.retrySync}
+        onSkipToManual={dailyMorning.skipToManual}
       />
       <PostRideModal
         activity={showPostRide ? currentActivity : null}

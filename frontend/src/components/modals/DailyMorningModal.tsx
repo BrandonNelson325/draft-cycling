@@ -26,22 +26,24 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
   // ── Step 1: Check-in ─────────────────────────────────────────────────────
 
   const wellness = readiness.wellness;
+  // Sleep picker is shown unless objective sleep data is present in wellness.
+  // sleepQuality is required iff the picker is shown.
+  const sleepPickerVisible = !wellness || wellness.sleepSeconds == null;
 
   const handleCheckInNext = async () => {
     if (!feeling) {
       toast.error('Please choose how you feel before continuing');
       return;
     }
-    if (!wellness && !sleepQuality) {
+    if (sleepPickerVisible && !sleepQuality) {
       toast.error('Please answer both questions before continuing');
       return;
     }
     try {
       setSaving(true);
-      // When wellness data was already pulled, skip sleepQuality.
-      const payload = wellness
-        ? { sleepQuality: undefined, feeling }
-        : { sleepQuality, feeling };
+      const payload = sleepPickerVisible
+        ? { sleepQuality, feeling }
+        : { sleepQuality: undefined, feeling };
       await dailyCheckInService.saveDailyCheckIn(payload as any);
       if (analysis) {
         setStep('analysis');
@@ -210,8 +212,10 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </div>
               )}
 
-              {/* Sleep Quality — hidden when wellness data is present */}
-              {!wellness && (
+              {/* Sleep Quality — hidden only when objective sleep data
+                  is present. Wellness with just HRV/RHR still shows the
+                  picker so the athlete can log sleep manually. */}
+              {(!wellness || wellness.sleepSeconds == null) && (
                 <div>
                   <label className="block font-semibold text-gray-800 mb-2">😴 How did you sleep?</label>
                   <div className="grid grid-cols-5 gap-2">
@@ -269,7 +273,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </Button>
                 <Button
                   onClick={handleCheckInNext}
-                  disabled={(!wellness && !sleepQuality) || !feeling || saving}
+                  disabled={(sleepPickerVisible && !sleepQuality) || !feeling || saving}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
                 >
                   {saving ? 'Saving...' : analysis ? 'See My Analysis →' : '💬 Talk to Coach'}

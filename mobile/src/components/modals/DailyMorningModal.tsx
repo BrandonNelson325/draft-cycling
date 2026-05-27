@@ -22,6 +22,15 @@ interface DailyMorningModalProps {
   readiness: DailyReadiness | null;
   onDismiss: () => void;
   onChatNavigate?: (message: string) => void;
+  // Apple Health waiting flow — when these are provided AND awaitingSleepData
+  // is true, the modal renders the "Waiting for sync" screen instead of the
+  // normal questionnaire.
+  awaitingSleepData?: boolean;
+  retryCount?: number;
+  maxRetries?: number;
+  loading?: boolean;
+  onRetrySync?: () => Promise<void> | void;
+  onSkipToManual?: () => void;
 }
 
 type SleepQuality = 'terrible' | 'poor' | 'okay' | 'good' | 'great';
@@ -56,6 +65,12 @@ export default function DailyMorningModal({
   readiness,
   onDismiss,
   onChatNavigate,
+  awaitingSleepData,
+  retryCount,
+  maxRetries,
+  loading: parentLoading,
+  onRetrySync,
+  onSkipToManual,
 }: DailyMorningModalProps) {
   const [step, setStep] = useState<1 | 2>(1);
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>(null);
@@ -78,7 +93,10 @@ export default function DailyMorningModal({
       Alert.alert('Please choose how you feel.');
       return;
     }
-    if (!wellness && !sleepQuality) {
+    // The sleep picker is shown unless wellness data has actual sleep_seconds.
+    // So sleepQuality is required whenever the picker is shown.
+    const sleepPickerVisible = !wellness || wellness.sleepSeconds == null;
+    if (sleepPickerVisible && !sleepQuality) {
       Alert.alert('Please answer both questions.');
       return;
     }
@@ -86,8 +104,8 @@ export default function DailyMorningModal({
     setSaving(true);
     try {
       const checkInData: DailyCheckInData = {
-        // Skip sleepQuality when we already have objective wellness data.
-        sleepQuality: wellness ? undefined : sleepQuality!,
+        // Send sleepQuality whenever the picker was shown.
+        sleepQuality: sleepPickerVisible ? sleepQuality! : undefined,
         feeling,
         notes: notes.trim() || undefined,
       };
@@ -141,7 +159,46 @@ export default function DailyMorningModal({
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="always"
         >
-          {step === 1 ? (
+          {step === 1 && awaitingSleepData ? (
+            <>
+              {/* Waiting-for-sync screen — the user has opted into Apple Health
+                  as the wellness source but sleep data hasn't arrived yet. */}
+              <View style={styles.waitCard}>
+                <Text style={styles.waitTitle}>🌙 Waiting for sleep data</Text>
+                <Text style={styles.waitBody}>
+                  Your sleep data hasn't synced from Apple Health yet. Open Garmin Connect
+                  (or your device's app) and tap Sync, then come back here and tap Try Again.
+                </Text>
+                {!!retryCount && (
+                  <Text style={styles.waitMeta}>
+                    {retryCount >= (maxRetries ?? 2)
+                      ? 'Still no data after several attempts — you can keep trying, or skip and answer manually.'
+                      : `Retry ${retryCount} of ${maxRetries ?? 2}.`}
+                  </Text>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.btn, parentLoading && styles.btnDisabled]}
+                onPress={() => onRetrySync?.()}
+                disabled={parentLoading}
+              >
+                {parentLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.btnText}>Try Again</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.skipBtn}
+                onPress={() => onSkipToManual?.()}
+                disabled={parentLoading}
+              >
+                <Text style={styles.skipBtnText}>Skip — answer manually</Text>
+              </TouchableOpacity>
+            </>
+          ) : step === 1 ? (
             <>
               {/* Wellness data (intervals.icu) — shown instead of sleep picker */}
               {wellness && (
@@ -187,8 +244,12 @@ export default function DailyMorningModal({
                 </View>
               )}
 
-              {/* Sleep Quality picker — hidden when wellness data is present */}
-              {!wellness && (
+              {/* Sleep Quality picker — only hidden when objective sleep
+                  data is in the wellness card. If the wellness source only
+                  brought RHR/HRV (e.g. a Garmin user whose watch doesn't
+                  write sleep to Apple Health), we still ask the question
+                  manually. */}
+              {(!wellness || wellness.sleepSeconds == null) && (
                 <>
                   <Text style={styles.question}>How did you sleep?</Text>
                   <View style={styles.optionsRow}>
@@ -236,17 +297,23 @@ export default function DailyMorningModal({
                 }}
               />
 
-              <TouchableOpacity
-                style={[styles.btn, ((!wellness && !sleepQuality) || !feeling || saving) && styles.btnDisabled]}
-                onPress={handleSubmitCheckIn}
-                disabled={(!wellness && !sleepQuality) || !feeling || saving}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Text style={styles.btnText}>Check In →</Text>
-                )}
-              </TouchableOpacity>
+              {(() => {
+                const sleepPickerVisible = !wellness || wellness.sleepSeconds == null;
+                const disabled = (sleepPickerVisible && !sleepQuality) || !feeling || saving;
+                return (
+                  <TouchableOpacity
+                    style={[styles.btn, disabled && styles.btnDisabled]}
+                    onPress={handleSubmitCheckIn}
+                    disabled={disabled}
+                  >
+                    {saving ? (
+                      <ActivityIndicator color="#fff" />
+                    ) : (
+                      <Text style={styles.btnText}>Check In →</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })()}
             </>
           ) : (
             <>
@@ -386,6 +453,40 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#a78bfa',
     marginTop: 8,
+  },
+  waitCard: {
+    backgroundColor: '#1f1810',
+    borderRadius: 10,
+    padding: 14,
+    borderLeftWidth: 3,
+    borderLeftColor: '#fbbf24',
+    marginBottom: 8,
+  },
+  waitTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#fcd34d',
+    marginBottom: 8,
+  },
+  waitBody: {
+    fontSize: 14,
+    color: '#cbd5e1',
+    lineHeight: 20,
+  },
+  waitMeta: {
+    fontSize: 12,
+    color: '#94a3b8',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  skipBtn: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  skipBtnText: {
+    color: '#94a3b8',
+    fontSize: 14,
   },
   textArea: {
     backgroundColor: '#1e293b',

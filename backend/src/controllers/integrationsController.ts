@@ -479,23 +479,20 @@ export const pushAppleHealthWellness = async (req: AuthRequest, res: Response): 
       .update({ apple_health_last_sync_at: new Date().toISOString() })
       .eq('id', req.user.id);
 
-    // Fire-and-forget: if the athlete has Apple Health on and hasn't done their
-    // check-in for this date yet, push them a "morning data ready" notification.
-    // The morning_notif_sent_date column is shared with the regular morning
-    // cron — setting it here also suppresses the cron's scheduled push so the
-    // athlete doesn't get notified twice.
+    // Fire-and-forget "morning data ready" push. Sleep is the only field
+    // that changes the modal UX (hides the sleep picker) — so we only push
+    // when sleep_seconds is in this payload. RHR/HRV alone don't unlock a
+    // streamlined check-in; the user still has to answer sleep manually.
     void (async () => {
       try {
+        if (typeof sleep_seconds !== 'number') return;
+
         const { data: athlete } = await supabaseAdmin
           .from('athletes')
           .select('apple_health_enabled, apple_health_use_for_wellness, push_token, push_notifications_enabled, morning_notif_sent_date')
           .eq('id', req.user!.id)
           .single();
 
-        // Only push the "morning data ready" alert when the user opted into
-        // using Apple Health AS the wellness source. If they just have the
-        // connection on but answer questions manually, the regular morning
-        // cron handles their notification.
         if (
           !athlete?.apple_health_enabled ||
           !athlete?.apple_health_use_for_wellness ||

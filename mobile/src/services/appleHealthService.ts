@@ -64,17 +64,32 @@ export const appleHealthService = {
     if (!HK) return { hrv: null, rhr: null, sleep_seconds: null };
 
     const now = new Date();
+
+    // HRV and RHR: look back 36 hours so we catch readings taken last night /
+    // yesterday evening. iOS often computes RHR once a day and HRV during
+    // sleep, so a "today only" window is regularly empty in the morning.
+    const hrvRhrWindowStart = new Date(now.getTime() - 36 * 60 * 60 * 1000);
+
+    // Sleep: from 6pm yesterday → now covers a typical overnight session.
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const sleepWindowStart = new Date(startOfToday);
     sleepWindowStart.setDate(sleepWindowStart.getDate() - 1);
     sleepWindowStart.setHours(18, 0, 0, 0);
 
-    const todayFilter = { filter: { date: { startDate: startOfToday, endDate: now } }, limit: 20, ascending: false };
-    const sleepFilter = { filter: { date: { startDate: sleepWindowStart, endDate: now } }, limit: 200, ascending: true };
+    const hrvRhrFilter = {
+      filter: { date: { startDate: hrvRhrWindowStart, endDate: now } },
+      limit: 50,
+      ascending: false,
+    };
+    const sleepFilter = {
+      filter: { date: { startDate: sleepWindowStart, endDate: now } },
+      limit: 200,
+      ascending: true,
+    };
 
     const [hrvSamples, rhrSamples, sleepSamples] = await Promise.allSettled([
-      HK.queryQuantitySamples('HKQuantityTypeIdentifierHeartRateVariabilitySDNN', { ...todayFilter, unit: 'ms' }),
-      HK.queryQuantitySamples('HKQuantityTypeIdentifierRestingHeartRate', { ...todayFilter, unit: 'count/min' }),
+      HK.queryQuantitySamples('HKQuantityTypeIdentifierHeartRateVariabilitySDNN', { ...hrvRhrFilter, unit: 'ms' }),
+      HK.queryQuantitySamples('HKQuantityTypeIdentifierRestingHeartRate', { ...hrvRhrFilter, unit: 'count/min' }),
       HK.queryCategorySamples('HKCategoryTypeIdentifierSleepAnalysis', sleepFilter),
     ]);
 
@@ -83,7 +98,7 @@ export const appleHealthService = {
     let sleep_seconds: number | null = null;
 
     if (hrvSamples.status === 'fulfilled' && hrvSamples.value?.length) {
-      // Most recent reading (queried descending) is most relevant for "today's HRV"
+      // Most recent reading (queried descending) — typically last night's
       hrv = Math.round(hrvSamples.value[0].quantity);
     }
 
@@ -92,11 +107,12 @@ export const appleHealthService = {
     }
 
     if (sleepSamples.status === 'fulfilled' && sleepSamples.value?.length) {
-      // Sum all "asleep" sub-categories (Core, REM, Deep, plus generic asleep).
-      // Apple uses these category values:
-      //   0 = inBed, 1 = asleepUnspecified, 2 = awake,
-      //   3 = asleepCore, 4 = asleepDeep, 5 = asleepREM
-      const ASLEEP_VALUES = new Set([1, 3, 4, 5]);
+      // Apple HealthKit HKCategoryValueSleepAnalysis values:
+      //   0 = inBed, 1 = asleep (legacy/unspecified),
+      //   2 = awake, 3 = asleepCore, 4 = asleepDeep, 5 = asleepREM,
+      //   6 = asleepUnspecified (iOS 16+)
+      // Garmin Connect tends to write value 1 (legacy asleep) for everything.
+      const ASLEEP_VALUES = new Set([1, 3, 4, 5, 6]);
       let totalSeconds = 0;
       for (const s of sleepSamples.value) {
         if (!ASLEEP_VALUES.has(s.value)) continue;
