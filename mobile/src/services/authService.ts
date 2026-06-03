@@ -54,6 +54,15 @@ export const authService = {
     useAuthStore.getState().logout();
   },
 
+  /**
+   * Permanently delete the user's account and all associated data on the
+   * backend, then clear local auth state. Apple Store guideline 5.1.1(v).
+   */
+  async deleteAccount() {
+    await apiClient.delete('/api/auth/account');
+    useAuthStore.getState().logout();
+  },
+
   async getProfile() {
     const { data } = await apiClient.get<Athlete>('/api/auth/me');
     useAuthStore.getState().setUser(data);

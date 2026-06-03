@@ -475,6 +475,57 @@ export default function SettingsScreen({ navigation }: any) {
     );
   };
 
+  /**
+   * Two-step delete to prevent accidents:
+   *   1. Warning alert explaining what gets deleted
+   *   2. Prompt requiring the user to type DELETE to confirm
+   *   3. Hits backend → logout
+   */
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      "This will permanently delete your account and all of your data — workouts, calendar, chat history, settings, training plans, and any active subscription will be cancelled. This cannot be undone.",
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Continue',
+          style: 'destructive',
+          onPress: () => {
+            Alert.prompt(
+              'Type DELETE to confirm',
+              'This is permanent. Type the word DELETE (in caps) to confirm.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Delete Account',
+                  style: 'destructive',
+                  onPress: async (input?: string) => {
+                    if (input?.trim() !== 'DELETE') {
+                      Alert.alert('Cancelled', 'You did not type DELETE — your account is safe.');
+                      return;
+                    }
+                    try {
+                      await authService.deleteAccount();
+                      // logout is called inside authService.deleteAccount();
+                      // navigation back to auth happens automatically via RootNavigator
+                      // reacting to the auth store change.
+                    } catch (err: any) {
+                      Alert.alert(
+                        'Error',
+                        err?.response?.data?.error || 'Failed to delete account. Please try again or contact support.'
+                      );
+                    }
+                  },
+                },
+              ],
+              'plain-text'
+            );
+          },
+        },
+      ]
+    );
+  };
+
   const handleLogout = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
@@ -999,6 +1050,11 @@ export default function SettingsScreen({ navigation }: any) {
           <TouchableOpacity style={[styles.btn, styles.logoutBtn]} onPress={handleLogout}>
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
+
+          <TouchableOpacity style={styles.deleteAccountBtn} onPress={handleDeleteAccount}>
+            <Ionicons name="trash-outline" size={14} color="#ef4444" />
+            <Text style={styles.deleteAccountText}>Delete Account</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={{ height: 32 }} />
@@ -1213,6 +1269,19 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   logoutBtn: { backgroundColor: '#1e293b', borderWidth: 1, borderColor: '#334155' },
+  deleteAccountBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 12,
+  },
+  deleteAccountText: {
+    color: '#ef4444',
+    fontSize: 13,
+    fontWeight: '500',
+  },
   logoutText: { color: '#ef4444', fontWeight: '600', fontSize: 14 },
   notifRow: {
     flexDirection: 'row',

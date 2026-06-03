@@ -79,4 +79,16 @@ export const authService = {
 
     return data;
   },
+
+  /**
+   * Permanently delete the user's account + all data. App Store guideline
+   * 5.1.1(v) requires this when account creation is supported.
+   */
+  async deleteAccount() {
+    const { error } = await api.delete('/api/auth/account', true);
+    if (error) {
+      throw new Error(error.error || 'Failed to delete account');
+    }
+    useAuthStore.getState().logout();
+  },
 };

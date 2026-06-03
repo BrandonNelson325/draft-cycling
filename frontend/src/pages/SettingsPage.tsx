@@ -7,10 +7,38 @@ import { StravaConnect } from '../components/strava/StravaConnect';
 import { IntervalsIcuConnect } from '../components/settings/IntervalsIcuConnect';
 import { WelcomeModal } from '../components/modals/WelcomeModal';
 import { useAuthStore } from '../stores/useAuthStore';
+import { authService } from '../services/authService';
 
 export function SettingsPage() {
   const logout = useAuthStore((state) => state.logout);
   const [showGuide, setShowGuide] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Two-step delete with a typed-confirmation prompt — prevents accidents and
+  // satisfies App Store guideline 5.1.1(v).
+  const handleDeleteAccount = async () => {
+    const warned = window.confirm(
+      'Delete your account?\n\nThis permanently removes your account and all data — workouts, calendar, chat history, settings, training plans. Any active subscription will be cancelled. This cannot be undone.'
+    );
+    if (!warned) return;
+
+    const typed = window.prompt(
+      'Type DELETE (in caps) to confirm. This is permanent.'
+    );
+    if (typed?.trim() !== 'DELETE') {
+      alert('You did not type DELETE — your account is safe.');
+      return;
+    }
+
+    setDeleting(true);
+    try {
+      await authService.deleteAccount();
+      // logout() inside deleteAccount() triggers app-wide redirect to login
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete account. Please try again or contact support.');
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="container mx-auto p-4 md:p-8 max-w-4xl">
@@ -124,6 +152,19 @@ export function SettingsPage() {
         >
           Log Out
         </Button>
+
+        {/* Delete account — separated visually as a true "danger zone" action */}
+        <div className="pt-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-red-600 hover:bg-red-50 hover:text-red-700"
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+          >
+            {deleting ? 'Deleting…' : 'Delete Account'}
+          </Button>
+        </div>
       </div>
 
       {showGuide && (

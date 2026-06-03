@@ -473,6 +473,20 @@ export const AI_TOOLS: Tool[] = [
               type: 'string',
               description: 'Schedule constraints (e.g., "Limited on weekdays, more time on weekends")',
             },
+            daily_training_hours: {
+              type: 'object',
+              description:
+                'Per-day max training time in hours. Use 0 for rest days. ONLY include keys for days the athlete has clarified. Critical for plan building — the validator uses this to size each day\'s workout, so capture it whenever the athlete tells you their schedule. Example: { "monday": 1, "tuesday": 1.5, "wednesday": 0, "thursday": 1.5, "friday": 0, "saturday": 4, "sunday": 2 }',
+              properties: {
+                monday: { type: 'number' },
+                tuesday: { type: 'number' },
+                wednesday: { type: 'number' },
+                thursday: { type: 'number' },
+                friday: { type: 'number' },
+                saturday: { type: 'number' },
+                sunday: { type: 'number' },
+              },
+            },
             intensity_preference: {
               type: 'string',
               description: 'Intensity preference (e.g., "prefers-hard-efforts", "prefers-volume")',

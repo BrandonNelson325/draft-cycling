@@ -104,6 +104,21 @@ export const aiToolExecutor = {
             result = await this.getWorkoutTemplates(toolCall.input);
             break;
           case 'schedule_plan_from_templates': {
+            // Hard safety net: before queueing, verify the plan's weekly
+            // volume actually matches the athlete's stated weekly_training_hours.
+            // The system prompt tells the AI to do this math itself, but it
+            // often picks all-60-minute templates and ends up short. Rejecting
+            // here forces it to re-call with longer rides in the same turn.
+            const volumeCheck = await this.validatePlanVolume(athleteId, toolCall.input);
+            if (!volumeCheck.ok) {
+              result = {
+                success: false,
+                error: volumeCheck.error,
+                weekly_hours_summary: volumeCheck.summary,
+              };
+              break;
+            }
+
             // Plan builds are slow (20-60 workouts, often 60-180s end-to-end).
             // Enqueue as a background job and return immediately so the chat
             // doesn't block the HTTP request past Railway's 5min upstream
@@ -655,6 +670,134 @@ export const aiToolExecutor = {
       })),
       note: 'Use schedule_plan_from_templates with these IDs and dates to build a full plan in one call.',
     };
+  },
+
+  /**
+   * Verify the plan's weekly volume actually matches the athlete's stated
+   * weekly_training_hours BEFORE queueing the build. Returns { ok: true } if
+   * the math works, or { ok: false, error, summary } if the AI under-scheduled.
+   *
+   * Rules:
+   *   - The athlete's PEAK week (not the average) must reach at least 85%
+   *     of stated weekly hours. Recovery / ramp / taper weeks are allowed
+   *     to be lower; the peak proves the plan can actually fill the time.
+   *   - If weekly_training_hours isn't set on the athlete, skip the check.
+   */
+  async validatePlanVolume(
+    athleteId: string,
+    input: any
+  ): Promise<{ ok: true } | { ok: false; error: string; summary?: Record<string, number> }> {
+    try {
+      const { workouts } = input as { workouts?: { template_id: string; date: string }[] };
+      if (!workouts || workouts.length === 0) return { ok: true };
+
+      const [{ data: athlete }, prefs] = await Promise.all([
+        supabaseAdmin
+          .from('athletes')
+          .select('weekly_training_hours')
+          .eq('id', athleteId)
+          .single(),
+        athletePreferencesService.getPreferences(athleteId),
+      ]);
+
+      const targetHours = athlete?.weekly_training_hours;
+      const dailyHours = prefs.daily_training_hours;
+
+      // No availability data of any kind → nothing to validate against.
+      if (!targetHours && !dailyHours) return { ok: true };
+
+      const templateIds = [...new Set(workouts.map(w => w.template_id))];
+      const { data: templates } = await supabaseAdmin
+        .from('workout_templates')
+        .select('id, duration_minutes')
+        .in('id', templateIds);
+      const durationByTemplate = new Map<string, number>(
+        (templates || []).map(t => [t.id as string, (t.duration_minutes as number) || 0])
+      );
+
+      const dayNameOf = (dateStr: string): keyof NonNullable<typeof dailyHours> => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const names = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'] as const;
+        return names[new Date(y, m - 1, d).getDay()] as any;
+      };
+
+      // PRIORITY 1: per-day availability. If the athlete has it set, each
+      // scheduled workout must fit within that day's available time.
+      // No assumptions about weekend being long — go entirely by what they said.
+      if (dailyHours) {
+        const violations: string[] = [];
+        const oversBuffer = 0.1; // tolerate 10% over (e.g., 65 min on a 60-min day)
+        for (const w of workouts) {
+          const day = dayNameOf(w.date);
+          const cap = dailyHours[day];
+          if (cap == null) continue; // unspecified day → no cap
+          const minutes = durationByTemplate.get(w.template_id) || 0;
+          const hours = minutes / 60;
+          if (cap === 0 && minutes > 0) {
+            violations.push(`${w.date} (${day}) is a rest day but a ${minutes}-min workout was scheduled`);
+          } else if (cap > 0 && hours > cap * (1 + oversBuffer)) {
+            violations.push(`${w.date} (${day}) has ${cap}h available but you scheduled a ${(hours).toFixed(1)}h workout`);
+          }
+        }
+        if (violations.length > 0) {
+          return {
+            ok: false,
+            error:
+              `Some workouts don't match the athlete's stated per-day availability:\n  - ${violations.join('\n  - ')}\n\n` +
+              `Pick templates whose duration fits each day's cap. Do not exceed the per-day time. ` +
+              `Re-call schedule_plan_from_templates with corrected durations.`,
+          };
+        }
+        return { ok: true };
+      }
+
+      // PRIORITY 2: fallback to total weekly hours when per-day isn't set.
+      // Check that the peak week reaches at least 85% of stated weekly_training_hours.
+      // No assumption about WHICH day is the long ride — just that the math sums.
+      if (!targetHours || targetHours <= 0) return { ok: true };
+
+      const isoWeekKey = (dateStr: string): string => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        const date = new Date(Date.UTC(y, m - 1, d));
+        date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+        const weekNum = Math.ceil(((date.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+        return `${date.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+      };
+
+      const minutesByWeek: Record<string, number> = {};
+      for (const w of workouts) {
+        const key = isoWeekKey(w.date);
+        minutesByWeek[key] = (minutesByWeek[key] || 0) + (durationByTemplate.get(w.template_id) || 0);
+      }
+      const hoursByWeek: Record<string, number> = Object.fromEntries(
+        Object.entries(minutesByWeek).map(([k, m]) => [k, Math.round((m / 60) * 10) / 10])
+      );
+
+      const peakWeek = Math.max(...Object.values(minutesByWeek)) / 60;
+      const requiredPeak = targetHours * 0.85;
+
+      if (peakWeek < requiredPeak) {
+        return {
+          ok: false,
+          error:
+            `Plan volume is too low. The athlete said they can train ${targetHours} hours/week, ` +
+            `but the peak week of this plan is only ${peakWeek.toFixed(1)} hours. ` +
+            `Required: at least ${requiredPeak.toFixed(1)} hours in the peak training week. ` +
+            `FIX by picking longer templates. Critically: you don't yet know WHICH days the ` +
+            `athlete has more time, so before retrying, ASK them which days they can ride longer ` +
+            `and which days are short. Save the answers via update_athlete_preferences with the ` +
+            `daily_training_hours field, then re-call schedule_plan_from_templates with workouts ` +
+            `that respect their per-day availability.`,
+          summary: hoursByWeek,
+        };
+      }
+
+      return { ok: true };
+    } catch (err: any) {
+      logger.warn('[ValidatePlanVolume] check failed (proceeding):', err.message);
+      return { ok: true };
+    }
   },
 
   /**

@@ -8,6 +8,21 @@ export interface AthletePreferences {
   event_date?: string;
   weekly_hours?: number;
   time_constraints?: string;
+  /**
+   * Per-day max training time in hours (0 = rest day). Keys are lowercase day
+   * names. When this is set, the plan-builder uses it directly to size each
+   * day's workout instead of guessing weekend = long. Example:
+   *   { monday: 1, tuesday: 1.5, wednesday: 0, thursday: 1.5, friday: 0, saturday: 4, sunday: 2 }
+   */
+  daily_training_hours?: {
+    monday?: number;
+    tuesday?: number;
+    wednesday?: number;
+    thursday?: number;
+    friday?: number;
+    saturday?: number;
+    sunday?: number;
+  };
   indoor_outdoor?: 'indoor' | 'outdoor' | 'both';
   zwift_available?: boolean;
   intensity_preference?: string;
@@ -143,6 +158,22 @@ export class AthletePreferencesService {
 
     if (preferences.weekly_hours) {
       formatted += `\n**Weekly Training Hours:** ${preferences.weekly_hours}`;
+    }
+
+    if (preferences.daily_training_hours) {
+      const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+      const lines: string[] = [];
+      let total = 0;
+      for (const d of days) {
+        const h = preferences.daily_training_hours[d];
+        if (h == null) continue;
+        const label = h === 0 ? 'rest' : `${h}h`;
+        lines.push(`${d.charAt(0).toUpperCase() + d.slice(1)}: ${label}`);
+        total += h;
+      }
+      if (lines.length > 0) {
+        formatted += `\n**Per-Day Available Time** (use these for plan durations, do NOT assume weekend = long ride):\n  ${lines.join(', ')}\n  → Total: ${total} hr/week`;
+      }
     }
 
     if (preferences.rest_days && preferences.rest_days.length > 0) {

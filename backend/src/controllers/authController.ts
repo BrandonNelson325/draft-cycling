@@ -311,3 +311,62 @@ export const updateProfile = async (req: AuthRequest, res: Response): Promise<vo
     res.status(500).json({ error: 'Failed to update profile', details: error.message });
   }
 };
+
+/**
+ * Permanently delete the authenticated user's account and all associated data.
+ * Required by App Store guideline 5.1.1(v) for apps that support account creation.
+ *
+ * Steps:
+ *   1. Best-effort cancel any active Stripe subscription so the user isn't
+ *      billed after their account is gone.
+ *   2. Delete the auth.users row via Supabase admin SDK. The athletes table FK
+ *      `id REFERENCES auth.users(id) ON DELETE CASCADE` wipes the athlete row,
+ *      which cascades all downstream tables (calendar_entries, workouts,
+ *      strava_activities, chat_*, daily_metrics, workout_syncs, training_*, etc.)
+ *      All those tables have `athlete_id REFERENCES athletes(id) ON DELETE CASCADE`.
+ *   3. Client should clear local tokens and route to the auth screen.
+ */
+export const deleteAccount = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const athleteId = req.user.id;
+
+    // Best-effort: cancel any active Stripe subscription before the customer
+    // row vanishes. Failures here don't block the deletion — better to have a
+    // dangling subscription we can clean up by hand than to keep a user's data
+    // around because Stripe was flaky.
+    try {
+      const { data: athlete } = await supabaseAdmin
+        .from('athletes')
+        .select('stripe_customer_id, stripe_subscription_id')
+        .eq('id', athleteId)
+        .single();
+
+      if (athlete?.stripe_subscription_id) {
+        const { stripe } = await import('../utils/stripe');
+        await stripe.subscriptions.cancel(athlete.stripe_subscription_id);
+        logger.info(`[DeleteAccount] Cancelled Stripe subscription for ${athleteId}`);
+      }
+    } catch (err: any) {
+      logger.warn(`[DeleteAccount] Stripe cancellation failed (non-blocking):`, err.message);
+    }
+
+    // Delete the auth user — cascades everything.
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(athleteId);
+    if (error) {
+      logger.error('[DeleteAccount] Supabase delete failed:', error);
+      res.status(500).json({ error: 'Failed to delete account. Please contact support.' });
+      return;
+    }
+
+    logger.info(`[DeleteAccount] Deleted account for athlete ${athleteId}`);
+    res.json({ success: true, message: 'Account deleted' });
+  } catch (error: any) {
+    logger.error('Delete account error:', error);
+    res.status(500).json({ error: 'Failed to delete account', details: error.message });
+  }
+};
