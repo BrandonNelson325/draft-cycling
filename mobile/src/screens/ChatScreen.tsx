@@ -114,8 +114,8 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     if (analyzingRoute || loading) return;
     try {
       const pick = await DocumentPicker.getDocumentAsync({
-        // GPX files don't have a single universal MIME type — we accept any
-        // and filter by extension after.
+        // GPX has no universal MIME type — accept any and validate by
+        // extension + content sniff below.
         type: ['application/gpx+xml', 'application/octet-stream', '*/*'],
         copyToCacheDirectory: true,
         multiple: false,
@@ -123,22 +123,48 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
       if (pick.canceled || !pick.assets?.[0]) return;
 
       const asset = pick.assets[0];
-      if (!asset.name.toLowerCase().endsWith('.gpx')) {
-        Alert.alert('Wrong file type', 'Please pick a .gpx route file.');
+      const lowerName = (asset.name || '').toLowerCase();
+
+      // Specific message for the most common wrong-file mistake: FIT routes.
+      if (lowerName.endsWith('.fit')) {
+        Alert.alert(
+          'FIT files not supported',
+          "We only support GPX routes right now. In Strava/Garmin Connect/Komoot, export your route as GPX instead and try again."
+        );
+        return;
+      }
+      if (!lowerName.endsWith('.gpx')) {
+        Alert.alert(
+          'Wrong file type',
+          'Please pick a .gpx route file. Most cycling platforms (Strava, Komoot, RWGPS, Garmin Connect) have a GPX export option.'
+        );
         return;
       }
 
       setAnalyzingRoute(true);
       const gpxContent = await FileSystem.readAsStringAsync(asset.uri);
+
+      // Content sniff: GPX is XML, must contain a <gpx tag near the top.
+      // Catches files that have a .gpx extension but aren't actually GPX
+      // (e.g. corrupt downloads, mislabelled FIT exports, empty files).
+      if (!gpxContent.slice(0, 4096).includes('<gpx')) {
+        Alert.alert(
+          'Not a valid GPX file',
+          "That file doesn't look like GPX content. Re-export your route from the source app and try again."
+        );
+        return;
+      }
+
       const analysis = await routeService.analyzeGpx(gpxContent, asset.name);
-      // Inline the analyzer's summary into the chat. The AI's system prompt
-      // doesn't need an update — the summary is plain text the AI reads
-      // naturally and uses to inform plan building.
       await sendMessage(analysis.summary);
     } catch (err: any) {
+      // Show the backend's actual error message rather than a generic
+      // "Could not analyze route" — far more diagnostic for the user.
+      const backendMessage =
+        err?.response?.data?.error || err?.response?.data?.message;
       Alert.alert(
         'Could not analyze route',
-        err?.message || 'Pick a valid GPX file and try again.'
+        backendMessage || err?.message || 'Pick a valid GPX file and try again.'
       );
     } finally {
       setAnalyzingRoute(false);

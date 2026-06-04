@@ -75,6 +75,9 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
     borderRadius: 16,
     padding: 12,
+    // Clamp markdown content so multi-paragraph + list combos don't visually
+    // bleed past the rounded corners.
+    overflow: 'hidden',
   },
   bubbleUser: {
     backgroundColor: '#1e3a5f',
