@@ -16,8 +16,8 @@ export const analyzeRoute = async (req: AuthRequest, res: Response): Promise<voi
       res.status(400).json({ error: 'gpx_content (string) is required' });
       return;
     }
-    if (gpx_content.length > 5 * 1024 * 1024) {
-      res.status(413).json({ error: 'GPX file too large (max 5MB)' });
+    if (gpx_content.length > 25 * 1024 * 1024) {
+      res.status(413).json({ error: 'GPX file too large (max 25MB)' });
       return;
     }
     if (!gpx_content.includes('<gpx')) {

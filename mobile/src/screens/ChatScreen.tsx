@@ -155,7 +155,17 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
         return;
       }
 
-      const analysis = await routeService.analyzeGpx(gpxContent, asset.name);
+      // Trim GPX down to only the data the analyzer reads (lat/lon/ele).
+      // <time>, <extensions>, <cmt>, <desc> nodes can multiply file size 3-5×
+      // on long routes — without these a 200-mile race route drops from ~12MB
+      // to ~2MB, well under the upload limit.
+      const trimmed = gpxContent
+        .replace(/<time>[\s\S]*?<\/time>/g, '')
+        .replace(/<extensions>[\s\S]*?<\/extensions>/g, '')
+        .replace(/<cmt>[\s\S]*?<\/cmt>/g, '')
+        .replace(/<desc>[\s\S]*?<\/desc>/g, '');
+
+      const analysis = await routeService.analyzeGpx(trimmed, asset.name);
       await sendMessage(analysis.summary);
     } catch (err: any) {
       // Show the backend's actual error message rather than a generic
