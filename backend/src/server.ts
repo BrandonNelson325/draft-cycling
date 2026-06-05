@@ -160,8 +160,15 @@ app.use(cors({
   credentials: true,
 }));
 
-// Body Parser
-app.use(express.json());
+// Body Parser. Skip the global parser for /api/routes/* — those endpoints
+// accept GPX file uploads embedded in JSON (can be 1-20MB on long routes)
+// and register their own larger-limit parser at the route level. Without
+// this skip, the default 100KB global parser rejects the upload before the
+// route-level parser ever runs.
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/routes/')) return next();
+  return express.json()(req, res, next);
+});
 
 // Health check with diagnostics
 app.get('/health', async (req, res) => {
