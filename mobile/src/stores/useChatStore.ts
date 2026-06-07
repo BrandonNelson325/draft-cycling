@@ -15,6 +15,8 @@ interface ChatStore {
   sendMessage: (message: string) => Promise<void>;
   clearActiveConversation: () => void;
   deleteConversation: (id: string) => Promise<void>;
+  refreshActiveMessages: () => Promise<void>;
+  pollForBackgroundUpdates: (conversationId: string) => void;
 }
 
 export const useChatStore = create<ChatStore>((set, get) => ({
@@ -158,6 +160,13 @@ export const useChatStore = create<ChatStore>((set, get) => ({
                 toolStatus: null,
                 loading: false,
               });
+
+              // If the coach said the plan is building in the background, the
+              // real result message lands in the DB shortly. Poll so it shows
+              // up even if the user stays on this screen.
+              if (/background|building|on your calendar|notif/i.test(accumulatedContent)) {
+                get().pollForBackgroundUpdates(conversationId);
+              }
             } else {
               set({ streamingContent: '', toolStatus: null, loading: false });
             }
@@ -166,18 +175,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
             get().loadConversations();
           },
 
-          onError: (error: string) => {
+          onError: async (error: string) => {
             console.error('Stream error:', error);
-            // Remove optimistic user message on error
-            if (conversationId) {
-              set({
-                messages: {
-                  ...get().messages,
-                  [conversationId]: (get().messages[conversationId] || []).filter(
-                    (m) => m.id !== userTempId
-                  ),
-                },
-              });
+            // DO NOT wipe the turn. The backend persists the user message
+            // immediately and (on its own graceful-recovery path) an assistant
+            // message too, so the source of truth is the DB. Refetch it so the
+            // user keeps their message + whatever was saved — including a
+            // background plan-build message that may land shortly. Wiping here
+            // is what made plan builds look like they "dropped the whole
+            // conversation" and never tried.
+            const convId = conversationId || initialConversationId;
+            if (convId) {
+              try {
+                const serverMessages = await chatService.getMessages(convId);
+                if (serverMessages.length > 0) {
+                  set({ messages: { ...get().messages, [convId]: serverMessages } });
+                }
+              } catch (refetchErr) {
+                console.error('Failed to refetch messages after stream error:', refetchErr);
+              }
             }
             set({ streamingContent: '', toolStatus: null, loading: false });
           },
@@ -235,6 +251,54 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         throw fallbackError;
       }
     }
+  },
+
+  /**
+   * Cache-bypassing refetch of the active conversation's messages. Used on
+   * screen focus and by the background-build poll so messages written by a
+   * background plan job (or a server-side graceful-recovery message) surface
+   * even though selectConversation caches by default.
+   */
+  refreshActiveMessages: async () => {
+    const convId = get().activeConversationId;
+    if (!convId) return;
+    try {
+      const serverMessages = await chatService.getMessages(convId);
+      if (serverMessages.length > 0) {
+        set({ messages: { ...get().messages, [convId]: serverMessages } });
+      }
+    } catch (err) {
+      console.error('Failed to refresh active messages:', err);
+    }
+  },
+
+  /**
+   * Plan builds run as a background job that writes its result message to the
+   * DB when finished (30s-2min later). If the user stays on the chat screen,
+   * nothing would update without this. Poll a handful of times, merging in any
+   * new server messages, then stop. Idempotent-ish: callers gate on a
+   * background-build hint so we don't poll on every message.
+   */
+  pollForBackgroundUpdates: (conversationId: string) => {
+    let attempts = 0;
+    const maxAttempts = 12; // 12 × 12s = ~2.5 min coverage
+    const tick = async () => {
+      attempts++;
+      try {
+        const serverMessages = await chatService.getMessages(conversationId);
+        const localCount = (get().messages[conversationId] || []).length;
+        if (serverMessages.length > localCount) {
+          set({ messages: { ...get().messages, [conversationId]: serverMessages } });
+          return; // new message landed (the plan result) — stop polling
+        }
+      } catch {
+        // ignore transient errors, keep polling
+      }
+      if (attempts < maxAttempts) {
+        setTimeout(tick, 12000);
+      }
+    };
+    setTimeout(tick, 12000);
   },
 
   clearActiveConversation: () => {

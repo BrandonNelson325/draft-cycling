@@ -588,18 +588,22 @@ export const aiToolExecutor = {
     const [year, month, day] = input.event_date.split('-').map(Number);
     const eventDate = new Date(year, month - 1, day);
 
-    // Build training plan config
+    // Build training plan config. daily_hours (per-day availability) is
+    // preferred — it lets the deterministic generator size each day's ride to
+    // the rider's actual time and put the long ride on their biggest day.
     const config = {
       goal_event: input.goal_event,
       event_date: eventDate,
-      current_fitness_level: input.current_fitness_level,
-      weekly_hours: input.weekly_hours,
+      current_fitness_level: input.current_fitness_level || 'intermediate',
+      weekly_hours: input.weekly_hours || 0,
       strengths: input.strengths || [],
       weaknesses: input.weaknesses || [],
       preferences: {
         indoor_outdoor: input.indoor_outdoor || 'both',
         zwift_availability: input.zwift_availability || false,
       },
+      daily_hours: input.daily_hours,
+      start_date: input.start_date,
     };
 
     // Generate the plan

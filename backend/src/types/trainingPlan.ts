@@ -1,6 +1,15 @@
 export type FitnessLevel = 'beginner' | 'intermediate' | 'advanced';
 export type TrainingPhase = 'base' | 'build' | 'peak' | 'taper';
 
+export type DayName =
+  | 'sunday'
+  | 'monday'
+  | 'tuesday'
+  | 'wednesday'
+  | 'thursday'
+  | 'friday'
+  | 'saturday';
+
 export interface TrainingPlanConfig {
   goal_event: string;
   event_date: Date;
@@ -12,6 +21,15 @@ export interface TrainingPlanConfig {
     indoor_outdoor: 'indoor' | 'outdoor' | 'both';
     zwift_availability: boolean;
   };
+  /**
+   * Per-day available training hours. When present, the generator places each
+   * workout on a day the athlete actually has time and caps its duration at
+   * that day's available hours — the long ride goes on the day with the MOST
+   * time (never assumes weekends). Days omitted or set to 0 are rest days.
+   */
+  daily_hours?: Partial<Record<DayName, number>>;
+  /** Explicit plan start (YYYY-MM-DD). Defaults to the next Monday when daily_hours is set. */
+  start_date?: string;
 }
 
 export interface WorkoutTemplate {

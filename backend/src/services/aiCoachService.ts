@@ -722,6 +722,13 @@ ${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 - Do NOT always default to suggesting a recovery ride. Sometimes the best coaching decision is no ride at all.
 - A recovery week should include 1-2 full rest days, not just easy rides every day.
 
+**OVERTRAINING — PROPOSE A CALENDAR MOVE, DON'T JUST WARN:**
+This is core to your job. When the data shows the athlete is digging a hole — ACWR persistently high (>1.4 for most, >1.5 for advanced), CTL/ATL climbing with no recovery, several hard days with no easy/rest in between, a string of high-RPE rides, or repeated poor sleep/readiness — do NOT just say "be careful." A real coach acts:
+1. Name what you see, specifically ("Your fatigue has been climbing for 10 days and you've ridden hard 5 of the last 6 days").
+2. PROPOSE a concrete calendar change — insert a rest day, swap the next hard session for recovery, or move a key workout back a day or two — with the reasoning.
+3. End with a yes/no. On confirmation, make the change with move_workout / schedule_rest_day / delete_workout_from_calendar (this is the ADAPT-THE-PLAN flow: propose → confirm → act; never change the calendar unilaterally).
+Pushing back is the value you add. If they want to train through it and you think it's a mistake, say so plainly — then respect their call. You advise; they decide.
+
 **PROACTIVE COACHING:**
 - When they ask "what should I do tomorrow?", FIRST analyze their recent rides to understand context
 - Reference their recent power outputs, duration patterns, and training consistency
@@ -937,6 +944,18 @@ When asked for "a workout for tomorrow" or "what should I do Wednesday":
 - Explicit build request ("Build me a plan", "Create a training plan", "Schedule my workouts for the next X weeks") → Gather any missing info (event date, rest days), then build
 - Athlete shares an event or goal without explicitly asking to build ("I have a race April 22", "I want to train for a camp", "I want to do 10 hrs/week") → Acknowledge their goal, briefly describe the approach you'd take (phases, weekly structure), and ask if they'd like you to build it — **do NOT start building until they confirm**
 
+**HOW TO BUILD A FULL MULTI-WEEK PLAN — ONE TOOL CALL, NO LOOPS:**
+For any full custom multi-week plan (including a plan built around a GPX route), use **generate_training_plan** and call it EXACTLY ONCE. Do NOT call get_workout_templates and do NOT assemble a list of template IDs for a full plan — that path is slow and unreliable. generate_training_plan builds the entire periodized plan deterministically in the background.
+
+Before calling it, make sure you have (ask only for what's missing — check the athlete profile/preferences first):
+1. Goal event + event date
+2. **Per-day available time** — how many hours they can ride on EACH day, and which days are off. This drives everything. Do NOT assume weekends are long; ASK. Pass it as the \`daily_hours\` object (e.g. {"monday":1.5,"tuesday":2,...,"saturday":5,"sunday":0}).
+3. FTP must be set (it almost always is; if not, handle FTP first).
+
+**REST DAYS — RECOMMEND, DON'T OVERRIDE:** If the athlete gives availability for all 7 days (no day off), build it if that's truly what they want, but FIRST push back briefly: at least one full rest day per week is recommended for recovery and adaptation, and ask if they'd like to keep one day off. If they confirm they want all 7, proceed — the plan automatically builds in genuine easy/recovery rides (short active-recovery spins the day after hard work) so the load is still manageable. The athlete decides; you make sure they decide informed.
+
+Then call generate_training_plan once with goal_event, event_date, and daily_hours. It returns status:"queued" immediately — tell the athlete the plan is building in the background and they'll be notified when it's ready. Never claim it's already on the calendar. The plan is deliberate: hard days may run back-to-back on purpose (overload), with active recovery placed right after — that's intentional, not a mistake.
+
 **Confirming before building:** When someone shares training intentions or an upcoming event, treat it as sharing context, not as a build request. Respond conversationally: summarize your understanding of their goal, sketch the broad plan you'd design, and ask something like "Want me to put this together for you?" or "Ready to build this out?" Only proceed once they say yes (or give an equivalent clear go-ahead).
 
 **GOLDEN RULE:** The more specific their request, the fewer questions you ask. Use your intelligence and the rich context you already have! But NEVER build a multi-week plan without the athlete confirming they want it.
@@ -1129,11 +1148,13 @@ Mon: Rest | Tue: Sweet spot 60min | Wed: Tempo 75min | Thu: Sweet spot 60min | F
 
 ### Training Plan Building
 
-**WORKFLOW (2 tool calls total):**
-1. get_workout_templates — fetch all templates (call once or twice by type), note their IDs, types, TSS, duration
-2. schedule_plan_from_templates — pass goal_event, event_date, and the complete list of {template_id, date, phase} pairs for the entire plan in ONE call. ALWAYS include goal_event and event_date so the plan appears on the Training Plan page.
+**FULL MULTI-WEEK PLANS — ONE tool call:**
+Use **generate_training_plan** and call it once with goal_event, event_date, and the athlete's per-day availability (\`daily_hours\`). The whole periodized plan is built deterministically in the background. Do NOT fetch templates or build a {template_id, date} list for a full plan — that older path is slow and fails. See "HOW TO BUILD A FULL MULTI-WEEK PLAN" above.
 
-Never call create_workout or schedule_workout in a loop for plan building — use schedule_plan_from_templates.
+**Hand-picking a few specific workouts (NOT a full plan):**
+Only when the athlete wants to place a handful of individual sessions yourself: get_workout_templates → schedule_plan_from_templates with the {template_id, date, phase} list.
+
+Never call create_workout or schedule_workout in a loop for plan building.
 
 ### Pre-Built Training Plans
 
@@ -1909,7 +1930,7 @@ Format it clearly so I can follow it during my ride.`;
         const toolResults = await Promise.race([
           aiToolExecutor.executeTools(athleteId, toolCalls as any, convId),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Tool execution timed out after 60s')), 60000)
+            setTimeout(() => reject(new Error('Tool execution timed out after 90s')), 90000)
           ),
         ]);
 
@@ -1936,7 +1957,7 @@ Format it clearly so I can follow it during my ride.`;
             betas: ['advisor-tool-2026-03-01'],
           }),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('AI response timed out after 45s')), 45000)
+            setTimeout(() => reject(new Error('AI response timed out after 120s')), 120000)
           ),
         ]);
       }
@@ -2120,6 +2141,11 @@ Format it clearly so I can follow it during my ride.`;
     clientDate: string | undefined,
     onEvent: (event: Record<string, any>) => void
   ): Promise<void> {
+    // Hoisted to function scope so the catch block can recover gracefully:
+    // persist whatever was streamed + a coherent message, rather than letting
+    // the client wipe the whole turn on error. See the catch at the bottom.
+    let convId: string = conversationId || '';
+    let streamedText = '';
     try {
       // Fast-path: the "Create custom plan" button on the Plans tab sends the
       // exact message below to start a guided plan-setup flow. There is no
@@ -2166,8 +2192,7 @@ Format it clearly so I can follow it during my ride.`;
       // and understanding planned vs completed workouts. Haiku is too weak.
       const model = SONNET;
 
-      // Get or create conversation
-      let convId: string = conversationId || '';
+      // Get or create conversation (convId hoisted to function scope above)
       if (!conversationId) {
         const { data: newConv } = await supabaseAdmin
           .from('chat_conversations')
@@ -2213,7 +2238,6 @@ Format it clearly so I can follow it during my ride.`;
         betas: ['advisor-tool-2026-03-01'],
       });
 
-      let streamedText = '';
       let hasTools = false;
 
       for await (const event of firstStream) {
@@ -2271,18 +2295,24 @@ Format it clearly so I can follow it during my ride.`;
             (b: any) => b.type === 'tool_use'
           ) as any[];
 
-          // Timeout each tool execution at 60s to prevent infinite hangs
+          // Timeout each tool execution at 90s. Plan builds enqueue a
+          // background job and return fast, so the only thing this guards is a
+          // genuinely stuck DB/network call. The SSE keepalive (every 10s)
+          // keeps the connection alive regardless.
           const toolResults = await Promise.race([
             aiToolExecutor.executeTools(athleteId, toolCalls, convId),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Tool execution timed out after 60s')), 60000)
+              setTimeout(() => reject(new Error('Tool execution timed out after 90s')), 90000)
             ),
           ]);
 
           conversationMessages.push({ role: 'assistant', content: finalResponse.content });
           conversationMessages.push({ role: 'user', content: toolResults });
 
-          // Timeout Claude API calls at 45s
+          // Timeout Claude API calls at 120s. The first call already streamed
+          // (fast first token); these follow-up calls carry the full GPX route
+          // context + tool results, which legitimately take longer. 45s was too
+          // aggressive and was the primary cause of plan builds failing mid-loop.
           finalResponse = await Promise.race([
             anthropic.beta.messages.create({
               model: SONNET,
@@ -2293,7 +2323,7 @@ Format it clearly so I can follow it during my ride.`;
               betas: ['advisor-tool-2026-03-01'],
             }),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('AI response timed out after 45s')), 45000)
+              setTimeout(() => reject(new Error('AI response timed out after 120s')), 120000)
             ),
           ]);
         }
@@ -2359,8 +2389,71 @@ Format it clearly so I can follow it during my ride.`;
       onEvent({ type: 'done' });
     } catch (error: any) {
       logger.error('Error in chatStream:', error);
-      onEvent({ type: 'error', error: error.message || 'Unknown error' });
-      throw error;
+
+      // GRACEFUL RECOVERY — never leave the user with a wiped, blank turn.
+      // The client's onError handler clears the optimistic UI, so if we just
+      // emit 'error' the user loses everything they saw (including the text we
+      // already streamed) and it looks like the chat "dropped" the whole
+      // conversation. Instead, persist a coherent assistant message and emit
+      // 'done' so the client commits it. A background plan job (if one was
+      // enqueued before the failure) keeps running and posts its own message
+      // when finished.
+      try {
+        if (!convId) {
+          // Failed before we even had a conversation — nothing to persist.
+          onEvent({ type: 'error', error: error.message || 'Unknown error' });
+          return;
+        }
+
+        const jobPending = await this.hasRecentPlanJob(convId, athleteId);
+        const prefix = streamedText.trim() ? '\n\n' : '';
+        let recoveryText: string;
+
+        if (jobPending) {
+          recoveryText =
+            `${prefix}Your plan is building in the background — I'll post it right here when it's ready ` +
+            `(usually 1-2 minutes). You can leave this screen; it'll keep going and you'll get a notification.`;
+        } else {
+          recoveryText =
+            `${prefix}I ran into a snag finishing that and didn't change anything on your calendar. ` +
+            `Nothing was lost — just tell me to "go ahead" and I'll pick it back up.`;
+        }
+
+        // Stream the recovery text so the client's accumulated buffer (and the
+        // committed message on 'done') includes it.
+        onEvent({ type: 'token', text: recoveryText });
+
+        const fullAssistant = `${streamedText}${recoveryText}`.trim();
+        await this.persistAssistantMessage(convId, athleteId, fullAssistant);
+        onEvent({ type: 'done' });
+      } catch (recoveryErr) {
+        logger.error('chatStream graceful recovery failed:', recoveryErr);
+        onEvent({ type: 'error', error: error.message || 'Unknown error' });
+      }
+      // Do NOT re-throw — recovery handled the client-facing outcome.
+    }
+  },
+
+  /**
+   * Did a plan-build background job get enqueued for this conversation very
+   * recently? Used by chatStream's recovery path to decide whether to tell the
+   * athlete "your plan is building in the background" vs "nothing changed, retry".
+   */
+  async hasRecentPlanJob(conversationId: string, athleteId: string): Promise<boolean> {
+    try {
+      const twoMinAgo = new Date(Date.now() - 2 * 60 * 1000).toISOString();
+      const { data } = await supabaseAdmin
+        .from('training_plan_jobs')
+        .select('id, status')
+        .eq('conversation_id', conversationId)
+        .eq('athlete_id', athleteId)
+        .gte('created_at', twoMinAgo)
+        .in('status', ['queued', 'running', 'completed'])
+        .limit(1);
+      return !!(data && data.length > 0);
+    } catch (err) {
+      logger.warn('[hasRecentPlanJob] lookup failed:', err);
+      return false;
     }
   },
 

@@ -12,7 +12,186 @@ import {
   PhaseDurations,
   TrainingPhase,
   FitnessLevel,
+  DayName,
 } from '../types/trainingPlan';
+
+const DAY_NAMES: DayName[] = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+
+/**
+ * Parse a YYYY-MM-DD plan date at local noon to avoid UTC/DST off-by-one shifts.
+ */
+export function parsePlanDate(iso: string): Date {
+  return new Date(iso + 'T12:00:00');
+}
+
+/**
+ * The next Monday strictly after `todayIso` (so a plan always starts on a clean
+ * future week boundary, never mid-week or in the past).
+ */
+export function nextMondayIso(todayIso: string): string {
+  const d = parsePlanDate(todayIso);
+  const day = d.getDay(); // 0=Sun..6=Sat
+  const daysUntilMonday = ((8 - day) % 7) || 7; // always 1-7, never 0 (next Monday, not today)
+  d.setDate(d.getDate() + daysUntilMonday);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+/**
+ * The actual calendar date for a plan workout. Weeks are anchored to the SUNDAY
+ * of the start week, so day_of_week (0=Sun..6=Sat) maps to the real weekday —
+ * NOT a raw offset from start_date (which only worked if start was a Sunday).
+ */
+export function workoutDateFor(startIso: string, weekNumber: number, dayOfWeek: number): Date {
+  const start = parsePlanDate(startIso);
+  const anchorSunday = new Date(start);
+  anchorSunday.setDate(anchorSunday.getDate() - anchorSunday.getDay()); // back up to Sunday
+  const d = new Date(anchorSunday);
+  d.setDate(d.getDate() + (weekNumber - 1) * 7 + dayOfWeek);
+  return d;
+}
+
+/**
+ * Convert a per-day-hours map into the list of trainable days, sorted by
+ * available time (most first). Days with no/zero hours are rest days and are
+ * excluded. Deterministic tie-break by day number.
+ */
+export function availableDaysFromDailyHours(
+  daily: Partial<Record<DayName, number>>
+): { day: number; cap: number }[] {
+  const out: { day: number; cap: number }[] = [];
+  DAY_NAMES.forEach((name, idx) => {
+    const cap = daily[name];
+    if (typeof cap === 'number' && cap > 0) out.push({ day: idx, cap });
+  });
+  out.sort((a, b) => b.cap - a.cap || a.day - b.day);
+  return out;
+}
+
+/**
+ * Scale a workout's intervals proportionally so the ride actually lasts
+ * `durationMinutes` (keeps warmup/work/cooldown ratios intact).
+ */
+function scaleWorkoutToDuration(workout: WorkoutTemplate, durationMinutes: number): WorkoutTemplate {
+  const intervals = workout.intervals || [];
+  const totalSec = intervals.reduce((s: number, iv: any) => s + (iv.duration || 0), 0);
+  const targetSec = durationMinutes * 60;
+  if (totalSec > 0 && targetSec > 0) {
+    const scale = targetSec / totalSec;
+    const scaled = intervals.map((iv: any) => ({
+      ...iv,
+      duration: Math.max(30, Math.round((iv.duration || 0) * scale)),
+    }));
+    return { ...workout, duration_minutes: durationMinutes, intervals: scaled };
+  }
+  return { ...workout, duration_minutes: durationMinutes };
+}
+
+/** Representative intensity factor per workout type, for TSS estimation. */
+function intensityFactorFor(type: string): number {
+  switch (type) {
+    case 'recovery': return 0.55;
+    case 'endurance': return 0.70;
+    case 'long': return 0.70;
+    case 'tempo': return 0.82;
+    case 'threshold': return 0.93;
+    case 'vo2max': return 1.06;
+    default: return 0.75;
+  }
+}
+
+/**
+ * Build a structured interval list that sums EXACTLY to durationMinutes. Warmup
+ * + work + cooldown; for interval types the work portion is broken into
+ * work/recovery repeats (so a "threshold" ride isn't one impossible 90-min
+ * block). The remainder is always absorbed as easy spinning so totals are exact.
+ */
+function buildIntervalsForType(type: string, durationMinutes: number): any[] {
+  const total = durationMinutes * 60;
+  const warm = Math.min(600, Math.round(total * 0.15));
+  const cool = Math.min(300, Math.round(total * 0.1));
+  let workSec = total - warm - cool;
+  if (workSec < 60) return [{ duration: total, power: 58, type: 'work' }]; // tiny ride: just spin
+
+  const out: any[] = [{ duration: warm, power: 60, type: 'warmup' }];
+
+  const repeats = (workLen: number, workPower: number, restLen: number, restPower: number) => {
+    let remaining = workSec;
+    while (remaining >= workLen + restLen) {
+      out.push({ duration: workLen, power: workPower, type: 'work' });
+      out.push({ duration: restLen, power: restPower, type: 'rest' });
+      remaining -= workLen + restLen;
+    }
+    if (remaining > 0) out.push({ duration: remaining, power: restPower, type: 'rest' });
+  };
+
+  switch (type) {
+    case 'threshold': repeats(480, 93, 180, 60); break;       // 8-min threshold reps
+    case 'vo2max': repeats(180, 110, 120, 55); break;         // 3-min VO2 reps
+    case 'tempo': repeats(900, 82, 180, 62); break;           // 15-min tempo blocks
+    case 'recovery': out.push({ duration: workSec, power: 55, type: 'work' }); break;
+    default: out.push({ duration: workSec, power: 70, type: 'work' }); break; // endurance/long
+  }
+
+  out.push({ duration: cool, power: 55, type: 'cooldown' });
+  return out;
+}
+
+const TYPE_LABELS: Record<string, { name: string; description: string }> = {
+  long: { name: 'Long Endurance Ride', description: 'Extended aerobic Zone 2 — your biggest day' },
+  endurance: { name: 'Endurance Ride', description: 'Steady aerobic Zone 2 to build volume' },
+  recovery: { name: 'Recovery Spin', description: 'Very easy spin to promote recovery' },
+  tempo: { name: 'Tempo Ride', description: 'Sustained Zone 3 tempo blocks' },
+  threshold: { name: 'Threshold Intervals', description: 'Sub/at-threshold intervals to lift FTP' },
+  vo2max: { name: 'VO2max Intervals', description: 'High-intensity 3-min VO2max efforts' },
+};
+
+/** Build one workout of a given type, sized to durationMinutes, on a given day. */
+function buildWorkout(type: string, durationMinutes: number, dayOfWeek: number, rationale?: string): WorkoutTemplate {
+  const label = TYPE_LABELS[type] || TYPE_LABELS.endurance;
+  const workoutType = type === 'long' ? 'endurance' : type;
+  return {
+    name: label.name,
+    description: label.description,
+    workout_type: workoutType,
+    duration_minutes: durationMinutes,
+    day_of_week: dayOfWeek,
+    intervals: buildIntervalsForType(type, durationMinutes),
+    rationale,
+  };
+}
+
+/**
+ * Re-place a week's workouts onto the athlete's actually-available days and cap
+ * each workout at that day's available time. The longest workout (the long
+ * ride) goes to the day with the MOST time — never assumes weekends. Workouts
+ * beyond the number of available days are dropped. This is the core guarantee
+ * that the plan matches the rider's stated per-day availability.
+ */
+export function applyDailyHourCaps(
+  workouts: WorkoutTemplate[],
+  availableDays: { day: number; cap: number }[],
+  minDuration: number
+): WorkoutTemplate[] {
+  if (availableDays.length === 0) return [];
+  const bySize = [...workouts].sort((a, b) => b.duration_minutes - a.duration_minutes);
+  const placed: WorkoutTemplate[] = [];
+
+  for (let i = 0; i < bySize.length && i < availableDays.length; i++) {
+    const { day, cap } = availableDays[i];
+    const capMin = Math.floor(cap * 60);
+    let dur = Math.round(Math.min(bySize[i].duration_minutes, capMin) / 5) * 5;
+    if (dur > capMin) dur -= 5; // rounding must never exceed the cap
+    const floor = Math.min(minDuration, capMin);
+    if (dur < floor) dur = floor;
+    placed.push(scaleWorkoutToDuration({ ...bySize[i], day_of_week: day }, dur));
+  }
+
+  placed.sort((a, b) => a.day_of_week - b.day_of_week); // stable display order
+  return placed;
+}
 
 /**
  * Minimum workout duration based on weekly hours target.
@@ -84,6 +263,15 @@ export const trainingPlanService = {
     const preferences = await athletePreferencesService.getPreferences(athleteId);
     const restDays = preferences.rest_days || [];
 
+    // Per-day availability drives everything when provided: derive the weekly
+    // hours target from the sum of daily caps so the volume math lines up, then
+    // we cap each workout per-day after generation (see applyDailyHourCaps).
+    const availableDays = config.daily_hours ? availableDaysFromDailyHours(config.daily_hours) : [];
+    if (availableDays.length > 0) {
+      const sum = availableDays.reduce((s, d) => s + d.cap, 0);
+      if (sum > 0) config.weekly_hours = sum;
+    }
+
     // Calculate weeks until event
     const weeksUntilEvent = this.calculateWeeks(config.event_date);
 
@@ -97,15 +285,31 @@ export const trainingPlanService = {
     // Get current CTL (chronic training load) to base plan off current fitness
     const currentCTL = await this.estimateCurrentCTL(athleteId);
 
-    // Generate week-by-week structure
-    const weeks = this.generateWeeklyStructure(
-      athleteId,
-      athlete.ftp,
-      config,
-      phases,
-      currentCTL,
-      restDays  // Pass rest days
-    );
+    // Generate week-by-week structure.
+    let weeks: TrainingWeek[];
+    if (availableDays.length > 0) {
+      // PER-DAY PATH (preferred): build each week directly from the athlete's
+      // stated per-day availability. Every available day is trained, every
+      // week. Volume across weeks (base ramp → recovery dip → taper) is handled
+      // by scaling each day's ride as (that day's hours × the week's volume
+      // factor) — NOT by dropping days. This is fully dynamic to availability.
+      weeks = this.generatePerDayWeeks(athlete.ftp, phases, availableDays);
+    } else {
+      const minDuration = getMinDuration(config.weekly_hours);
+      weeks = this.generateWeeklyStructure(athleteId, athlete.ftp, config, phases, currentCTL, restDays);
+    }
+
+    const tz = athlete.timezone || 'America/Los_Angeles';
+    const todayIso = (() => {
+      try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()); }
+      catch { return new Date().toISOString().split('T')[0]; }
+    })();
+
+    // Start date: explicit override wins; per-day plans start the upcoming
+    // Monday for clean whole weeks; otherwise today.
+    const startDate = config.start_date
+      ? config.start_date
+      : (availableDays.length > 0 ? nextMondayIso(todayIso) : todayIso);
 
     // Create plan object
     const plan: TrainingPlan = {
@@ -113,11 +317,7 @@ export const trainingPlanService = {
       athlete_id: athleteId,
       goal_event: config.goal_event,
       event_date: config.event_date.toISOString().split('T')[0],
-      start_date: (() => {
-        try {
-          return new Intl.DateTimeFormat('en-CA', { timeZone: athlete.timezone || 'America/Los_Angeles' }).format(new Date());
-        } catch { return new Date().toISOString().split('T')[0]; }
-      })(),
+      start_date: startDate,
       weeks,
       total_tss: weeks.reduce((sum, week) => sum + week.tss, 0),
       created_at: new Date().toISOString(),
@@ -173,6 +373,150 @@ export const trainingPlanService = {
         taper: Math.max(1, Math.min(2, totalWeeks - 3)), // At least 1 week, 2 if room
       };
     }
+  },
+
+  /**
+   * Per-day deterministic week builder. Trains EVERY day the athlete said they
+   * have time, every week — rest comes only from days they didn't give. Volume
+   * across the plan (base ramp → recovery dip → peak → taper) is expressed as a
+   * per-week "volume factor" applied to each day's available hours, so down
+   * weeks are lighter rides on the SAME days, never fewer days.
+   *
+   *   - The day with the MOST time gets the long ride (never assumes a weekend).
+   *   - Intensity sessions (threshold/VO2/tempo) go on the next-biggest days,
+   *     capped at 2h (you don't do a 5-hour threshold workout).
+   *   - All remaining available days are easy aerobic endurance.
+   *   - No ride ever exceeds that day's stated available time.
+   */
+  generatePerDayWeeks(
+    ftp: number,
+    phases: PhaseDurations,
+    availableDays: { day: number; cap: number }[] // pre-sorted by cap desc
+  ): TrainingWeek[] {
+    const STRUCTURED_MAX = 120; // minutes — cap on intensity-ride length
+    const round5 = (m: number) => Math.round(m / 5) * 5;
+
+    type RideKind = 'long' | 'intensity' | 'easy' | 'recovery';
+    const sizeDay = (cap: number, factor: number, kind: RideKind): number => {
+      const capMin = cap * 60;
+      const target =
+        kind === 'long' ? capMin * factor
+        : kind === 'intensity' ? Math.min(capMin, STRUCTURED_MAX) * factor
+        : kind === 'recovery' ? Math.min(capMin, 60) * factor // recovery is SHORT even on a big day
+        : capMin * factor * 0.9;
+      let d = round5(target);
+      if (d > capMin) d = Math.floor(capMin / 5) * 5;
+      const floor = Math.min(30, capMin);
+      if (d < floor) d = floor;
+      return d;
+    };
+
+    const rationaleFor = (kind: RideKind, type: string): string => {
+      switch (kind) {
+        case 'long': return 'Your day with the most time — long aerobic endurance to build the durability this goal demands.';
+        case 'recovery': return 'Deliberate easy recovery the day after hard work — flushes the legs and lets the hard sessions stick.';
+        case 'intensity':
+          return type === 'vo2max' ? 'VO2max intervals to raise your aerobic ceiling.'
+            : type === 'threshold' ? 'Threshold work to lift sustainable power (FTP).'
+            : 'Tempo to build aerobic strength without deep fatigue.';
+        default: return 'Aerobic endurance — adds volume without extra stress.';
+      }
+    };
+
+    const weeks: TrainingWeek[] = [];
+    let weekNumber = 1;
+
+    const pushWeek = (phase: TrainingPhase, factor: number, intensityTypes: string[], notes?: string) => {
+      // 1. Assign a role to each available day by time: the biggest day is the
+      //    long ride, the next-biggest are the phase's intensity sessions, the
+      //    rest start as easy endurance.
+      const roleByDay = new Map<number, { type: string; kind: RideKind; cap: number }>();
+      availableDays.forEach((d, idx) => {
+        if (idx === 0) { roleByDay.set(d.day, { type: 'long', kind: 'long', cap: d.cap }); return; }
+        const it = intensityTypes[idx - 1];
+        roleByDay.set(d.day, it
+          ? { type: it, kind: 'intensity', cap: d.cap }
+          : { type: 'endurance', kind: 'easy', cap: d.cap });
+      });
+
+      // 2. Place recovery DELIBERATELY: an easy day that immediately follows a
+      //    hard day (in weekday order) becomes a short recovery spin. Hard days
+      //    CAN run back-to-back (intentional overload) — but the day after a
+      //    hard block is active recovery, not just more endurance.
+      const ordered = [...availableDays].sort((a, b) => a.day - b.day);
+      for (let i = 1; i < ordered.length; i++) {
+        const cur = roleByDay.get(ordered[i].day)!;
+        const prev = roleByDay.get(ordered[i - 1].day)!;
+        const adjacent = ordered[i].day - ordered[i - 1].day === 1;
+        if (cur.kind === 'easy' && adjacent && (prev.kind === 'long' || prev.kind === 'intensity')) {
+          cur.kind = 'recovery';
+          cur.type = 'recovery';
+        }
+      }
+
+      // 3. If they train 6+ days a week, GUARANTEE at least one recovery ride.
+      //    Place it deliberately: prefer the day right after the long ride, then
+      //    any day after a hard day, then (on an all-easy recovery/taper week)
+      //    the lowest-time day.
+      if (availableDays.length >= 6 && ![...roleByDay.values()].some((r) => r.kind === 'recovery')) {
+        const easies = [...roleByDay.entries()].filter(([, r]) => r.kind === 'easy');
+        const longDay = availableDays[0].day;
+        let pick =
+          easies.find(([day]) => day === longDay + 1) ||
+          easies.find(([day]) => {
+            const prev = roleByDay.get(day - 1);
+            return prev && (prev.kind === 'long' || prev.kind === 'intensity');
+          }) ||
+          easies.sort((a, b) => a[1].cap - b[1].cap)[0];
+        if (pick) { pick[1].kind = 'recovery'; pick[1].type = 'recovery'; }
+      }
+
+      // 4. Build the workouts, each with a deliberate rationale.
+      const workouts: WorkoutTemplate[] = [];
+      for (const [day, r] of roleByDay) {
+        workouts.push(buildWorkout(r.type, sizeDay(r.cap, factor, r.kind), day, rationaleFor(r.kind, r.type)));
+      }
+      workouts.sort((a, b) => a.day_of_week - b.day_of_week);
+      const tss = Math.round(
+        workouts.reduce((s, w) => {
+          const IF = intensityFactorFor(w.workout_type);
+          return s + (w.duration_minutes / 60) * IF * IF * 100;
+        }, 0)
+      );
+      weeks.push({ week_number: weekNumber++, phase, tss, workouts, notes });
+    };
+
+    // BASE — 4-week blocks: 3 loading (ramping) + 1 recovery. One tempo quality day.
+    for (let i = 0; i < phases.base; i++) {
+      const pos = i % 4;
+      const isRec = pos === 3;
+      const factor = isRec ? 0.6 : [0.78, 0.86, 0.94][pos];
+      pushWeek('base', factor, isRec ? [] : ['tempo'],
+        isRec ? 'Recovery week — easy, reduced volume' : pos === 2 ? 'Peak loading week' : undefined);
+    }
+
+    // BUILD — 3-week blocks: 2 loading + 1 recovery. Threshold-focused.
+    for (let i = 0; i < phases.build; i++) {
+      const pos = i % 3;
+      const isRec = pos === 2;
+      const factor = isRec ? 0.62 : [0.9, 1.0][pos];
+      pushWeek('build', factor, isRec ? ['tempo'] : ['threshold', 'tempo', 'threshold'],
+        isRec ? 'Recovery week — easy, reduced volume' : pos === 1 ? 'Peak loading week' : undefined);
+    }
+
+    // PEAK — high intensity, near-full volume.
+    for (let i = 0; i < phases.peak; i++) {
+      const factor = Math.min(1.0, 0.95 + i * 0.02);
+      pushWeek('peak', factor, ['vo2max', 'threshold', 'tempo'], 'Peak phase — race-specific intensity');
+    }
+
+    // TAPER — same days, sharply reduced volume, keep a little intensity.
+    for (let i = 0; i < phases.taper; i++) {
+      const factor = Math.max(0.3, 0.55 - i * 0.12);
+      pushWeek('taper', factor, ['threshold'], 'Taper — sharpen and shed fatigue, lower volume');
+    }
+
+    return weeks;
   },
 
   /**
@@ -858,12 +1202,14 @@ export const trainingPlanService = {
     athleteId: string,
     plan: TrainingPlan
   ): Promise<{ scheduledCount: number; workoutIds: string[] }> {
-    const startDate = new Date(plan.start_date);
+    const start = parsePlanDate(plan.start_date);
 
-    // Flatten all week+workout combos so we can work with them as a flat list
-    const items = plan.weeks.flatMap((week) =>
-      week.workouts.map((wt) => ({ week, wt }))
-    );
+    // Flatten all week+workout combos, computing each one's REAL calendar date
+    // (weekday-anchored, not a raw offset). Drop anything before the start date
+    // — week 1 can legitimately have days earlier in the week than the start.
+    const items = plan.weeks
+      .flatMap((week) => week.workouts.map((wt) => ({ week, wt, date: workoutDateFor(plan.start_date, week.week_number, wt.day_of_week) })))
+      .filter((it) => it.date.getTime() >= start.getTime());
 
     // Step 1: Create all workouts in parallel (was sequential — big speedup for 20+ workout plans)
     const createdWorkouts = await Promise.all(
@@ -884,15 +1230,11 @@ export const trainingPlanService = {
     // Step 2: Schedule all calendar entries in parallel
     await Promise.all(
       createdWorkouts.map((workout, i) => {
-        const { week, wt } = items[i];
-        const weekOffset = week.week_number - 1;
-        const scheduledDate = new Date(startDate);
-        scheduledDate.setDate(scheduledDate.getDate() + weekOffset * 7 + wt.day_of_week);
-
+        const { week, wt, date } = items[i];
         return calendarService.scheduleWorkout(
           athleteId,
           workout.id,
-          scheduledDate,
+          date,
           wt.rationale || `Week ${week.week_number} - ${week.phase} phase: ${wt.name}`,
           plan.id,
           week.week_number
@@ -902,18 +1244,13 @@ export const trainingPlanService = {
 
     // Schedule rest days for all dates in the plan range without workouts
     try {
-      const workoutDates = new Set<string>();
-      createdWorkouts.forEach((_, i) => {
-        const { week, wt } = items[i];
-        const weekOffset = week.week_number - 1;
-        const d = new Date(startDate);
-        d.setDate(d.getDate() + weekOffset * 7 + wt.day_of_week);
-        workoutDates.add(d.toISOString().split('T')[0]);
-      });
+      const workoutDates = new Set<string>(
+        items.map((it) => it.date.toISOString().split('T')[0])
+      );
 
       const endDate = new Date(plan.event_date + 'T12:00:00');
       const restDayEntries: { athlete_id: string; workout_id: null; scheduled_date: string; entry_type: string; ai_rationale: string; completed: boolean }[] = [];
-      const cursor = new Date(startDate);
+      const cursor = new Date(start);
       while (cursor <= endDate) {
         const dateStr = cursor.toISOString().split('T')[0];
         if (!workoutDates.has(dateStr)) {

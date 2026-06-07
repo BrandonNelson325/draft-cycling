@@ -232,13 +232,13 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'generate_training_plan',
     description:
-      'Generate a fully custom AI-designed periodized plan from scratch. PREFER schedule_plan_from_templates or schedule_training_plan_template over this — they are faster, more reliable, and do not require the athlete to have an FTP set. Only use generate_training_plan when no suitable template fits AND the athlete has an FTP set. REQUIRES athlete FTP to be set; if not, ask the athlete to set their FTP first via update_athlete_ftp or recommend they ride a structured test before continuing. ASYNCHRONOUS — returns immediately with status:"queued" and a job_id; the build runs in the background (typically 60-120 seconds). The athlete gets a push notification + chat message when ready. Do NOT pretend the plan is already on the calendar when you receive a queued response.',
+      'Build a complete, periodized multi-week training plan in ONE call. This is the PREFERRED tool for any full custom plan — including plans built around a GPX route. The entire plan is generated DETERMINISTICALLY in the background (base/build/peak/taper, progressive overload, recovery weeks, each ride sized to the day the athlete actually has time). It does NOT require fetching workout templates and does NOT need a list of template IDs — just pass the high-level parameters below and call it ONCE. REQUIRES the athlete to have an FTP set; if not, set it first via update_athlete_ftp. ASYNCHRONOUS — returns immediately with status:"queued" and a job_id; the build runs in the background (usually under a minute) and the athlete gets a push notification + chat message when ready. Do NOT pretend the plan is already on the calendar when you receive a queued response. PREFER this over schedule_plan_from_templates for full multi-week plans — that template-list path is only for hand-picking individual workouts.',
     input_schema: {
       type: 'object',
       properties: {
         goal_event: {
           type: 'string',
-          description: 'The goal event (e.g., "Gran Fondo", "Century Ride", "Criterium Race")',
+          description: 'The goal event (e.g., "200-mile TTT", "Gran Fondo", "Century Ride", "Criterium Race")',
         },
         event_date: {
           type: 'string',
@@ -247,11 +247,29 @@ export const AI_TOOLS: Tool[] = [
         current_fitness_level: {
           type: 'string',
           enum: ['beginner', 'intermediate', 'advanced'],
-          description: 'Current fitness level',
+          description: 'Current fitness level (defaults to intermediate if unknown)',
+        },
+        daily_hours: {
+          type: 'object',
+          description:
+            'STRONGLY PREFERRED over weekly_hours. The hours the athlete has available to train EACH day of the week. Omit a day or set it to 0 to mark it a rest day. The generator caps every workout at that day\'s available time and puts the long ride on the day with the MOST time — so always ask the athlete how much time they have on each day (and which days are off) before calling. Example: { "monday": 1.5, "tuesday": 2, "wednesday": 1.5, "thursday": 2, "friday": 1.5, "saturday": 5, "sunday": 0 }',
+          properties: {
+            monday: { type: 'number' },
+            tuesday: { type: 'number' },
+            wednesday: { type: 'number' },
+            thursday: { type: 'number' },
+            friday: { type: 'number' },
+            saturday: { type: 'number' },
+            sunday: { type: 'number' },
+          },
         },
         weekly_hours: {
           type: 'number',
-          description: 'Hours available per week for training',
+          description: 'Total hours per week, only as a fallback when you do not have per-day availability. Prefer daily_hours.',
+        },
+        start_date: {
+          type: 'string',
+          description: 'Optional plan start in YYYY-MM-DD. Defaults to the upcoming Monday. Use this if the athlete wants to start on a specific date.',
         },
         strengths: {
           type: 'array',
@@ -261,7 +279,7 @@ export const AI_TOOLS: Tool[] = [
         weaknesses: {
           type: 'array',
           items: { type: 'string' },
-          description: 'Areas to improve',
+          description: 'Areas to improve (e.g., "climbing" for a hilly route)',
         },
         indoor_outdoor: {
           type: 'string',
@@ -273,7 +291,7 @@ export const AI_TOOLS: Tool[] = [
           description: 'Whether athlete has access to Zwift',
         },
       },
-      required: ['goal_event', 'event_date', 'current_fitness_level', 'weekly_hours'],
+      required: ['goal_event', 'event_date'],
     },
   },
 

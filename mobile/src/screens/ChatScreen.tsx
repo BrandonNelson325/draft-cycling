@@ -12,6 +12,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import BottomSheet, { BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -48,9 +49,21 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     sendMessage,
     clearActiveConversation,
     deleteConversation,
+    refreshActiveMessages,
   } = useChatStore();
 
   const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
+
+  // Refetch on focus so a plan that finished building in the background (its
+  // result message + any server-side recovery message) shows up when the user
+  // returns to the chat — e.g. after tapping the "plan ready" notification.
+  useFocusEffect(
+    React.useCallback(() => {
+      if (activeConversationId && !loading) {
+        refreshActiveMessages();
+      }
+    }, [activeConversationId, loading])
+  );
 
   useEffect(() => {
     trainingPlanService.getActivePlan().then(plan => setHasActivePlan(!!plan)).catch(() => {});
