@@ -20,6 +20,22 @@ const ADVISOR_TOOL = {
   caching: { type: 'ephemeral' as const },
 };
 
+/**
+ * First message shown when the athlete taps "Create custom plan". Leads with
+ * the GPX upload on purpose: the route (climbs + distance) shapes the whole
+ * plan, so getting it in first lets the coach tailor everything else.
+ */
+const CUSTOM_PLAN_INTRO = [
+  "Let's build your plan. First — **do you have a GPX file of the route?**",
+  '',
+  "If you do, tap the 📎 below and upload it now. I'll build the plan around the actual climbs and distance. If you don't have one, no problem — we'll go off your goal.",
+  '',
+  "Once that's in (or if you don't have a file), tell me:",
+  '1. **Your goal** — the event, or what you want to get better at',
+  '2. **Event / target date**',
+  '3. **Which days you can train, and how long on each** — e.g. "1–2h on weekdays, longer Saturdays, Sundays off." This shapes the whole plan.',
+].join('\n');
+
 interface PlanDeviation {
   scheduled_date: string;
   workoutName: string;
@@ -847,7 +863,7 @@ Examples:
 Signals: vague goals ("I want to get faster"), open-ended ("what should my training look like?"),
 mentions "plan" without specifics
 Examples:
-- "I want to create a training plan" → Ask: (1) Goal/event? (2) Hours/week? (3) Event date?
+- "I want to create a training plan" → FIRST ask if they have a GPX of the route (have them upload it now if so), then: goal/event, event date, and per-day availability.
   Then offer curated plans AND custom option.
 - "I want to get faster" → Ask 1-2 targeted questions, then recommend.
 
@@ -947,10 +963,13 @@ When asked for "a workout for tomorrow" or "what should I do Wednesday":
 **HOW TO BUILD A FULL MULTI-WEEK PLAN — ONE TOOL CALL, NO LOOPS:**
 For any full custom multi-week plan (including a plan built around a GPX route), use **generate_training_plan** and call it EXACTLY ONCE. Do NOT call get_workout_templates and do NOT assemble a list of template IDs for a full plan — that path is slow and unreliable. generate_training_plan builds the entire periodized plan deterministically in the background.
 
-Before calling it, make sure you have (ask only for what's missing — check the athlete profile/preferences first):
-1. Goal event + event date
-2. **Per-day available time** — how many hours they can ride on EACH day, and which days are off. This drives everything. Do NOT assume weekends are long; ASK. Pass it as the \`daily_hours\` object (e.g. {"monday":1.5,"tuesday":2,...,"saturday":5,"sunday":0}).
-3. FTP must be set (it almost always is; if not, handle FTP first).
+**ASK ABOUT THE GPX FIRST.** The very first thing to ask when building a plan is whether they have a GPX file of the route/goal ride. If they do, tell them to tap the 📎 and upload it NOW, before anything else — the route's climbs and distance shape the whole plan, and it's easier to tailor the remaining questions once you've seen it. If they don't have one, move on without it. Only after the GPX question do you gather the rest.
+
+Before calling generate_training_plan, make sure you have (ask only for what's missing — check the athlete profile/preferences first):
+1. **GPX route file (FIRST)** — ask up front; if they have one, get it uploaded before the other questions.
+2. Goal event + event date
+3. **Per-day available time** — how many hours they can ride on EACH day, and which days are off. This drives everything. Do NOT assume weekends are long; ASK. Pass it as the \`daily_hours\` object (e.g. {"monday":1.5,"tuesday":2,...,"saturday":5,"sunday":0}).
+4. FTP must be set (it almost always is; if not, handle FTP first).
 
 **REST DAYS — RECOMMEND, DON'T OVERRIDE:** If the athlete gives availability for all 7 days (no day off), build it if that's truly what they want, but FIRST push back briefly: at least one full rest day per week is recommended for recovery and adaptation, and ask if they'd like to keep one day off. If they confirm they want all 7, proceed — the plan automatically builds in genuine easy/recovery rides (short active-recovery spins the day after hard work) so the load is still manageable. The athlete decides; you make sure they decide informed.
 
@@ -1374,11 +1393,11 @@ Mon: rest | Tue: 90min threshold intervals | Wed: 2hr Z2 endurance | Thu: 90min 
 Always call get_workouts first — if a suitable workout exists, schedule it instead of creating a new one.
 
 For training plans: if the athlete explicitly requests a plan, gather these REQUIRED details (ask one at a time, not all at once):
-1. **Goal/event** — What are you training for? (e.g., century, gran fondo, crit, general fitness)
-2. **Competitive intent** — Are you training to WIN/compete, or to finish/complete the event? This dramatically changes plan intensity and structure. A competitive 200-mile racer needs a very different plan than someone aiming to finish their first century.
-3. **Event date** — When is it? (or "no event, ongoing" for general fitness)
-4. **Time availability** — How many hours per week can you train, and how does that break down by day? (CRITICAL for plan structure)
-5. **Rest days** — Which days are completely off? MUST know before scheduling.
+1. **GPX route file (ASK FIRST)** — Do you have a GPX of the route/goal ride? If yes, have them tap the 📎 and upload it NOW, before the other questions — the climbs and distance shape the whole plan. If not, continue without it.
+2. **Goal/event** — What are you training for? (e.g., century, gran fondo, crit, general fitness)
+3. **Competitive intent** — Are you training to WIN/compete, or to finish/complete the event? This dramatically changes plan intensity and structure. A competitive 200-mile racer needs a very different plan than someone aiming to finish their first century.
+4. **Event date** — When is it? (or "no event, ongoing" for general fitness)
+5. **Time availability** — How many hours can you train on EACH day, and which days are off? (CRITICAL — drives the whole plan; don't assume weekends are long.)
 Use CTL/FTP/experience level/recent rides for everything else — don't ask what you already know from their profile.
 
 **FTP Testing in Plans:** When building a multi-week plan, check the athlete's ftp_test_preference. If not set, ask: "Would you like me to schedule FTP tests at the start of each training block (every ~6 weeks), or would you prefer I estimate your FTP from your ride data?" Save their answer with update_athlete_preferences. If they choose tests, include an FTP test workout in the first week of each new phase.
@@ -1841,14 +1860,7 @@ Format it clearly so I can follow it during my ride.`;
         const convId = newConv!.id;
         await this.persistUserMessage(convId, athleteId, message);
 
-        const cannedReply = [
-          "Let's get you set up. A few quick questions:",
-          '',
-          "1. **What's your goal?** (e.g. a specific event, raise FTP, general fitness)",
-          '2. **Target / event date?** (if you have one)',
-          '3. **How many weeks** are you looking for?',
-          "4. **Have a GPX of the race route?** Tap the 📎 to attach it and I'll build the plan around the actual climbs.",
-        ].join('\n');
+        const cannedReply = CUSTOM_PLAN_INTRO;
 
         await this.persistAssistantMessage(convId, athleteId, cannedReply);
         return { response: cannedReply, conversationId: convId };
@@ -2165,14 +2177,7 @@ Format it clearly so I can follow it during my ride.`;
 
         await this.persistUserMessage(convId, athleteId, message);
 
-        const cannedReply = [
-          "Let's get you set up. A few quick questions:",
-          '',
-          "1. **What's your goal?** (e.g. a specific event, raise FTP, general fitness)",
-          '2. **Target / event date?** (if you have one)',
-          '3. **How many weeks** are you looking for?',
-          "4. **Have a GPX of the race route?** Tap the 📎 to attach it and I'll build the plan around the actual climbs.",
-        ].join('\n');
+        const cannedReply = CUSTOM_PLAN_INTRO;
 
         // Stream the canned reply character-by-character-ish so the UI shows
         // it animating in like a normal AI response, instead of slamming the
