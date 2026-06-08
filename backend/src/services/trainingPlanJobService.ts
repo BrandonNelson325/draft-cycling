@@ -60,6 +60,33 @@ export const trainingPlanJobService = {
     kind: PlanJobKind,
     params: any
   ): Promise<PlanJobRow> {
+    // IDEMPOTENCY GUARD — prevent duplicate plans.
+    // A single plan-build turn can enqueue twice: the AI sees only "queued"
+    // (not "done") and re-calls the tool on a later loop iteration, or a
+    // dropped stream falls back to the non-streaming path and re-runs the turn.
+    // Either way the athlete ends up with two identical plans. If a plan job
+    // for THIS conversation was created in the last few minutes and hasn't
+    // failed, reuse it instead of starting another. (Failed jobs are NOT
+    // reused, so a genuine retry after a failure still works.)
+    if (conversationId) {
+      const threeMinAgo = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+      const { data: existing } = await supabaseAdmin
+        .from('training_plan_jobs')
+        .select('*')
+        .eq('athlete_id', athleteId)
+        .eq('conversation_id', conversationId)
+        .in('status', ['queued', 'running', 'completed'])
+        .gte('created_at', threeMinAgo)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (existing && existing.length > 0) {
+        logger.warn(
+          `[PlanJob] Duplicate enqueue suppressed for conversation ${conversationId} — reusing job ${existing[0].id} (status ${existing[0].status})`
+        );
+        return existing[0] as PlanJobRow;
+      }
+    }
+
     // Stash the kind inside params so we don't need another migration to add
     // a typed column — the job table is intentionally simple/opaque.
     const { data, error } = await supabaseAdmin
