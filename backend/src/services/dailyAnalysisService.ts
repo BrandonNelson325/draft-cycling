@@ -614,7 +614,8 @@ Format as JSON:
         tomorrowEntry.data,
         recentActivities,
         fatigueProfile,
-        availableWorkouts
+        availableWorkouts,
+        isTomorrowRestDay
       );
     } else if (isRestDay) {
       // Rest day — build a dedicated rest day context
@@ -713,6 +714,28 @@ Format as JSON:
       }
     }
 
+    // Resolve the suggested workout. A PLANNED rest day tomorrow (post-ride
+    // preview) ALWAYS wins over any AI-generated ride — the plan put rest there
+    // on purpose (e.g. taper), so the suggestion must be rest, not a workout.
+    let suggestedWorkout: NonNullable<TodaySuggestion['suggestion']>['suggestedWorkout'] = null;
+    if (riddenToday && isTomorrowRestDay) {
+      suggestedWorkout = {
+        workoutId: undefined,
+        name: 'Rest day',
+        type: 'rest',
+        duration: 0,
+        description: aiResult.suggestedWorkout?.description || 'Planned rest day — recover and let the work absorb.',
+      };
+    } else if (aiResult.suggestedWorkout) {
+      suggestedWorkout = {
+        workoutId: resolvedWorkoutId,
+        name: aiResult.suggestedWorkout.name,
+        type: aiResult.suggestedWorkout.type,
+        duration: aiResult.suggestedWorkout.duration,
+        description: aiResult.suggestedWorkout.description,
+      };
+    }
+
     const result: TodaySuggestion = {
       hasRiddenToday: riddenToday,
       suggestion: {
@@ -728,15 +751,7 @@ Format as JSON:
               tss: todayEntry.data.workouts.tss,
             }
           : null,
-        suggestedWorkout: aiResult.suggestedWorkout
-          ? {
-              workoutId: resolvedWorkoutId,
-              name: aiResult.suggestedWorkout.name,
-              type: aiResult.suggestedWorkout.type,
-              duration: aiResult.suggestedWorkout.duration,
-              description: aiResult.suggestedWorkout.description,
-            }
-          : null,
+        suggestedWorkout,
         status,
         currentTSB: tsb,
         tomorrowsWorkout,
@@ -914,7 +929,8 @@ Format as JSON:
     tomorrowEntry: any,
     recentActivities: any[],
     fatigueProfile: FatigueProfile | null = null,
-    availableWorkouts: AvailableWorkout[] = []
+    availableWorkouts: AvailableWorkout[] = [],
+    tomorrowIsRest: boolean = false
   ): string {
     const todayTSS = todayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
@@ -928,7 +944,20 @@ Format as JSON:
       .join('\n');
 
     let tomorrowSection: string;
-    if (hasTomorrow) {
+    if (tomorrowIsRest) {
+      // Tomorrow is a PLANNED rest day on the calendar — it's part of the plan
+      // (e.g. a taper rest day). Do NOT invent a workout; affirm the rest.
+      tomorrowSection = '- PLANNED REST DAY (deliberately scheduled — likely taper/recovery)\n\n'
+        + 'YOUR TASK:\n'
+        + 'Summarize today\'s effort, then AFFIRM that tomorrow is a planned rest day and why it matters (recovery/absorption/taper). Do NOT suggest a workout for tomorrow. Your assessment MUST match the training status above. Be direct, no filler.\n\n'
+        + 'Format as JSON:\n'
+        + '{\n'
+        + '  "summary": "1 sentence: today\'s ride recap referencing actual data.",\n'
+        + '  "recommendation": "1 sentence affirming tomorrow\'s rest (e.g. \'Tomorrow is a planned rest day — let today\'s work absorb and show up fresh.\')",\n'
+        + '  "suggestedAction": "suggested-workout",\n'
+        + '  "suggestedWorkout": { "name": "Rest day", "type": "rest", "duration": 0, "description": "Planned rest day to recover." }\n'
+        + '}';
+    } else if (hasTomorrow) {
       tomorrowSection = '- ' + tomorrowEntry.workouts.name + '\n'
         + '- Type: ' + tomorrowEntry.workouts.workout_type + '\n'
         + '- Duration: ' + tomorrowEntry.workouts.duration_minutes + ' minutes\n'
