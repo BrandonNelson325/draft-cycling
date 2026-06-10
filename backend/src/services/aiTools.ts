@@ -271,6 +271,10 @@ export const AI_TOOLS: Tool[] = [
           type: 'string',
           description: 'Optional plan start in YYYY-MM-DD. Defaults to the upcoming Monday. Use this if the athlete wants to start on a specific date.',
         },
+        route_notes: {
+          type: 'string',
+          description: 'Race/route specifics the plan should be designed around — e.g. the GPX climb summary (distance, total climbing, key climbs and gradients), terrain, surface, or any race details the athlete shared. Pass this whenever a GPX was analyzed or the athlete described the course.',
+        },
         strengths: {
           type: 'array',
           items: { type: 'string' },

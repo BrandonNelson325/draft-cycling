@@ -14,6 +14,7 @@ import { logger } from '../utils/logger';
 import { clearSuggestionCache } from './dailyAnalysisService';
 import { trainingPlanJobService, registerPlanJobExecutor } from './trainingPlanJobService';
 import { mapWithConcurrency } from '../utils/concurrency';
+import { aiPlanDesignerService } from './aiPlanDesignerService';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -607,8 +608,21 @@ export const aiToolExecutor = {
       start_date: input.start_date,
     };
 
-    // Generate the plan
-    const plan = await trainingPlanService.generatePlan(athleteId, config);
+    // Design the plan. Opus 4.8 designs the periodized structure (every workout
+    // reasoned for this athlete/goal/route); the deterministic generator is the
+    // fallback so a build can NEVER fail outright. Both produce the same plan
+    // shape, and both are clamped to the athlete's per-day availability.
+    let plan;
+    let designedBy: 'opus' | 'deterministic' = 'opus';
+    try {
+      if (!input.daily_hours) throw new Error('no daily_hours — use deterministic');
+      plan = await aiPlanDesignerService.designPlan(athleteId, input);
+    } catch (err: any) {
+      logger.warn(`[generateTrainingPlan] Opus designer fell back to deterministic: ${err?.message}`);
+      designedBy = 'deterministic';
+      plan = await trainingPlanService.generatePlan(athleteId, config);
+    }
+    logger.info(`[generateTrainingPlan] Plan designed by ${designedBy}`);
 
     // Save plan to database
     await trainingPlanService.savePlan(athleteId, plan);

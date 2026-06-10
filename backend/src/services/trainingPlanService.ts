@@ -97,8 +97,10 @@ function intensityFactorFor(type: string): number {
     case 'endurance': return 0.70;
     case 'long': return 0.70;
     case 'tempo': return 0.82;
+    case 'sweet_spot': return 0.90;
     case 'threshold': return 0.93;
     case 'vo2max': return 1.06;
+    case 'anaerobic': return 1.15;
     default: return 0.75;
   }
 }
@@ -109,7 +111,7 @@ function intensityFactorFor(type: string): number {
  * work/recovery repeats (so a "threshold" ride isn't one impossible 90-min
  * block). The remainder is always absorbed as easy spinning so totals are exact.
  */
-function buildIntervalsForType(type: string, durationMinutes: number): any[] {
+export function buildIntervalsForType(type: string, durationMinutes: number): any[] {
   const total = durationMinutes * 60;
   const warm = Math.min(600, Math.round(total * 0.15));
   const cool = Math.min(300, Math.round(total * 0.1));
@@ -130,7 +132,9 @@ function buildIntervalsForType(type: string, durationMinutes: number): any[] {
 
   switch (type) {
     case 'threshold': repeats(480, 93, 180, 60); break;       // 8-min threshold reps
+    case 'sweet_spot': repeats(720, 90, 240, 60); break;      // 12-min sweet-spot blocks
     case 'vo2max': repeats(180, 110, 120, 55); break;         // 3-min VO2 reps
+    case 'anaerobic': repeats(40, 130, 200, 50); break;       // 40s anaerobic bursts
     case 'tempo': repeats(900, 82, 180, 62); break;           // 15-min tempo blocks
     case 'recovery': out.push({ duration: workSec, power: 55, type: 'work' }); break;
     default: out.push({ duration: workSec, power: 70, type: 'work' }); break; // endurance/long
@@ -161,6 +165,109 @@ function buildWorkout(type: string, durationMinutes: number, dayOfWeek: number, 
     day_of_week: dayOfWeek,
     intervals: buildIntervalsForType(type, durationMinutes),
     rationale,
+  };
+}
+
+/**
+ * Build a workout from an AI-designed spec: the AI chooses type/duration/day/
+ * name/rationale (the coaching decisions); we synthesize the intervals so they
+ * are always valid and sum correctly. Used by aiPlanDesignerService.
+ */
+export function buildWorkoutFromSpec(spec: {
+  workout_type: string;
+  duration_minutes: number;
+  day_of_week: number;
+  name?: string;
+  rationale?: string;
+}): WorkoutTemplate {
+  const fallback = TYPE_LABELS[spec.workout_type] || TYPE_LABELS.endurance;
+  return {
+    name: spec.name || fallback.name,
+    description: spec.rationale || fallback.description,
+    workout_type: spec.workout_type === 'long' ? 'endurance' : spec.workout_type,
+    duration_minutes: spec.duration_minutes,
+    day_of_week: spec.day_of_week,
+    intervals: buildIntervalsForType(spec.workout_type, spec.duration_minutes),
+    rationale: spec.rationale,
+  };
+}
+
+const VALID_WORKOUT_TYPES = new Set([
+  'recovery', 'endurance', 'long', 'tempo', 'sweet_spot', 'threshold', 'vo2max', 'anaerobic',
+]);
+
+/**
+ * Normalize an AI-designed plan into a safe, schedulable TrainingPlan, ENFORCING
+ * the same invariants the deterministic generator guarantees — regardless of
+ * what the model returned:
+ *   - only days the athlete is actually available (cap > 0) are kept
+ *   - no workout exceeds that day's available time (clamped, not trusted)
+ *   - one workout per day (dedup), valid workout types, sane durations
+ *   - intervals are synthesized by us (never trust model-authored intervals)
+ * Throws if the result is empty/unusable so the caller can fall back to the
+ * deterministic engine.
+ */
+export function normalizeAiPlan(
+  aiWeeks: any[],
+  availableDays: { day: number; cap: number }[],
+  meta: { goal_event: string; eventIso: string; startIso: string; athleteId: string }
+): TrainingPlan {
+  if (!Array.isArray(aiWeeks) || aiWeeks.length === 0) {
+    throw new Error('AI plan has no weeks');
+  }
+  const capByDay = new Map(availableDays.map((d) => [d.day, d.cap]));
+
+  const weeks: TrainingWeek[] = [];
+  let weekNum = 1;
+
+  for (const w of aiWeeks) {
+    const phase: TrainingPhase = ['base', 'build', 'peak', 'taper'].includes(w?.phase) ? w.phase : 'build';
+    const byDay = new Map<number, WorkoutTemplate>();
+
+    for (const wk of Array.isArray(w?.workouts) ? w.workouts : []) {
+      const day = Number(wk?.day_of_week);
+      if (!Number.isInteger(day) || day < 0 || day > 6) continue;
+      const cap = capByDay.get(day);
+      if (!cap || cap <= 0) continue; // not an available day — drop it
+      if (byDay.has(day)) continue; // one workout per day
+
+      const type = VALID_WORKOUT_TYPES.has(wk?.workout_type) ? wk.workout_type : 'endurance';
+      const capMin = Math.floor(cap * 60);
+      let dur = Math.round((Number(wk?.duration_minutes) || 60) / 5) * 5;
+      if (dur > capMin) dur = Math.floor(capMin / 5) * 5; // clamp to available time
+      if (dur < 30) dur = Math.min(30, capMin);
+
+      byDay.set(day, buildWorkoutFromSpec({
+        workout_type: type,
+        duration_minutes: dur,
+        day_of_week: day,
+        name: typeof wk?.name === 'string' ? wk.name.slice(0, 80) : undefined,
+        rationale: typeof wk?.rationale === 'string' ? wk.rationale.slice(0, 300) : undefined,
+      }));
+    }
+
+    const workouts = [...byDay.values()].sort((a, b) => a.day_of_week - b.day_of_week);
+    if (workouts.length === 0) continue; // skip empty weeks
+    const tss = Math.round(
+      workouts.reduce((s, x) => {
+        const IF = intensityFactorFor(x.workout_type);
+        return s + (x.duration_minutes / 60) * IF * IF * 100;
+      }, 0)
+    );
+    weeks.push({ week_number: weekNum++, phase, tss, workouts, notes: typeof w?.focus === 'string' ? w.focus.slice(0, 120) : undefined });
+  }
+
+  if (weeks.length === 0) throw new Error('AI plan had no schedulable workouts after normalization');
+
+  return {
+    id: uuidv4(),
+    athlete_id: meta.athleteId,
+    goal_event: meta.goal_event,
+    event_date: meta.eventIso,
+    start_date: meta.startIso,
+    weeks,
+    total_tss: weeks.reduce((s, w) => s + w.tss, 0),
+    created_at: new Date().toISOString(),
   };
 }
 
