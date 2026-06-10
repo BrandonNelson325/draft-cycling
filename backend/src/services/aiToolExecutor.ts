@@ -13,6 +13,7 @@ import { CreateWorkoutDTO } from '../types/workout';
 import { logger } from '../utils/logger';
 import { clearSuggestionCache } from './dailyAnalysisService';
 import { trainingPlanJobService, registerPlanJobExecutor } from './trainingPlanJobService';
+import { mapWithConcurrency } from '../utils/concurrency';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -864,30 +865,28 @@ export const aiToolExecutor = {
         .eq('athlete_id', athleteId);
     }
 
-    // Create all athlete workouts in parallel (no ZWO/FIT generation — done on demand)
-    const created = await Promise.all(
-      deduplicatedWorkouts.map(async (item) => {
-        const t = templateMap.get(item.template_id)!;
-        const workout = await workoutService.createWorkout(athleteId, {
-          name: t.name,
-          description: t.description,
-          workout_type: t.workout_type,
-          duration_minutes: t.duration_minutes,
-          intervals: t.intervals,
-          generated_by_ai: true,
-          ai_prompt: 'Training plan template',
-        });
-        return { workout, date: item.date, phase: item.phase || 'build', template: t };
-      })
-    );
+    // Create athlete workouts with capped concurrency (no ZWO/FIT generation —
+    // done on demand). Fully-parallel creates exhaust Supabase's connection
+    // pool (PGRST003) on large plans; batches of 5 stay fast without saturating.
+    const created = await mapWithConcurrency(deduplicatedWorkouts, 5, async (item) => {
+      const t = templateMap.get(item.template_id)!;
+      const workout = await workoutService.createWorkout(athleteId, {
+        name: t.name,
+        description: t.description,
+        workout_type: t.workout_type,
+        duration_minutes: t.duration_minutes,
+        intervals: t.intervals,
+        generated_by_ai: true,
+        ai_prompt: 'Training plan template',
+      });
+      return { workout, date: item.date, phase: item.phase || 'build', template: t };
+    });
 
-    // Schedule all calendar entries in parallel
-    await Promise.all(
-      created.map(({ workout, date }) => {
-        const [year, month, day] = date.split('-').map(Number);
-        return calendarService.scheduleWorkout(athleteId, workout.id, new Date(year, month - 1, day));
-      })
-    );
+    // Schedule calendar entries with the same concurrency cap.
+    await mapWithConcurrency(created, 5, ({ workout, date }) => {
+      const [year, month, day] = date.split('-').map(Number);
+      return calendarService.scheduleWorkout(athleteId, workout.id, new Date(year, month - 1, day));
+    });
 
     // Schedule rest days for all dates in the plan range without workouts.
     // This makes rest days visible on the calendar and prevents the daily suggestion

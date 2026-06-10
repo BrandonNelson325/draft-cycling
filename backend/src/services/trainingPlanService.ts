@@ -4,6 +4,7 @@ import { workoutService } from './workoutService';
 import { calendarService } from './calendarService';
 import { athletePreferencesService } from './athletePreferencesService';
 import { logger } from '../utils/logger';
+import { mapWithConcurrency } from '../utils/concurrency';
 import {
   TrainingPlanConfig,
   TrainingPlan,
@@ -1211,36 +1212,35 @@ export const trainingPlanService = {
       .flatMap((week) => week.workouts.map((wt) => ({ week, wt, date: workoutDateFor(plan.start_date, week.week_number, wt.day_of_week) })))
       .filter((it) => it.date.getTime() >= start.getTime());
 
-    // Step 1: Create all workouts in parallel (was sequential — big speedup for 20+ workout plans)
-    const createdWorkouts = await Promise.all(
-      items.map(({ week, wt }) =>
-        workoutService.createWorkout(athleteId, {
-          name: wt.name,
-          description: wt.description,
-          workout_type: wt.workout_type as any,
-          duration_minutes: wt.duration_minutes,
-          intervals: wt.intervals,
-          generated_by_ai: true,
-          ai_prompt: `Training plan: ${plan.goal_event} - Week ${week.week_number} (${week.phase} phase)`,
-          training_plan_id: plan.id,
-        })
-      )
-    );
-
-    // Step 2: Schedule all calendar entries in parallel
-    await Promise.all(
-      createdWorkouts.map((workout, i) => {
-        const { week, wt, date } = items[i];
-        return calendarService.scheduleWorkout(
-          athleteId,
-          workout.id,
-          date,
-          wt.rationale || `Week ${week.week_number} - ${week.phase} phase: ${wt.name}`,
-          plan.id,
-          week.week_number
-        );
+    // Step 1: Create workouts with capped concurrency. Fully-parallel
+    // Promise.all over every workout opened 2+ DB connections each at once
+    // (250+ for an 84-workout plan), exhausting Supabase's pool (PGRST003).
+    // Batches of 5 stay fast without saturating the pool.
+    const createdWorkouts = await mapWithConcurrency(items, 5, ({ week, wt }) =>
+      workoutService.createWorkout(athleteId, {
+        name: wt.name,
+        description: wt.description,
+        workout_type: wt.workout_type as any,
+        duration_minutes: wt.duration_minutes,
+        intervals: wt.intervals,
+        generated_by_ai: true,
+        ai_prompt: `Training plan: ${plan.goal_event} - Week ${week.week_number} (${week.phase} phase)`,
+        training_plan_id: plan.id,
       })
     );
+
+    // Step 2: Schedule calendar entries with the same concurrency cap.
+    await mapWithConcurrency(createdWorkouts, 5, (workout, i) => {
+      const { week, wt, date } = items[i];
+      return calendarService.scheduleWorkout(
+        athleteId,
+        workout.id,
+        date,
+        wt.rationale || `Week ${week.week_number} - ${week.phase} phase: ${wt.name}`,
+        plan.id,
+        week.week_number
+      );
+    });
 
     // Schedule rest days for all dates in the plan range without workouts
     try {
