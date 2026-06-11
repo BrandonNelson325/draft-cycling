@@ -109,13 +109,21 @@ export function LandingPage() {
               Start Free 7-Day Trial
             </Link>
             <a
-              href="#features"
-              className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold border border-gray-700 hover:border-gray-500 text-gray-300 rounded-xl transition-colors"
+              href="https://apps.apple.com/us/app/draft-cycling/id6759934039"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2.5 px-8 py-3.5 text-base font-semibold bg-white text-gray-900 hover:bg-gray-200 rounded-xl transition-colors"
             >
-              Learn More
+              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+              </svg>
+              Download on the App Store
             </a>
           </div>
-          <p className="mt-4 text-sm text-gray-500">No credit card required to explore. 7-day free trial on all plans.</p>
+          <p className="mt-4 text-sm text-gray-500">
+            Now on iOS · Android coming soon · 7-day free trial — no credit card to explore.{' '}
+            <a href="#features" className="text-gray-400 hover:text-white underline underline-offset-2">Learn more</a>
+          </p>
         </div>
       </section>
 
@@ -194,11 +202,13 @@ export function LandingPage() {
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl font-bold mb-4">Take your coach everywhere</h2>
           <p className="text-gray-400 mb-8">
-            Available on iOS and Android. Train smarter from your pocket.
+            Now on the App Store. Train smarter from your pocket — Android coming soon.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <a
-              href="#"
+              href="https://apps.apple.com/us/app/draft-cycling/id6759934039"
+              target="_blank"
+              rel="noopener noreferrer"
               className="inline-flex items-center justify-center gap-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl px-6 py-3 transition-colors"
             >
               <svg viewBox="0 0 24 24" className="w-7 h-7 fill-current" xmlns="http://www.w3.org/2000/svg">
@@ -209,20 +219,23 @@ export function LandingPage() {
                 <div className="text-sm font-semibold">App Store</div>
               </div>
             </a>
-            <a
-              href="#"
-              className="inline-flex items-center justify-center gap-3 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-xl px-6 py-3 transition-colors"
+            <div
+              aria-disabled="true"
+              title="Coming soon to Google Play"
+              className="relative inline-flex items-center justify-center gap-3 bg-gray-800/60 border border-gray-700/60 rounded-xl px-6 py-3 opacity-60 cursor-default select-none"
             >
               <svg viewBox="0 0 24 24" className="w-7 h-7 fill-current" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3.18 23.73c.44.23.97.2 1.38-.08l16.18-9.47c.44-.26.71-.74.71-1.25s-.27-.99-.71-1.25L4.56.22c-.41-.28-.94-.31-1.38-.08S2.5.7 2.5 1.18v21.65c0 .49.25.93.68 1.17v-.27zM5.5 3.84L13.72 12 5.5 20.16V3.84z"/>
               </svg>
               <div className="text-left">
-                <div className="text-xs text-gray-400">Get it on</div>
+                <div className="text-xs text-gray-400">Coming soon to</div>
                 <div className="text-sm font-semibold">Google Play</div>
               </div>
-            </a>
+              <span className="absolute -top-2 -right-2 text-[10px] font-semibold uppercase tracking-wide bg-blue-600 text-white rounded-full px-2 py-0.5">
+                Soon
+              </span>
+            </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4">Coming soon to app stores</p>
         </div>
       </section>
 
