@@ -44,6 +44,11 @@ class StravaClient {
       redirect_uri: config.strava.redirectUri,
       response_type: 'code',
       scope: 'read,activity:read_all,activity:write',
+      // force = always show the consent screen. With the default ('auto'),
+      // Strava silently reuses a prior grant — so a user who once unchecked
+      // "View data about your activities" could never re-grant it and would be
+      // permanently stuck unable to sync. 'force' lets them fix it by reconnecting.
+      approval_prompt: 'force',
       state,
     });
 
@@ -133,7 +138,19 @@ class StravaClient {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch activities');
+        const body = await response.text().catch(() => '');
+        // Surface the REAL cause instead of a generic message, and give the
+        // 401 case an actionable hint (almost always a missing activity scope).
+        if (response.status === 401) {
+          throw new Error(
+            'Strava returned 401 (unauthorized). The athlete likely did not grant activity access — they need to reconnect Strava and allow "View data about your activities". ' +
+              `Strava said: ${body.slice(0, 200)}`
+          );
+        }
+        if (response.status === 429) {
+          throw new Error('Strava rate limit reached (429). Try again in a few minutes.');
+        }
+        throw new Error(`Strava activities fetch failed (${response.status}): ${body.slice(0, 200)}`);
       }
 
       const batch = await response.json() as StravaActivity[];

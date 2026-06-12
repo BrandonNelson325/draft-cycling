@@ -47,6 +47,24 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
       return;
     }
 
+    const isMobile = typeof state === 'string' && state.includes(':mobile');
+
+    // Strava returns the GRANTED scopes here. If the athlete unchecked "View
+    // data about your activities" on the consent screen, the token can't read
+    // activities and every sync 401s. Reject the connection now with a clear
+    // error instead of letting them connect into a broken state.
+    const grantedScope = typeof scope === 'string' ? scope : '';
+    if (!grantedScope.split(',').includes('activity:read_all')) {
+      logger.warn(`Strava connect rejected — missing activity:read_all scope (granted: "${grantedScope}")`);
+      if (isMobile) {
+        const mobileRedirect = process.env.STRAVA_MOBILE_REDIRECT_URI || 'cyclingcoach://strava/callback';
+        res.redirect(`${mobileRedirect}?error=missing_activity_scope`);
+      } else {
+        res.redirect(`${process.env.FRONTEND_URL}?strava_error=missing_activity_scope`);
+      }
+      return;
+    }
+
     // Exchange code for tokens
     const tokenData = await stravaClient.exchangeToken(code);
 
@@ -57,7 +75,6 @@ export const handleCallback = async (req: Request, res: Response): Promise<void>
     // TODO: For now, this is a placeholder. We need to implement proper state management
     // to associate the callback with a specific user session
 
-    const isMobile = typeof state === 'string' && state.includes(':mobile');
     const redirectParams =
       `access_token=${tokenData.access_token}&` +
       `refresh_token=${tokenData.refresh_token}&` +
