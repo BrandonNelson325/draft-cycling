@@ -25,19 +25,13 @@ import MessageBubble from '../components/chat/MessageBubble';
 import LoadingDots from '../components/chat/LoadingDots';
 import type { MainTabScreenProps } from '../navigation/types';
 
-// Messages the plan-start buttons send. For these we start a brand-new chat so
-// the plan setup isn't polluted by a prior conversation's context.
-const PLAN_START_TRIGGERS = [
-  'I want to create a custom training plan',
-  'I want to create a new training plan',
-];
-
 export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Chat'>) {
   const [inputText, setInputText] = useState('');
   const [hasActivePlan, setHasActivePlan] = useState(false);
   const [analyzingRoute, setAnalyzingRoute] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const sheetRef = useRef<BottomSheet>(null);
+  const initialMessageSent = useRef(false);
   const tabBarHeight = useBottomTabBarHeight();
 
   const startingConversation = useRef(false);
@@ -96,19 +90,11 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     init();
   }, []);
 
-  // Handle initialMessage param from navigation. We CONSUME the param (set it
-  // back to undefined) after handling so navigating again with the same message
-  // re-fires it — without this, a second "Create custom plan" tap in the same
-  // session did nothing. For plan-start triggers we clear the active
-  // conversation first so it always opens a fresh chat instead of dropping the
-  // message into whatever conversation was last open.
+  // Handle initialMessage param from navigation
   useEffect(() => {
     const initialMessage = route.params?.initialMessage;
-    if (initialMessage && !loading) {
-      navigation.setParams({ initialMessage: undefined } as any);
-      if (PLAN_START_TRIGGERS.includes(initialMessage)) {
-        clearActiveConversation();
-      }
+    if (initialMessage && !initialMessageSent.current && !loading) {
+      initialMessageSent.current = true;
       handleSend(initialMessage);
     }
   }, [route.params?.initialMessage, loading]);

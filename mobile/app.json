@@ -2,7 +2,7 @@
   "expo": {
     "name": "Draft Cycling",
     "slug": "cycling-coach",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "scheme": "cyclingcoach",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.draftcycling.app",
-      "buildNumber": "113",
+      "buildNumber": "116",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "Draft reads your sleep, heart rate, and HRV data from Apple Health to give your coach a more accurate picture of your recovery.",
