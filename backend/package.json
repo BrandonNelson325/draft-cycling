@@ -11,7 +11,8 @@
     "test:plan": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyDeterministicPlan.ts",
     "test:plan-dedup": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyPlanDedup.ts",
     "test:concurrency": "ts-node src/scripts/verifyConcurrency.ts",
-    "test:ai-plan": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyAiPlanNormalize.ts"
+    "test:ai-plan": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyAiPlanNormalize.ts",
+    "test:custom-plan": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyCustomPlanTrigger.ts"
   },
   "keywords": [],
   "author": "",

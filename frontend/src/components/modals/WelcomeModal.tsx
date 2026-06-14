@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { X, Activity, MessageCircle, Calendar, Dumbbell, Route } from 'lucide-react';
+import { X, Activity, MessageCircle, Calendar, Dumbbell, Route, Gauge } from 'lucide-react';
 import { Button } from '../ui/button';
 
 interface WelcomeModalProps {
@@ -42,6 +42,13 @@ const features = [
     description: 'Ask the coach to build a workout for you — VO2max intervals, sweet spot, recovery spins, anything. It creates structured workouts with power targets you can download.',
     color: 'text-green-600',
     bg: 'bg-green-50',
+  },
+  {
+    icon: Gauge,
+    title: 'Get Workouts on Your Head Unit',
+    description: 'Direct Garmin and Wahoo connections are on the way. For now, Draft sends your planned workouts through intervals.icu — a free app. Set up a free account at intervals.icu, then connect your head unit (Garmin, Wahoo, etc.), Zwift, and any other apps to it. Once connected, your Draft workouts load onto your devices automatically — just hop on and ride.',
+    color: 'text-teal-600',
+    bg: 'bg-teal-50',
   },
   {
     icon: MessageCircle,

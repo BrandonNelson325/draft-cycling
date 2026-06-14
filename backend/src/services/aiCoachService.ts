@@ -36,6 +36,21 @@ const CUSTOM_PLAN_INTRO = [
   '3. **Which days you can train, and how long on each** — e.g. "1–2h on weekdays, longer Saturdays, Sundays off." This shapes the whole plan.',
 ].join('\n');
 
+/**
+ * The plan-start buttons ("Create custom plan" / "Create a new training plan")
+ * send one of these exact messages. We fast-path them to the canned plan-setup
+ * intro regardless of whether a conversation is already active — otherwise, once
+ * the app has auto-selected a recent conversation, the button would just drop
+ * the trigger into the old chat and skip the clean setup flow.
+ */
+const CUSTOM_PLAN_TRIGGERS = [
+  'i want to create a custom training plan',
+  'i want to create a new training plan',
+];
+function isCustomPlanTrigger(message: string): boolean {
+  return CUSTOM_PLAN_TRIGGERS.includes(message.trim().toLowerCase());
+}
+
 interface PlanDeviation {
   scheduled_date: string;
   workoutName: string;
@@ -1844,15 +1859,19 @@ Format it clearly so I can follow it during my ride.`;
   }> {
     try {
       // Fast-path: "Create custom plan" button. See chatStream() for the
-      // full rationale. Skips context-build + AI call entirely.
-      const customPlanTrigger = 'I want to create a custom training plan';
-      if (!conversationId && message.trim() === customPlanTrigger) {
-        const { data: newConv } = await supabaseAdmin
-          .from('chat_conversations')
-          .insert({ athlete_id: athleteId, title: 'New training plan' })
-          .select()
-          .single();
-        const convId = newConv!.id;
+      // full rationale. Skips context-build + AI call entirely. Fires whether
+      // or not a conversation is active — reuses the active one if present so the
+      // mobile UI actually shows it; otherwise starts a fresh chat.
+      if (isCustomPlanTrigger(message)) {
+        let convId = conversationId || '';
+        if (!convId) {
+          const { data: newConv } = await supabaseAdmin
+            .from('chat_conversations')
+            .insert({ athlete_id: athleteId, title: 'New training plan' })
+            .select()
+            .single();
+          convId = newConv!.id;
+        }
         await this.persistUserMessage(convId, athleteId, message);
 
         const cannedReply = CUSTOM_PLAN_INTRO;
@@ -2160,14 +2179,17 @@ Format it clearly so I can follow it during my ride.`;
       // full athlete-context build + AI call + tool loop and stream a canned
       // first question immediately. From the user's perspective: tap button,
       // chat opens, questions appear in < 1s.
-      const customPlanTrigger = 'I want to create a custom training plan';
-      if (!conversationId && message.trim() === customPlanTrigger) {
-        const { data: newConv } = await supabaseAdmin
-          .from('chat_conversations')
-          .insert({ athlete_id: athleteId, title: 'New training plan' })
-          .select()
-          .single();
-        const convId = newConv!.id;
+      if (isCustomPlanTrigger(message)) {
+        // Reuse the active conversation if there is one (so the mobile UI shows
+        // it), else start a fresh chat. convId is hoisted above.
+        if (!convId) {
+          const { data: newConv } = await supabaseAdmin
+            .from('chat_conversations')
+            .insert({ athlete_id: athleteId, title: 'New training plan' })
+            .select()
+            .single();
+          convId = newConv!.id;
+        }
         onEvent({ type: 'start', conversation_id: convId });
 
         await this.persistUserMessage(convId, athleteId, message);

@@ -57,6 +57,14 @@ const features = [
     bg: '#052e16',
   },
   {
+    icon: 'speedometer-outline' as const,
+    title: 'Get Workouts on Your Head Unit',
+    description:
+      'Direct Garmin and Wahoo connections are on the way. For now, Draft sends your planned workouts through intervals.icu — a free app. Set up a free account at intervals.icu, then connect your head unit (Garmin, Wahoo, etc.), Zwift, and any other apps to it. Once connected, your Draft workouts load onto your devices automatically — just hop on and ride.',
+    color: '#14b8a6',
+    bg: '#042f2e',
+  },
+  {
     icon: 'chatbubble-ellipses-outline' as const,
     title: 'Managing Conversations',
     description:
