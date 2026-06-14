@@ -46,6 +46,7 @@ const messyWeeks = [
     workouts: [
       { day_of_week: 6, workout_type: 'endurance', duration_minutes: 240, name: 'Long', rationale: 'vol' },
       { day_of_week: 1, workout_type: 'sweet_spot', duration_minutes: 90, name: 'SS', rationale: 'ftp' },
+      { day_of_week: 3, workout_type: 'anaerobic', duration_minutes: 60, name: 'Bursts', rationale: 'top end' },
     ],
   },
 ];
@@ -67,6 +68,14 @@ check('No workout exceeds its day cap', all.every((w) => w.duration_minutes <= C
   all.map((w) => `${w.day_of_week}:${w.duration_minutes}/${CAP[w.day_of_week] * 60}`).join(' '));
 check('Over-cap Saturday ride clamped to 300min', all.find((w) => w.day_of_week === 6)?.duration_minutes === 300);
 check('Invalid workout_type coerced to a valid type', all.every((w) => VALID.has(w.workout_type)));
+// The workouts table CHECK constraint (after migration 036) allows this set.
+// Any value outside it MUST be coerced before insert or the build dies.
+const DB_ALLOWED = new Set(['endurance', 'tempo', 'threshold', 'sweet_spot', 'vo2max', 'anaerobic', 'sprint', 'recovery', 'custom']);
+check('Every workout_type is DB-insertable',
+  all.every((w) => DB_ALLOWED.has(w.workout_type)),
+  [...new Set(all.map((w) => w.workout_type))].join(','));
+check('sweet_spot kept as a first-class type', all.find((w) => w.day_of_week === 1)?.workout_type === 'sweet_spot');
+check('anaerobic kept as a first-class type', all.find((w) => w.day_of_week === 3)?.workout_type === 'anaerobic');
 check('One workout per day per week (dup Tuesday removed)', plan.weeks.every((w) => new Set(w.workouts.map((x) => x.day_of_week)).size === w.workouts.length));
 check('Every workout has synthesized intervals', all.every((w) => Array.isArray(w.intervals) && w.intervals.length > 0));
 check('Intervals sum to the workout duration', all.every((w) => {

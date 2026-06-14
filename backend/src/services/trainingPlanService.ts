@@ -144,23 +144,37 @@ export function buildIntervalsForType(type: string, durationMinutes: number): an
   return out;
 }
 
+// Values the `workouts` table CHECK constraint allows. sweet_spot and anaerobic
+// are first-class (added in migration 036). `long` is a duration concept, not a
+// stored type, so it maps to endurance. Any unexpected value falls back to
+// 'custom' so an unknown type can never break the insert (defense in depth).
+const DB_WORKOUT_TYPES = new Set([
+  'endurance', 'tempo', 'threshold', 'sweet_spot', 'vo2max', 'anaerobic', 'sprint', 'recovery', 'custom',
+]);
+function toDbWorkoutType(type: string): string {
+  if (DB_WORKOUT_TYPES.has(type)) return type;
+  if (type === 'long') return 'endurance';
+  return 'custom';
+}
+
 const TYPE_LABELS: Record<string, { name: string; description: string }> = {
   long: { name: 'Long Endurance Ride', description: 'Extended aerobic Zone 2 — your biggest day' },
   endurance: { name: 'Endurance Ride', description: 'Steady aerobic Zone 2 to build volume' },
   recovery: { name: 'Recovery Spin', description: 'Very easy spin to promote recovery' },
   tempo: { name: 'Tempo Ride', description: 'Sustained Zone 3 tempo blocks' },
+  sweet_spot: { name: 'Sweet Spot Intervals', description: 'Sustained 88-94% FTP blocks — high return for the fatigue' },
   threshold: { name: 'Threshold Intervals', description: 'Sub/at-threshold intervals to lift FTP' },
   vo2max: { name: 'VO2max Intervals', description: 'High-intensity 3-min VO2max efforts' },
+  anaerobic: { name: 'Anaerobic Bursts', description: 'Short, very hard efforts above VO2max' },
 };
 
 /** Build one workout of a given type, sized to durationMinutes, on a given day. */
 function buildWorkout(type: string, durationMinutes: number, dayOfWeek: number, rationale?: string): WorkoutTemplate {
   const label = TYPE_LABELS[type] || TYPE_LABELS.endurance;
-  const workoutType = type === 'long' ? 'endurance' : type;
   return {
     name: label.name,
     description: label.description,
-    workout_type: workoutType,
+    workout_type: toDbWorkoutType(type),
     duration_minutes: durationMinutes,
     day_of_week: dayOfWeek,
     intervals: buildIntervalsForType(type, durationMinutes),
@@ -184,7 +198,9 @@ export function buildWorkoutFromSpec(spec: {
   return {
     name: spec.name || fallback.name,
     description: spec.rationale || fallback.description,
-    workout_type: spec.workout_type === 'long' ? 'endurance' : spec.workout_type,
+    // Store a DB-allowed type, but build intervals from the original type
+    // (e.g. sweet_spot → 'threshold' row with sweet-spot-shaped intervals).
+    workout_type: toDbWorkoutType(spec.workout_type),
     duration_minutes: spec.duration_minutes,
     day_of_week: spec.day_of_week,
     intervals: buildIntervalsForType(spec.workout_type, spec.duration_minutes),
