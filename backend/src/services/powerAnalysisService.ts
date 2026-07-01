@@ -50,8 +50,8 @@ export const powerAnalysisService = {
    */
   async analyzePowerCurve(athleteId: string, stravaActivityId: number) {
     try {
-      // Get activity with power streams
-      const { activity, streams } = await stravaService.getActivityWithStreams(
+      // Get activity power streams
+      const { streams } = await stravaService.getActivityWithStreams(
         athleteId,
         stravaActivityId
       );
@@ -112,6 +112,78 @@ export const powerAnalysisService = {
     } catch (error) {
       logger.error('Error analyzing power curve:', error);
       return null;
+    }
+  },
+
+  /**
+   * Backfill power curves for historical activities that have power data but no
+   * power_curves row yet. The initial Strava connect skips per-activity power
+   * analysis to avoid rate limits, which left the power curve (and therefore FTP
+   * estimation) starved until enough NEW rides trickled in — the main reason
+   * estimated FTP read far too low right after connecting.
+   *
+   * This processes the un-analyzed activities newest-first, throttled and capped
+   * so it stays well under Strava's rate limits (100 req / 15 min). It stops
+   * gracefully on a rate-limit error so it can resume on the next sync.
+   */
+  async backfillPowerCurves(
+    athleteId: string,
+    opts: { maxActivities?: number; delayMs?: number } = {}
+  ): Promise<{ analyzed: number; remaining: number }> {
+    const maxActivities = opts.maxActivities ?? 60;
+    const delayMs = opts.delayMs ?? 700;
+
+    try {
+      // Rides from a real power meter, newest first. We filter on device_watts (not
+      // just average_watts) so we don't burn Strava API calls repeatedly on rides
+      // with only Strava-*estimated* power — those have no power stream, so
+      // analyzePowerCurve returns null, they never get marked done, and (processing
+      // newest-first) they'd otherwise starve older real-power rides every sync.
+      const { data: activities, error } = await supabaseAdmin
+        .from('strava_activities')
+        .select('strava_activity_id, start_date')
+        .eq('athlete_id', athleteId)
+        .filter('raw_data->>device_watts', 'eq', 'true')
+        .order('start_date', { ascending: false })
+        .limit(300);
+
+      if (error || !activities || activities.length === 0) {
+        return { analyzed: 0, remaining: 0 };
+      }
+
+      // Which of those already have a power curve?
+      const { data: existing } = await supabaseAdmin
+        .from('power_curves')
+        .select('strava_activity_id')
+        .eq('athlete_id', athleteId);
+      const analyzedSet = new Set((existing || []).map((c) => c.strava_activity_id));
+
+      const pending = activities.filter(
+        (a) => !analyzedSet.has(a.strava_activity_id)
+      );
+
+      let analyzed = 0;
+      for (const activity of pending.slice(0, maxActivities)) {
+        try {
+          const curve = await this.analyzePowerCurve(athleteId, activity.strava_activity_id);
+          if (curve) analyzed++;
+        } catch (err: any) {
+          // Stop the whole backfill on a rate-limit hit — the next sync resumes it
+          if (typeof err?.message === 'string' && err.message.includes('429')) {
+            logger.warn(`Power curve backfill hit Strava rate limit after ${analyzed} activities; will resume next sync`);
+            break;
+          }
+          logger.error(`Backfill failed for activity ${activity.strava_activity_id}:`, err);
+        }
+        if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+      }
+
+      const remaining = Math.max(0, pending.length - analyzed);
+      logger.debug(`Power curve backfill for ${athleteId}: analyzed ${analyzed}, ${remaining} remaining`);
+      return { analyzed, remaining };
+    } catch (error) {
+      logger.error('Error backfilling power curves:', error);
+      return { analyzed: 0, remaining: 0 };
     }
   },
 

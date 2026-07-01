@@ -156,7 +156,10 @@ export const aiCoachService = {
         .eq('athlete_id', athleteId)
         .gte('scheduled_date', today)
         .order('scheduled_date', { ascending: true })
-        .limit(5),
+        // ~3 weeks ahead, not just the next few days — the coach needs downstream
+        // visibility to adapt a plan without breaking next week's progression,
+        // recovery-week placement, or the taper.
+        .limit(21),
       athletePreferencesService.getPreferences(athleteId),
       supabaseAdmin.from('health_data').select('*').eq('athlete_id', athleteId).eq('date', today).single(),
       supabaseAdmin.from('daily_metrics').select('*').eq('athlete_id', athleteId).eq('date', today).single(),
@@ -642,8 +645,8 @@ CRITICAL RULES when athlete has already ridden today:
         return rideDate === isoDate;
       });
 
-      prompt += `UPCOMING SCHEDULE:\n`;
-      context.upcomingWorkouts.slice(0, 7).forEach((entry: any) => {
+      prompt += `UPCOMING SCHEDULE (next ~3 weeks — use this to see downstream ripple effects when adapting):\n`;
+      context.upcomingWorkouts.slice(0, 21).forEach((entry: any) => {
         const isToday = entry.scheduled_date === isoDate;
         const date = new Date(entry.scheduled_date + 'T12:00:00').toLocaleDateString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric', timeZone: athleteTz,
@@ -920,6 +923,22 @@ The flow is exactly three steps:
    - If they missed key volume → propose adding it back somewhere this week
    - If they did more than planned → propose softening the next 1-2 sessions
    - If recovery is now needed → propose swapping or moving the next hard session
+
+   **THEN LOOK DOWNSTREAM — do not stop at tomorrow.** A change today ripples forward.
+   Before proposing, check the WHOLE upcoming schedule (the UPCOMING SCHEDULE above
+   spans ~3 weeks; if you need to see further into a multi-week plan, call
+   \`get_calendar\` for the full remaining range). Ask yourself:
+   - Does moving a hard session create two hard days back-to-back later in the week?
+   - If they went harder/longer than planned, does the NEXT hard day now need to
+     shift or soften so recovery still lands right?
+   - If you add volume/intensity to make up a miss, does that overload the following
+     days — and does a scheduled recovery week still fall in the right place?
+   - For a plan targeting an event, does the change affect the taper or the
+     progression toward peak? Protect those.
+   Your proposal should name every day you'd touch — including next week if the
+   ripple reaches it — not just the next single day. If the honest answer is that
+   only tomorrow needs to change, say that explicitly ("nothing downstream needs to
+   move"); don't just default to a one-day tweak because it's the easy view.
 
 2. **Propose, in 2-3 sentences.** State the analysis and the specific changes you'd
    make. End with a yes/no question. Example:

@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../utils/supabase';
 import { stravaClient } from '../utils/strava';
 import { stravaService } from '../services/stravaService';
 import { ftpEstimationService } from '../services/ftpEstimationService';
+import { powerAnalysisService } from '../services/powerAnalysisService';
 import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
@@ -138,8 +139,14 @@ export const connectStrava = async (req: AuthRequest, res: Response): Promise<vo
       .then(async (result) => {
         logger.debug(`Initial Strava sync for ${req.user!.id}: ${result.synced} activities`);
 
-        // Auto-update FTP from synced data (uses average_watts, no extra API calls)
         if (result.synced > 0) {
+          // Backfill power curves for the historical rides we just imported.
+          // Without this the power curve (and FTP estimate) stays starved until
+          // enough new rides trickle in — the main cause of FTP reading too low
+          // right after connecting. Throttled so it stays under Strava limits.
+          await powerAnalysisService.backfillPowerCurves(req.user!.id);
+
+          // Re-estimate FTP now that the curve reflects real historical efforts
           await ftpEstimationService.autoUpdateFTP(req.user!.id);
         }
       })
@@ -204,8 +211,16 @@ export const syncActivities = async (req: AuthRequest, res: Response): Promise<v
 
     logger.debug(`Sync complete: ${result.synced}/${result.total} activities stored, ${result.analyzed} analyzed`);
 
+    // Opportunistically backfill power curves for any historical rides still
+    // missing one (e.g. users who connected before backfill existed, or whose
+    // initial connect skipped power analysis). Bounded so a manual sync stays
+    // responsive and under Strava rate limits; it progresses a bit each sync.
+    const backfill = await powerAnalysisService.backfillPowerCurves(req.user.id, {
+      maxActivities: 25,
+    });
+
     // Auto-update FTP after manual sync
-    if (result.analyzed > 0) {
+    if (result.analyzed > 0 || backfill.analyzed > 0) {
       await ftpEstimationService.autoUpdateFTP(req.user.id);
     }
 

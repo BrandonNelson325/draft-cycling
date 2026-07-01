@@ -176,12 +176,11 @@ export const stravaService = {
   async getActivityWithStreams(athleteId: string, stravaActivityId: number) {
     const accessToken = await this.ensureValidToken(athleteId);
 
-    // Get detailed activity
-    const activity = await stravaClient.getActivity(accessToken, stravaActivityId);
-
-    // Get streams (power, HR, etc.)
+    // Only the power stream is consumed downstream (power-curve analysis), so we
+    // skip the separate activity-detail request — that halves the Strava API cost
+    // per activity, which matters when backfilling many historical rides at once.
     const streams = await stravaClient.getActivityStreams(accessToken, stravaActivityId);
 
-    return { activity, streams };
+    return { activity: null, streams };
   },
 };

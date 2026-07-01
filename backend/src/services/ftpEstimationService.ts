@@ -46,6 +46,11 @@ const CP_DURATIONS: { key: string; t: number }[] = [
 // Intervals.icu implied ~21 kJ for this athlete; 20 kJ is a safe conservative default
 const DEFAULT_W_PRIME_J = 20000;
 
+// Lookback for the best-effort search. 90 days keeps the estimate honest to
+// *recent* fitness — a wider window would raise FTP off months-old efforts an
+// athlete may no longer be capable of (inflating zones + every TSS calc).
+const FTP_LOOKBACK_DAYS = 90;
+
 export const ftpEstimationService = {
   /**
    * Ordinary least-squares linear regression: y = slope*x + intercept
@@ -103,15 +108,14 @@ export const ftpEstimationService = {
     activity_count: number;
   } | null> {
     try {
-      // 90-day window — wider than the old 42-day window to get better curve coverage
-      const ninetyDaysAgo = new Date();
-      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+      const lookbackStart = new Date();
+      lookbackStart.setDate(lookbackStart.getDate() - FTP_LOOKBACK_DAYS);
 
       const { data: curves, error } = await supabaseAdmin
         .from('power_curves')
         .select('*, strava_activities!inner(start_date)')
         .eq('athlete_id', athleteId)
-        .gte('strava_activities.start_date', ninetyDaysAgo.toISOString());
+        .gte('strava_activities.start_date', lookbackStart.toISOString());
 
       if (error || !curves || curves.length === 0) {
         logger.debug('No power curve data available for FTP estimation');
@@ -223,20 +227,19 @@ export const ftpEstimationService = {
   },
 
   /**
-   * Auto-update athlete FTP if estimation is medium or high confidence
-   * and the new estimate is meaningfully higher than the current FTP.
+   * Recalculate FTP after a ride and, if warranted, commit a new value.
+   *
+   * Runs after EVERY uploaded ride (Strava webhook + 15-min cron + manual sync).
+   * It always records the outcome (estimate, confidence, reason, timestamp) on the
+   * athlete row so the recalc is verifiable even when the committed FTP doesn't
+   * move — it only commits a confident, >5W improvement and never auto-lowers.
+   *
+   * Returns true only when the committed ftp actually changed.
    */
   async autoUpdateFTP(athleteId: string): Promise<boolean> {
+    const now = new Date().toISOString();
     try {
       const estimation = await this.estimateFTP(athleteId);
-
-      if (!estimation) return false;
-
-      // Accept medium or high confidence (was high-only before)
-      if (estimation.confidence === 'low') {
-        logger.debug(`FTP estimation confidence too low (${estimation.confidence})`);
-        return false;
-      }
 
       const { data: athlete } = await supabaseAdmin
         .from('athletes')
@@ -244,31 +247,97 @@ export const ftpEstimationService = {
         .eq('id', athleteId)
         .single();
 
-      // Only update if significantly different (>5W) or not set
-      // Never auto-lower FTP — only auto-raise (drops require intentional reset)
-      if (
+      // No power-curve data in the window — nothing to compute from. Record the
+      // attempt so a stuck athlete is diagnosable (this is the case the historical
+      // power-curve backfill exists to eliminate).
+      if (!estimation) {
+        await this.recordEstimateOutcome(athleteId, {
+          at: now,
+          estimate: null,
+          confidence: null,
+          reason: 'no_power_curves',
+        });
+        logger.debug(`FTP recalc for ${athleteId}: no power curves in window`);
+        return false;
+      }
+
+      // Decide whether to commit. Accept medium/high confidence; never auto-lower.
+      let committed = false;
+      let reason: string;
+      if (estimation.confidence === 'low') {
+        reason = 'low_confidence';
+      } else if (
         !athlete?.ftp ||
         (estimation.estimated_ftp > athlete.ftp && estimation.estimated_ftp - athlete.ftp > 5)
       ) {
-        await supabaseAdmin
-          .from('athletes')
-          .update({
-            ftp: estimation.estimated_ftp,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', athleteId);
-
-        logger.debug(
-          `Auto-updated FTP for athlete ${athleteId}: ${athlete?.ftp || 'none'} → ${estimation.estimated_ftp}W`
-        );
-        return true;
+        committed = true;
+        reason = athlete?.ftp ? 'raised' : 'initial';
+      } else if (estimation.estimated_ftp <= (athlete?.ftp ?? 0)) {
+        reason = 'estimate_not_higher';
+      } else {
+        reason = 'within_5w_deadband';
       }
 
-      return false;
+      await this.recordEstimateOutcome(athleteId, {
+        at: now,
+        estimate: estimation.estimated_ftp,
+        confidence: estimation.confidence,
+        reason,
+        commit: committed ? estimation.estimated_ftp : undefined,
+      });
+
+      logger.debug(
+        `FTP recalc for ${athleteId}: est=${estimation.estimated_ftp}W conf=${estimation.confidence} ` +
+          `current=${athlete?.ftp ?? 'none'} → ${committed ? 'RAISED' : `held (${reason})`}`
+      );
+      return committed;
     } catch (error) {
       logger.error('Error auto-updating FTP:', error);
       return false;
     }
+  },
+
+  /**
+   * Persist the outcome of an FTP recalc to the athlete row. Always writes the
+   * estimate/confidence/reason/timestamp; only writes `ftp` (and bumps updated_at)
+   * when `commit` is provided. This is what makes post-ride recalculation
+   * observable — ftp_estimated_at advancing proves the recalc ran.
+   */
+  async recordEstimateOutcome(
+    athleteId: string,
+    outcome: {
+      at: string;
+      estimate: number | null;
+      confidence: 'high' | 'medium' | 'low' | null;
+      reason: string;
+      commit?: number;
+    }
+  ): Promise<void> {
+    const update: Record<string, unknown> = {
+      ftp_estimate: outcome.estimate,
+      ftp_estimate_conf: outcome.confidence,
+      ftp_estimate_reason: outcome.reason,
+      ftp_estimated_at: outcome.at,
+    };
+    if (outcome.commit !== undefined) {
+      update.ftp = outcome.commit;
+      update.updated_at = outcome.at;
+    }
+    const { error } = await supabaseAdmin.from('athletes').update(update).eq('id', athleteId);
+    if (!error) return;
+
+    // Deploy-safety: if the observability columns aren't migrated yet (PGRST204),
+    // don't let that block the real ftp commit — retry with just ftp/updated_at.
+    if (error.code === 'PGRST204' && outcome.commit !== undefined) {
+      const { error: retryErr } = await supabaseAdmin
+        .from('athletes')
+        .update({ ftp: outcome.commit, updated_at: outcome.at })
+        .eq('id', athleteId);
+      if (retryErr) logger.error(`Failed to commit FTP for ${athleteId}:`, retryErr);
+      else logger.warn(`Committed FTP for ${athleteId} but ftp_estimate columns are missing — run migration 038`);
+      return;
+    }
+    logger.error(`Failed to record FTP estimate outcome for ${athleteId}:`, error);
   },
 
   /**
