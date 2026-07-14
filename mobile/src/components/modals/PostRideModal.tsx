@@ -18,8 +18,12 @@ import { getConversionUtils } from '../../utils/units';
 
 interface PostRideModalProps {
   activity: UnacknowledgedActivity | null;
+  // Total number of activities still awaiting feedback (including this one).
+  // When > 1 we surface a "Skip all" affordance.
+  remainingCount?: number;
   onAcknowledge: (feedback: ActivityFeedback) => void;
   onSkip: () => void;
+  onSkipAll?: () => void;
   onNavigateToChat?: (message: string) => void;
 }
 
@@ -41,7 +45,7 @@ const WORKOUT_TYPE_LABELS: Record<string, string> = {
   custom: 'Custom',
 };
 
-export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavigateToChat }: PostRideModalProps) {
+export default function PostRideModal({ activity, remainingCount, onAcknowledge, onSkip, onSkipAll, onNavigateToChat }: PostRideModalProps) {
   const [rpe, setRpe] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [wasPlanned, setWasPlanned] = useState<boolean | null>(null);
@@ -93,9 +97,16 @@ export default function PostRideModal({ activity, onAcknowledge, onSkip, onNavig
       >
         <View style={styles.header}>
           <Text style={styles.title}>Post-Ride Feedback</Text>
-          <TouchableOpacity onPress={onSkip}>
-            <Text style={styles.close}>Skip</Text>
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            {onSkipAll && remainingCount && remainingCount > 1 ? (
+              <TouchableOpacity onPress={onSkipAll} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.skipAll}>Skip all ({remainingCount})</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity onPress={onSkip} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.close}>Skip</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <ScrollView
@@ -288,7 +299,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#1e293b',
   },
   title: { fontSize: 20, fontWeight: '700', color: '#f1f5f9' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   close: { fontSize: 15, color: '#64748b' },
+  skipAll: { fontSize: 15, color: '#64748b' },
   scroll: { flex: 1 },
   content: { padding: 20, paddingBottom: 20, gap: 16 },
   activityCard: {

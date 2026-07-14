@@ -70,7 +70,13 @@ function AppModalsInner() {
   };
 
   const currentActivity = newActivities.activities[newActivities.currentIndex];
-  const showPostRide = !dailyMorning.shouldShow && !showWelcome && !!currentActivity;
+  const pendingRideCount = Math.max(0, newActivities.activities.length - newActivities.currentIndex);
+  // Post-ride feedback takes priority over the morning check-in: if the user
+  // just finished a ride, let them complete (or skip) that feedback FIRST, then
+  // surface the sleep/readiness modal. Previously the morning modal could
+  // preempt an in-progress post-ride survey mid-answer (its `shouldShow` flips
+  // true asynchronously) and then bounce back once dismissed.
+  const showPostRide = !showWelcome && !!currentActivity;
 
   const navigateToChat = useCallback((message: string) => {
     if (navigationRef.isReady()) {
@@ -86,7 +92,7 @@ function AppModalsInner() {
         showWelcome={true}
       />
       <DailyMorningModal
-        visible={!showWelcome && dailyMorning.shouldShow}
+        visible={!showWelcome && dailyMorning.shouldShow && !currentActivity}
         analysis={dailyMorning.analysis}
         readiness={dailyMorning.readiness}
         onDismiss={dailyMorning.dismiss}
@@ -99,8 +105,10 @@ function AppModalsInner() {
       />
       <PostRideModal
         activity={showPostRide ? currentActivity : null}
+        remainingCount={pendingRideCount}
         onAcknowledge={newActivities.acknowledge}
         onSkip={newActivities.skip}
+        onSkipAll={newActivities.skipAll}
         onNavigateToChat={navigateToChat}
       />
     </>

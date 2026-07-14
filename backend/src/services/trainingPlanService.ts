@@ -1202,12 +1202,38 @@ export const trainingPlanService = {
   /**
    * Get active training plan for athlete
    */
+  /**
+   * Best-effort: flip any of this athlete's 'active' plans whose end_date has
+   * already passed to 'completed', so a finished plan stops being treated as
+   * the current plan (it was showing at the top of the Plans page indefinitely).
+   * Fire-and-forget — callers don't await it; the read filters below guarantee
+   * correctness even if this write is momentarily behind.
+   */
+  completeEndedPlans(athleteId: string, today: string): void {
+    supabaseAdmin
+      .from('training_plans')
+      .update({ status: 'completed' })
+      .eq('athlete_id', athleteId)
+      .eq('status', 'active')
+      .not('end_date', 'is', null)
+      .lt('end_date', today)
+      .then(({ error }) => {
+        if (error) logger.warn('completeEndedPlans failed:', error);
+      });
+  },
+
   async getActivePlan(athleteId: string): Promise<TrainingPlan | null> {
+    const today = new Date().toISOString().split('T')[0];
+    this.completeEndedPlans(athleteId, today);
+
     const { data, error } = await supabaseAdmin
       .from('training_plans')
       .select('*')
       .eq('athlete_id', athleteId)
       .eq('status', 'active')
+      // A plan that has run its course is no longer "active". Legacy rows with a
+      // null end_date are kept (we can't tell when they end).
+      .or(`end_date.gte.${today},end_date.is.null`)
       .order('created_at', { ascending: false })
       .limit(1)
       .single();
@@ -1232,11 +1258,15 @@ export const trainingPlanService = {
    * Get all active training plans for athlete, sorted by start_date ascending (soonest first)
    */
   async getActivePlans(athleteId: string): Promise<TrainingPlan[]> {
+    const today = new Date().toISOString().split('T')[0];
+    this.completeEndedPlans(athleteId, today);
+
     const { data, error } = await supabaseAdmin
       .from('training_plans')
       .select('*')
       .eq('athlete_id', athleteId)
       .eq('status', 'active')
+      .or(`end_date.gte.${today},end_date.is.null`)
       .order('start_date', { ascending: true });
 
     if (error || !data) {

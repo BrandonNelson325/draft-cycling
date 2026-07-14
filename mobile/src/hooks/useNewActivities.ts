@@ -66,6 +66,23 @@ export function useNewActivities() {
     setCurrentIndex((prev) => prev + 1);
   };
 
+  // Skip ALL remaining unacknowledged activities at once. Acknowledges each with
+  // empty feedback so none reappear on the next fetch, then clears the queue.
+  const skipAll = async () => {
+    const remaining = activities.slice(currentIndex);
+    if (remaining.length === 0) return;
+
+    await Promise.all(
+      remaining.map((a) =>
+        activityFeedbackService
+          .acknowledge(a.id, {})
+          .catch((error) => console.error('Error skipping activity:', error))
+      )
+    );
+
+    setCurrentIndex(activities.length);
+  };
+
   const refetch = async () => {
     try {
       setCurrentIndex(0);
@@ -76,5 +93,5 @@ export function useNewActivities() {
     }
   };
 
-  return { activities, currentIndex, acknowledge, skip, refetch };
+  return { activities, currentIndex, acknowledge, skip, skipAll, refetch };
 }

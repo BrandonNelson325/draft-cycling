@@ -31,7 +31,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   const [analyzingRoute, setAnalyzingRoute] = useState(false);
   const flatListRef = useRef<FlatList>(null);
   const sheetRef = useRef<BottomSheet>(null);
-  const initialMessageSent = useRef(false);
+  const handledInitialMessageRef = useRef<string | null>(null);
   const tabBarHeight = useBottomTabBarHeight();
 
   const startingConversation = useRef(false);
@@ -69,19 +69,37 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     trainingPlanService.getActivePlan().then(plan => setHasActivePlan(!!plan)).catch(() => {});
   }, []);
 
-  // Load conversations on mount and resume the most recent
+  // Load conversations on mount, resume the most recent (or start fresh), THEN
+  // auto-send any initialMessage — all as one awaited sequence. Doing this
+  // serially (rather than letting loadConversations race the send) fixes the bug
+  // where an "adapt my plan" message was sent but the coach appeared to never
+  // respond: loadConversations resolving mid-stream reset `loading` to false,
+  // which hid the streaming reply + tool progress (both gated on `loading`) and
+  // left the input enabled — so only a manually-typed second message ever
+  // surfaced a response.
   useEffect(() => {
     const init = async () => {
       if (startingConversation.current) return;
       startingConversation.current = true;
       try {
         await loadConversations();
-        const { conversations, activeConversationId } = useChatStore.getState();
-        if (activeConversationId || route.params?.initialMessage) return;
-        if (conversations.length > 0) {
-          await selectConversation(conversations[0].id);
-        } else {
-          await startConversation();
+        // Ensure there's an active conversation to send into before we send, so
+        // nothing async is left in flight to clobber `loading` during the turn.
+        if (!useChatStore.getState().activeConversationId) {
+          const { conversations } = useChatStore.getState();
+          if (conversations.length > 0) {
+            await selectConversation(conversations[0].id);
+          } else {
+            await startConversation();
+          }
+        }
+        const initialMessage = route.params?.initialMessage;
+        if (initialMessage && handledInitialMessageRef.current !== initialMessage) {
+          handledInitialMessageRef.current = initialMessage;
+          // Consume the param so navigating here again (even with identical text)
+          // re-fires instead of being silently swallowed.
+          navigation.setParams({ initialMessage: undefined });
+          await handleSend(initialMessage);
         }
       } finally {
         startingConversation.current = false;
@@ -90,13 +108,16 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     init();
   }, []);
 
-  // Handle initialMessage param from navigation
+  // Handle an initialMessage that arrives while the screen is already mounted
+  // (the common case — the Chat tab stays mounted after its first visit, so the
+  // init effect above won't re-run). Guarded against double-firing during init.
   useEffect(() => {
     const initialMessage = route.params?.initialMessage;
-    if (initialMessage && !initialMessageSent.current && !loading) {
-      initialMessageSent.current = true;
-      handleSend(initialMessage);
-    }
+    if (!initialMessage || loading || startingConversation.current) return;
+    if (handledInitialMessageRef.current === initialMessage) return;
+    handledInitialMessageRef.current = initialMessage;
+    navigation.setParams({ initialMessage: undefined });
+    handleSend(initialMessage);
   }, [route.params?.initialMessage, loading]);
 
   // Scroll to bottom on new messages, streaming tokens, and tool-progress updates
