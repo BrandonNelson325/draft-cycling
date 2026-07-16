@@ -50,8 +50,24 @@ export default function IntervalVisualizer({ intervals }: IntervalVisualizerProp
 
   const selected = selectedIndex !== null ? expanded[selectedIndex] : null;
 
+  // Caption describing the actual work structure ("3 × 8 min @ 93%"), derived
+  // from the SAME expanded intervals the bars are drawn from — so the label can
+  // never disagree with the graphic (or with a stale stored workout name).
+  const structureCaption = (() => {
+    const work = expanded.filter((iv) => iv.type === 'work');
+    if (work.length <= 1) return null;
+    const first = work[0];
+    const allSame = work.every((w) => w.duration === first.duration);
+    if (!allSame) return `${work.length} intervals`;
+    const p = getPower(first);
+    const durLabel = first.duration < 60 ? `${first.duration} sec` : `${Math.round(first.duration / 60)} min`;
+    return `${work.length} × ${durLabel}${p > 0 ? ` @ ${p}%` : ''}`;
+  })();
+
   return (
     <View style={styles.container}>
+      {structureCaption && <Text style={styles.caption}>{structureCaption}</Text>}
+
       {/* Bar visualization */}
       <View style={[styles.bars, { height: BAR_HEIGHT }]}>
         {expanded.map((iv, i) => {
@@ -111,6 +127,11 @@ export default function IntervalVisualizer({ intervals }: IntervalVisualizerProp
 const styles = StyleSheet.create({
   container: {
     gap: 8,
+  },
+  caption: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#e2e8f0',
   },
   bars: {
     flexDirection: 'row',

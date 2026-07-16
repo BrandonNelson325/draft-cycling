@@ -164,10 +164,32 @@ function buildTrainingStatusBlock(trainingStatus: any): string {
 - TSB (Form): ${tsb.toFixed(1)} (CTL minus ATL)
 ${ctl >= 15 ? `- ACWR: ${(atl / ctl).toFixed(2)} (Acute:Chronic ratio — the primary metric)` : '- ACWR: N/A (not enough training history)'}
 
-IMPORTANT: Your assessment MUST align with the "${statusLabel}" status shown above. The ACWR (not TSB alone) determines training status.
+IMPORTANT: This status reflects CHRONIC load (ACWR over weeks). Keep your description of the training WEEK aligned with the "${statusLabel}" status:
 - Do NOT say the athlete is "fresh" or has "low fatigue" if the status is Productive, Overreaching, or Overtraining.
 - Do NOT say the athlete is "fatigued" or "overtrained" if the status is Fresh or Balanced.
-- Base your description of the training week on the ACTUAL ride data below, not assumptions.`;
+- Base your description of the training week on the ACTUAL ride data below, not assumptions.
+- BUT today's RECOMMENDATION must also weigh the acute readiness signals below (RPE, sleep, HRV, resting HR). ACWR moves slowly, so a single hard day barely shifts it — a poor-readiness day (high RPE, short/poor sleep, suppressed HRV, elevated resting HR) justifies an easier session or rest EVEN WHEN the chronic status reads Productive or Balanced. Don't reflexively say "proceed."`;
+}
+
+/**
+ * Acute readiness signals for TODAY: subjective morning check-in + objective
+ * wellness (sleep, HRV, resting HR). These are the fast-moving signals ACWR
+ * misses — the reason the coach previously always defaulted to "proceed."
+ */
+function buildReadinessBlock(metrics: any): string {
+  if (!metrics) {
+    return 'ACUTE READINESS (today): No morning check-in or wellness data available today — weigh recent ride RPE and load instead.';
+  }
+  const lines: string[] = [];
+  if (metrics.sleep_quality) lines.push(`- Sleep quality (subjective): ${metrics.sleep_quality}`);
+  if (metrics.sleep_seconds) lines.push(`- Sleep duration: ${(metrics.sleep_seconds / 3600).toFixed(1)}h`);
+  if (metrics.feeling) lines.push(`- Feeling: ${metrics.feeling}`);
+  if (metrics.hrv != null) lines.push(`- HRV: ${Math.round(metrics.hrv)} ms (lower than the athlete's norm = more fatigue)`);
+  if (metrics.rhr != null) lines.push(`- Resting HR: ${Math.round(metrics.rhr)} bpm (elevated = incomplete recovery)`);
+  if (lines.length === 0) {
+    return 'ACUTE READINESS (today): No morning check-in or wellness data available today — weigh recent ride RPE and load instead.';
+  }
+  return 'ACUTE READINESS (today):\n' + lines.join('\n');
 }
 
 /**
@@ -500,7 +522,7 @@ Format as JSON:
     const todayUTC = localDayToUTCRange(todayStr, tz);
     const sevenDaysAgoUTC = localDayToUTCRange(sevenDaysAgo.toISOString().split('T')[0], tz);
 
-    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile, athleteWorkoutsResult, templatesResult, athletePrefsResult, activePlansResult] = await Promise.all([
+    const [trainingStatus, yesterdayResult, todayEntry, tomorrowEntry, todayRidesResult, recentResult, fatigueProfile, athleteWorkoutsResult, templatesResult, athletePrefsResult, activePlansResult, todayMetricsResult] = await Promise.all([
       trainingLoadService.getTrainingStatus(athleteId),
       supabaseAdmin
         .from('strava_activities')
@@ -557,6 +579,12 @@ Format as JSON:
         .eq('athlete_id', athleteId)
         .eq('status', 'active')
         .limit(1),
+      supabaseAdmin
+        .from('daily_metrics')
+        .select('sleep_quality, sleep_score, sleep_seconds, feeling, feeling_score, hrv, rhr, check_in_completed')
+        .eq('athlete_id', athleteId)
+        .eq('date', todayStr)
+        .maybeSingle(),
     ]);
 
     const yesterdayActivities = yesterdayResult.data || [];
@@ -605,6 +633,9 @@ Format as JSON:
       ...templateWorkouts.filter(t => !seenNames.has(t.name)),
     ];
 
+    // Acute readiness signals for today (subjective check-in + wellness).
+    const readinessBlock = buildReadinessBlock(todayMetricsResult.data);
+
     // Build AI context — use post-ride prompt if ridden today
     let context: string;
     if (riddenToday) {
@@ -615,7 +646,8 @@ Format as JSON:
         recentActivities,
         fatigueProfile,
         availableWorkouts,
-        isTomorrowRestDay
+        isTomorrowRestDay,
+        readinessBlock
       );
     } else if (isRestDay) {
       // Rest day — build a dedicated rest day context
@@ -624,7 +656,8 @@ Format as JSON:
         trainingStatus,
         recentActivities,
         fatigueProfile,
-        isCalendarRestDay ? 'scheduled' : isPreferenceRestDay ? 'preference' : 'plan'
+        isCalendarRestDay ? 'scheduled' : isPreferenceRestDay ? 'preference' : 'plan',
+        readinessBlock
       );
     } else {
       context = this.buildSuggestionContext(
@@ -634,7 +667,8 @@ Format as JSON:
         recentActivities,
         hasPlannedWorkout,
         fatigueProfile,
-        availableWorkouts
+        availableWorkouts,
+        readinessBlock
       );
     }
 
@@ -775,13 +809,14 @@ Format as JSON:
     recentActivities: any[],
     hasPlannedWorkout: boolean,
     fatigueProfile: FatigueProfile | null = null,
-    availableWorkouts: AvailableWorkout[] = []
+    availableWorkouts: AvailableWorkout[] = [],
+    readinessBlock: string = ''
   ): string {
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
 
     const recentRideList = recentActivities
-      .map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`)
+      .map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS${a.perceived_effort ? `, RPE ${a.perceived_effort}/5` : ''}`)
       .join('\n');
 
     const base = `You are a cycling coach assessing an athlete's readiness for today.
@@ -794,7 +829,7 @@ ${
           (a) =>
             `- ${a.name}: ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS, ${
               a.average_watts || 0
-            }W avg`
+            }W avg${a.perceived_effort ? `, RPE ${a.perceived_effort}/5` : ''}`
         )
         .join('\n')
     : '- No rides yesterday (rest day)'
@@ -802,6 +837,8 @@ ${
 Total TSS: ${yesterdayTSS}
 
 ${buildTrainingStatusBlock(trainingStatus)}
+
+${readinessBlock}
 
 LAST 7 DAYS (${recentActivities.length} rides, ${recentTotalTSS} total TSS, ${(recentTotalTSS / 7).toFixed(1)} avg TSS/day):
 ${recentRideList || '  (no rides)'}
@@ -818,18 +855,20 @@ TODAY'S SCHEDULED WORKOUT:
 - TSS: ${todayEntry.workouts.tss}
 
 YOUR TASK:
-Give a direct, no-fluff assessment that MATCHES the training status above. If Overreaching/Overtraining, recommend rest or easier sessions. If Fresh/Balanced, the athlete can push harder. No greetings or filler.
-Base your description on the ACTUAL ride data — don't guess or assume what the week looked like.
+Give a direct, no-fluff assessment. Weigh BOTH the chronic status (ACWR) AND today's acute readiness (RPE, sleep, HRV, resting HR). Base your description on the ACTUAL data — don't guess.
 
-You must also decide whether the planned workout above should be ADJUSTED. Be conservative — only override the plan when the data clearly warrants it:
-- adjustment.kind = "rest" → recent load is high enough that recovery is the better call (e.g. several hard days in a row, ATL well above CTL, fatigued status)
-- adjustment.kind = "easier" → athlete can train but the planned intensity/duration is too much given current readiness
-- adjustment.kind = "none" → keep the plan as-is. This is the default. Use it when the athlete is fresh or balanced.
+Decide honestly whether the planned workout should be ADJUSTED. Do NOT rubber-stamp "proceed" — judge it on the evidence:
+- adjustment.kind = "rest" → recovery is the better call today (several hard days in a row, ATL well above CTL, fatigued status, OR clearly poor acute readiness — e.g. short/bad sleep, suppressed HRV, elevated resting HR, high RPE on recent rides).
+- adjustment.kind = "easier" → the athlete can train, but the planned intensity/duration is too much given current readiness (e.g. a hard interval day landing on a poor-sleep morning).
+- adjustment.kind = "none" → the plan is right for today. Choose this when readiness supports the planned effort — not as a reflex.
+If acute readiness is genuinely good and load is sustainable, keeping the plan (or pushing) is the correct, confident answer. The goal is an honest call, not a cautious or a permissive one.
+
+Include a brief RECOVERY OUTLOOK in the recommendation when relevant (e.g. "legs should be ready for intensity in a day or two").
 
 Format as JSON:
 {
-  "summary": "1 sentence: current state referencing actual training data (e.g. 'Carrying fatigue from 5 rides totaling 400 TSS this week.' or 'Well-rested after 2 easy days.')",
-  "recommendation": "1 sentence: what to do (e.g. 'Proceed as planned — you're ready for it.' or 'I'd suggest skipping today's workout and resting — your body will benefit more from recovery right now.')",
+  "summary": "1 sentence: current state referencing actual data (e.g. 'Carrying fatigue from 5 rides totaling 400 TSS this week, and HRV is down this morning.' or 'Well-rested after 2 easy days, slept 8h.')",
+  "recommendation": "1-2 sentences: what to do today + recovery outlook (e.g. 'Proceed — readiness is solid and you'll absorb this well.' or 'Skip the intervals and spin easy; short sleep + high RPE yesterday mean you'd dig a hole. Ready for hard work again in ~2 days.')",
   "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more",
   "adjustment": {
     "kind": "rest|easier|none",
@@ -878,7 +917,8 @@ Format as JSON:
     trainingStatus: any,
     recentActivities: any[],
     fatigueProfile: FatigueProfile | null = null,
-    reason: 'scheduled' | 'preference' | 'plan'
+    reason: 'scheduled' | 'preference' | 'plan',
+    readinessBlock: string = ''
   ): string {
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
@@ -904,13 +944,15 @@ Total TSS: ${yesterdayTSS}
 
 ${buildTrainingStatusBlock(trainingStatus)}
 
+${readinessBlock}
+
 LAST 7 DAYS (${recentActivities.length} rides, ${recentTotalTSS} total TSS):
-${recentActivities.map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`).join('\n') || '  (no rides)'}
+${recentActivities.map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS${a.perceived_effort ? `, RPE ${a.perceived_effort}/5` : ''}`).join('\n') || '  (no rides)'}
 
 ${fatigueProfileService.formatForPrompt(fatigueProfile)}
 
 YOUR TASK:
-Provide a rest day summary. Acknowledge the training load and reinforce why rest matters today.
+Provide a rest day summary. Acknowledge the training load and acute readiness, and reinforce why rest matters today.
 
 Format as JSON:
 {
@@ -930,7 +972,8 @@ Format as JSON:
     recentActivities: any[],
     fatigueProfile: FatigueProfile | null = null,
     availableWorkouts: AvailableWorkout[] = [],
-    tomorrowIsRest: boolean = false
+    tomorrowIsRest: boolean = false,
+    readinessBlock: string = ''
   ): string {
     const todayTSS = todayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
@@ -939,7 +982,7 @@ Format as JSON:
     const ridesText = todayActivities
       .map(
         (a) =>
-          '- ' + a.name + ': ' + Math.round(a.moving_time_seconds / 60) + 'min, ' + (a.tss || 0) + ' TSS, ' + (a.average_watts || 0) + 'W avg'
+          '- ' + a.name + ': ' + Math.round(a.moving_time_seconds / 60) + 'min, ' + (a.tss || 0) + ' TSS, ' + (a.average_watts || 0) + 'W avg' + (a.perceived_effort ? ', RPE ' + a.perceived_effort + '/5' : '')
       )
       .join('\n');
 
@@ -963,12 +1006,13 @@ Format as JSON:
         + '- Duration: ' + tomorrowEntry.workouts.duration_minutes + ' minutes\n'
         + '- TSS: ' + tomorrowEntry.workouts.tss + '\n\n'
         + 'YOUR TASK:\n'
-        + 'Summarize today\'s training effort, preview tomorrow\'s workout, and assess recovery outlook. Your assessment MUST match the training status above. Be direct, no filler.\n'
-        + 'Base your description on the ACTUAL ride data — don\'t guess or assume what the week looked like.\n\n'
+        + 'Summarize today\'s effort, then give a REAL recovery read and preview tomorrow. Weigh today\'s RPE + TSS, current TSB/ACWR, and the acute readiness signals above (sleep, HRV, resting HR). Be direct, no filler.\n'
+        + 'The recommendation must include a concrete RECOVERY OUTLOOK — roughly when the athlete will be ready for the next hard effort (e.g. "fresh by tomorrow", "give it ~48h before intensity") — and, if tomorrow\'s planned session looks like too much given today\'s effort + readiness, say so and suggest easing it. Don\'t default to a bland "get good rest."\n'
+        + 'Base your description on the ACTUAL ride data — don\'t guess.\n\n'
         + 'Format as JSON:\n'
         + '{\n'
-        + '  "summary": "1 sentence: today\'s ride recap referencing actual data (e.g. \'Solid 75 TSS endurance ride on top of a 400 TSS week.\')",\n'
-        + '  "recommendation": "1 sentence: recovery outlook + tomorrow preview (e.g. \'Get good rest tonight — tomorrow\'s threshold intervals will need fresh legs.\')",\n'
+        + '  "summary": "1 sentence: today\'s ride recap referencing actual data + RPE (e.g. \'Hard 95 TSS threshold session, RPE 4/5, on top of a 400 TSS week.\')",\n'
+        + '  "recommendation": "1-2 sentences: recovery outlook + honest take on tomorrow (e.g. \'That was a big anaerobic load — expect ~48h before you\\\'re sharp again, so tomorrow\\\'s VO2 work may be better pushed a day or eased.\' or \'Easy effort, you\\\'ll be fresh tomorrow — the threshold intervals are a green light.\')",\n'
         + '  "suggestedAction": "proceed-as-planned|make-easier|add-rest|can-do-more"\n'
         + '}';
     } else {
@@ -1000,7 +1044,7 @@ Format as JSON:
     }
 
     const recentRideList = recentActivities
-      .map((a) => '  - ' + new Date(a.start_date).toLocaleDateString() + ': ' + a.name + ' — ' + Math.round(a.moving_time_seconds / 60) + 'min, ' + (a.tss || 0) + ' TSS')
+      .map((a) => '  - ' + new Date(a.start_date).toLocaleDateString() + ': ' + a.name + ' — ' + Math.round(a.moving_time_seconds / 60) + 'min, ' + (a.tss || 0) + ' TSS' + (a.perceived_effort ? ', RPE ' + a.perceived_effort + '/5' : ''))
       .join('\n');
 
     return 'You are a cycling coach reviewing an athlete\'s completed training for today and previewing tomorrow.\n\n'
@@ -1008,6 +1052,7 @@ Format as JSON:
       + ridesText + '\n'
       + 'Total TSS today: ' + todayTSS + '\n\n'
       + buildTrainingStatusBlock(trainingStatus) + '\n\n'
+      + readinessBlock + '\n\n'
       + 'LAST 7 DAYS (' + recentActivities.length + ' rides, ' + recentTotalTSS + ' total TSS, ' + (recentTotalTSS / 7).toFixed(1) + ' avg TSS/day):\n'
       + (recentRideList || '  (no rides)') + '\n\n'
       + fatigueProfileService.formatForPrompt(fatigueProfile) + '\n\n'

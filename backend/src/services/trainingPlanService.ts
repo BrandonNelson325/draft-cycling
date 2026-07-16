@@ -106,42 +106,134 @@ function intensityFactorFor(type: string): number {
 }
 
 /**
+ * Summarize an interval list's WORK structure the way an athlete reads it:
+ * "3 × 8 min @ 93%". Derived from the actual intervals so it can NEVER disagree
+ * with what the workout graphic draws. Returns null for steady rides (one work
+ * block, e.g. endurance/recovery) where a rep count would be meaningless.
+ */
+export function describeIntervals(intervals: any[]): string | null {
+  if (!Array.isArray(intervals)) return null;
+  // Expand repeat counts the same way the visualizer does, so the label matches.
+  const work: { duration: number; power: number }[] = [];
+  for (const iv of intervals) {
+    if (iv?.type !== 'work') continue;
+    const count = Math.max(1, Number(iv.repeat) || 1);
+    const power = Number(iv.power ?? iv.power_high ?? iv.power_low) || 0;
+    for (let i = 0; i < count; i++) work.push({ duration: Number(iv.duration) || 0, power });
+  }
+  if (work.length <= 1) return null; // steady ride — no meaningful rep structure
+
+  // If every work rep is the same length, express it as "N × M min @ P%".
+  const first = work[0];
+  const allSame = work.every((w) => w.duration === first.duration);
+  const fmt = (sec: number) => (sec < 60 ? `${sec} sec` : `${Math.round(sec / 60)} min`);
+  if (allSame) {
+    const label = `${work.length} × ${fmt(first.duration)}`;
+    return first.power > 0 ? `${label} @ ${first.power}%` : label;
+  }
+  return `${work.length} intervals`; // mixed structure (e.g. over-unders)
+}
+
+/**
  * Build a structured interval list that sums EXACTLY to durationMinutes. Warmup
  * + work + cooldown; for interval types the work portion is broken into
  * work/recovery repeats (so a "threshold" ride isn't one impossible 90-min
  * block). The remainder is always absorbed as easy spinning so totals are exact.
  */
-export function buildIntervalsForType(type: string, durationMinutes: number): any[] {
-  const total = durationMinutes * 60;
+// Per-type interval shape. Code OWNS the powers (never the model) so intensity
+// is always physiologically correct; the coach may only choose rep count / work
+// & rest length (see buildIntervalsFromStructure). Default work/rest lengths are
+// used when the coach doesn't specify a structure.
+const INTERVAL_SPECS: Record<string, { workPower: number; restPower: number; workSec: number; restSec: number }> = {
+  threshold:  { workPower: 93,  restPower: 60, workSec: 480, restSec: 180 }, // 8-min threshold reps
+  sweet_spot: { workPower: 90,  restPower: 60, workSec: 720, restSec: 240 }, // 12-min sweet-spot blocks
+  vo2max:     { workPower: 110, restPower: 55, workSec: 180, restSec: 120 }, // 3-min VO2 reps
+  anaerobic:  { workPower: 130, restPower: 50, workSec: 40,  restSec: 200 }, // 40s bursts
+  tempo:      { workPower: 82,  restPower: 62, workSec: 900, restSec: 180 }, // 15-min tempo blocks
+};
+
+/**
+ * Assemble warmup + work/rest reps + cooldown that sum EXACTLY to `total` sec.
+ * `maxReps` caps the number of reps (undefined = fill all available time, the
+ * generic behavior); any time not consumed by reps is absorbed as easy spinning.
+ * Returns the interval array and how many work reps were actually placed.
+ */
+function assembleIntervals(
+  type: string,
+  total: number,
+  workLen: number,
+  restLen: number,
+  workPower: number,
+  restPower: number,
+  maxReps?: number
+): { intervals: any[]; reps: number } {
   const warm = Math.min(600, Math.round(total * 0.15));
   const cool = Math.min(300, Math.round(total * 0.1));
-  let workSec = total - warm - cool;
-  if (workSec < 60) return [{ duration: total, power: 58, type: 'work' }]; // tiny ride: just spin
+  const available = total - warm - cool;
+  if (available < 60) return { intervals: [{ duration: total, power: 58, type: 'work' }], reps: 0 };
 
   const out: any[] = [{ duration: warm, power: 60, type: 'warmup' }];
-
-  const repeats = (workLen: number, workPower: number, restLen: number, restPower: number) => {
-    let remaining = workSec;
-    while (remaining >= workLen + restLen) {
-      out.push({ duration: workLen, power: workPower, type: 'work' });
-      out.push({ duration: restLen, power: restPower, type: 'rest' });
-      remaining -= workLen + restLen;
-    }
-    if (remaining > 0) out.push({ duration: remaining, power: restPower, type: 'rest' });
-  };
-
-  switch (type) {
-    case 'threshold': repeats(480, 93, 180, 60); break;       // 8-min threshold reps
-    case 'sweet_spot': repeats(720, 90, 240, 60); break;      // 12-min sweet-spot blocks
-    case 'vo2max': repeats(180, 110, 120, 55); break;         // 3-min VO2 reps
-    case 'anaerobic': repeats(40, 130, 200, 50); break;       // 40s anaerobic bursts
-    case 'tempo': repeats(900, 82, 180, 62); break;           // 15-min tempo blocks
-    case 'recovery': out.push({ duration: workSec, power: 55, type: 'work' }); break;
-    default: out.push({ duration: workSec, power: 70, type: 'work' }); break; // endurance/long
+  let remaining = available;
+  let reps = 0;
+  while (remaining >= workLen + restLen && (maxReps == null || reps < maxReps)) {
+    out.push({ duration: workLen, power: workPower, type: 'work' });
+    out.push({ duration: restLen, power: restPower, type: 'rest' });
+    remaining -= workLen + restLen;
+    reps++;
   }
-
+  if (remaining > 0) out.push({ duration: remaining, power: restPower, type: 'rest' });
   out.push({ duration: cool, power: 55, type: 'cooldown' });
-  return out;
+  return { intervals: out, reps };
+}
+
+export function buildIntervalsForType(type: string, durationMinutes: number): any[] {
+  const total = durationMinutes * 60;
+  const spec = INTERVAL_SPECS[type];
+  if (!spec) {
+    // Steady rides (endurance / recovery / anything else): one work block.
+    const warm = Math.min(600, Math.round(total * 0.15));
+    const cool = Math.min(300, Math.round(total * 0.1));
+    const workSec = total - warm - cool;
+    if (workSec < 60) return [{ duration: total, power: 58, type: 'work' }];
+    return [
+      { duration: warm, power: 60, type: 'warmup' },
+      { duration: workSec, power: type === 'recovery' ? 55 : 70, type: 'work' },
+      { duration: cool, power: 55, type: 'cooldown' },
+    ];
+  }
+  // Interval type, no explicit structure → fill the time with default-size reps.
+  return assembleIntervals(type, total, spec.workSec, spec.restSec, spec.workPower, spec.restPower).intervals;
+}
+
+/**
+ * Build intervals from a coach-prescribed STRUCTURE (reps × work_minutes, with
+ * rest_minutes recovery). Powers still come from the type (code-owned). Honors
+ * the exact rep count when it fits the duration; clamps reps that don't fit.
+ * Returns null when the structure is invalid or doesn't apply (steady types, or
+ * not even one rep fits) so the caller falls back to buildIntervalsForType.
+ */
+export function buildIntervalsFromStructure(
+  type: string,
+  durationMinutes: number,
+  s: { reps?: number; work_minutes?: number; rest_minutes?: number }
+): any[] | null {
+  const spec = INTERVAL_SPECS[type];
+  if (!spec) return null; // steady ride — no rep structure
+
+  const reps = Math.round(Number(s.reps));
+  const workSec = Math.round(Number(s.work_minutes) * 60);
+  if (!Number.isFinite(reps) || reps < 1 || reps > 24) return null;
+  if (!Number.isFinite(workSec) || workSec < 20 || workSec > 3600) return null;
+
+  let restSec = Math.round(Number(s.rest_minutes) * 60);
+  if (!Number.isFinite(restSec) || restSec < 0) restSec = spec.restSec;
+  restSec = Math.min(restSec, 1800);
+
+  const { intervals, reps: placed } = assembleIntervals(
+    type, durationMinutes * 60, workSec, restSec, spec.workPower, spec.restPower, reps
+  );
+  if (placed < 1) return null; // couldn't fit even one rep → let generic builder handle it
+  return intervals;
 }
 
 // Values the `workouts` table CHECK constraint allows. sweet_spot and anaerobic
@@ -171,13 +263,17 @@ const TYPE_LABELS: Record<string, { name: string; description: string }> = {
 /** Build one workout of a given type, sized to durationMinutes, on a given day. */
 function buildWorkout(type: string, durationMinutes: number, dayOfWeek: number, rationale?: string): WorkoutTemplate {
   const label = TYPE_LABELS[type] || TYPE_LABELS.endurance;
+  const intervals = buildIntervalsForType(type, durationMinutes);
+  // Name from the ACTUAL synthesized structure so the title always matches the
+  // interval graphic (e.g. "Threshold Intervals · 3 × 8 min @ 93%").
+  const structure = describeIntervals(intervals);
   return {
-    name: label.name,
+    name: structure ? `${label.name} · ${structure}` : label.name,
     description: label.description,
     workout_type: toDbWorkoutType(type),
     duration_minutes: durationMinutes,
     day_of_week: dayOfWeek,
-    intervals: buildIntervalsForType(type, durationMinutes),
+    intervals,
     rationale,
   };
 }
@@ -193,17 +289,38 @@ export function buildWorkoutFromSpec(spec: {
   day_of_week: number;
   name?: string;
   rationale?: string;
+  // Coach-prescribed interval structure (optional). When present + valid, the
+  // session is built to match (e.g. reps 2, work_minutes 12 → a real 2×12);
+  // otherwise we fall back to the generic per-type template.
+  reps?: number;
+  work_minutes?: number;
+  rest_minutes?: number;
 }): WorkoutTemplate {
   const fallback = TYPE_LABELS[spec.workout_type] || TYPE_LABELS.endurance;
+  const structured =
+    spec.reps != null || spec.work_minutes != null
+      ? buildIntervalsFromStructure(spec.workout_type, spec.duration_minutes, {
+          reps: spec.reps,
+          work_minutes: spec.work_minutes,
+          rest_minutes: spec.rest_minutes,
+        })
+      : null;
+  const intervals = structured ?? buildIntervalsForType(spec.workout_type, spec.duration_minutes);
+  // We synthesize the intervals, so the NAME must describe the structure we
+  // actually built — never the model's claimed structure (which could say
+  // "2×12" while the builder produced 3×8). Base label reflects the true type
+  // (e.g. sweet_spot → "Sweet Spot Intervals"); structure is appended from the
+  // real intervals so name + graphic can't disagree.
+  const structure = describeIntervals(intervals);
   return {
-    name: spec.name || fallback.name,
+    name: structure ? `${fallback.name} · ${structure}` : fallback.name,
     description: spec.rationale || fallback.description,
     // Store a DB-allowed type, but build intervals from the original type
     // (e.g. sweet_spot → 'threshold' row with sweet-spot-shaped intervals).
     workout_type: toDbWorkoutType(spec.workout_type),
     duration_minutes: spec.duration_minutes,
     day_of_week: spec.day_of_week,
-    intervals: buildIntervalsForType(spec.workout_type, spec.duration_minutes),
+    intervals,
     rationale: spec.rationale,
   };
 }
@@ -253,12 +370,17 @@ export function normalizeAiPlan(
       if (dur > capMin) dur = Math.floor(capMin / 5) * 5; // clamp to available time
       if (dur < 30) dur = Math.min(30, capMin);
 
+      const numOrUndef = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : undefined);
       byDay.set(day, buildWorkoutFromSpec({
         workout_type: type,
         duration_minutes: dur,
         day_of_week: day,
         name: typeof wk?.name === 'string' ? wk.name.slice(0, 80) : undefined,
         rationale: typeof wk?.rationale === 'string' ? wk.rationale.slice(0, 300) : undefined,
+        // Coach-prescribed structure (validated + clamped inside the builder).
+        reps: numOrUndef(wk?.reps),
+        work_minutes: numOrUndef(wk?.work_minutes),
+        rest_minutes: numOrUndef(wk?.rest_minutes),
       }));
     }
 

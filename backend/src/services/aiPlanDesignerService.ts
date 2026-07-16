@@ -46,6 +46,9 @@ const SUBMIT_PLAN_TOOL = {
                     enum: ['recovery', 'endurance', 'tempo', 'sweet_spot', 'threshold', 'vo2max', 'anaerobic'],
                   },
                   duration_minutes: { type: 'number' },
+                  reps: { type: 'number', description: 'For interval sessions (tempo/sweet_spot/threshold/vo2max/anaerobic): number of work intervals, e.g. 2 for a 2×12. Omit for steady endurance/recovery rides.' },
+                  work_minutes: { type: 'number', description: 'Length of EACH work interval in minutes, e.g. 12 for a 2×12. Omit for steady rides.' },
+                  rest_minutes: { type: 'number', description: 'Easy recovery between work intervals, in minutes (e.g. 4). Omit for steady rides.' },
                   name: { type: 'string', description: 'Short, specific workout name.' },
                   rationale: { type: 'string', description: 'One sentence: why THIS workout on THIS day.' },
                 },
@@ -142,6 +145,7 @@ DESIGN REQUIREMENTS:
 4. Tailor to the athlete's FTP, experience, strengths/weaknesses, and the route (e.g. lots of climbing → more threshold/tempo and long climbing-style endurance).
 5. Every workout needs a one-sentence rationale that a smart athlete would respect.
 6. duration_minutes must fit within that day's available hours.
+7. For INTERVAL sessions (tempo/sweet_spot/threshold/vo2max/anaerobic), prescribe the exact structure with reps + work_minutes + rest_minutes (e.g. a 2×12 sweet spot = reps 2, work_minutes 12, rest_minutes 4). We synthesize the intervals at the correct power for the type from these numbers, and the workout is NAMED from them — so the structure you give is what the athlete sees and rides. Make warmup + (reps × (work_minutes + rest_minutes)) + cooldown fit inside duration_minutes; the rest of the time becomes easy spinning. Omit reps/work_minutes/rest_minutes for steady endurance and recovery rides.
 
 Return the full week-by-week plan via submit_training_plan now.`;
 
