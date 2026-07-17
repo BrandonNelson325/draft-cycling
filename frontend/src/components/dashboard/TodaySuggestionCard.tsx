@@ -200,7 +200,7 @@ export function TodaySuggestionCard() {
         )}
 
         {/* Rest day (pre-ride): explicit rest, no workout planned */}
-        {!hasRiddenToday && suggestion.isRestDay && (
+        {!hasRiddenToday && suggestion.isRestDay && !suggestion.todaysWorkout && (
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-1">
               Today

@@ -172,8 +172,8 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
         </TouchableOpacity>
       )}
 
-      {/* Rest day (pre-ride) */}
-      {!hasRiddenToday && suggestion.isRestDay && (
+      {/* Rest day (pre-ride) — never show alongside an actual planned workout */}
+      {!hasRiddenToday && suggestion.isRestDay && !suggestion.todaysWorkout && (
         <View style={[styles.workoutBox, styles.completedBox]}>
           <Text style={[styles.workoutLabel, styles.completedLabel]}>Today</Text>
           <Text style={styles.workoutName}>Rest day</Text>

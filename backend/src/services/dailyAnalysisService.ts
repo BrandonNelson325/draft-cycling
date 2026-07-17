@@ -604,7 +604,12 @@ Format as JSON:
     const hasActivePlan = (activePlansResult.data?.length ?? 0) > 0;
     const isImpliedPlanRestDay = hasActivePlan && !hasPlannedWorkout && !isCalendarRestDay;
 
-    const isRestDay = isCalendarRestDay || isPreferenceRestDay || isImpliedPlanRestDay;
+    // A workout actually scheduled for today ALWAYS wins — never call it a rest
+    // day just because today's weekday sits in the athlete's rest_days
+    // preference. Otherwise the dashboard contradicts itself (shows the planned
+    // workout AND a "Rest day" card) and the coach gives rest advice for a day
+    // that has a real session on the calendar.
+    const isRestDay = !hasPlannedWorkout && (isCalendarRestDay || isPreferenceRestDay || isImpliedPlanRestDay);
     const isTomorrowRestDay = tomorrowEntry.data?.entry_type === 'rest';
 
     // Build normalized list of available workouts for AI to pick from
