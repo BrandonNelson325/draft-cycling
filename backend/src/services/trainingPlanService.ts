@@ -1505,6 +1505,9 @@ export const trainingPlanService = {
     );
 
     // Step 2: Schedule calendar entries with the same concurrency cap.
+    // skipIntervalsAutoSync=true: don't fire 84 racing per-entry uploads — a
+    // single reconcileIntervalsIcu() below wipes any prior plan's events and
+    // re-uploads the whole new plan cleanly.
     await mapWithConcurrency(createdWorkouts, 5, (workout, i) => {
       const { week, wt, date } = items[i];
       return calendarService.scheduleWorkout(
@@ -1513,7 +1516,8 @@ export const trainingPlanService = {
         date,
         wt.rationale || `Week ${week.week_number} - ${week.phase} phase: ${wt.name}`,
         plan.id,
-        week.week_number
+        week.week_number,
+        true
       );
     });
 
@@ -1547,6 +1551,11 @@ export const trainingPlanService = {
     } catch (err: any) {
       logger.error('Failed to schedule rest days:', err.message);
     }
+
+    // Reconcile intervals.icu once for the whole plan: wipes any prior plan's
+    // future "Draft -" events and uploads this plan. Fire-and-forget (swallows
+    // its own errors) so it never blocks or fails the build.
+    void calendarService.reconcileIntervalsIcu(athleteId);
 
     return {
       scheduledCount: createdWorkouts.length,

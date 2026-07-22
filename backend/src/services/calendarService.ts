@@ -7,6 +7,30 @@ import { localDayToUTCRange, utcToLocalDate } from '../utils/timezone';
 
 export const calendarService = {
   /**
+   * Reconcile the athlete's intervals.icu calendar with ours after a BULK change
+   * (plan build/adapt, clear, bulk schedule). Full reconcile = wipe future
+   * "Draft -" events + re-upload the current calendar, so intervals.icu always
+   * matches after changes that the per-entry sync paths don't cover. No-op if
+   * the athlete isn't connected / auto-sync is off. Fire-and-forget safe: it
+   * swallows its own errors (the manual "Sync all" button remains a backstop).
+   */
+  async reconcileIntervalsIcu(athleteId: string): Promise<void> {
+    try {
+      const { data: athlete } = await supabaseAdmin
+        .from('athletes')
+        .select('intervals_icu_auto_sync, intervals_icu_access_token')
+        .eq('id', athleteId)
+        .single();
+      if (!athlete?.intervals_icu_auto_sync || !athlete?.intervals_icu_access_token) return;
+
+      const result = await intervalsIcuService.resyncAll(athleteId);
+      logger.info(`[Intervals.icu] Auto-reconcile after calendar change for ${athleteId}: ${JSON.stringify(result)}`);
+    } catch (err: any) {
+      logger.error('[Intervals.icu] Auto-reconcile failed:', err?.message || err);
+    }
+  },
+
+  /**
    * Schedule a workout to a specific date
    */
   async scheduleWorkout(
@@ -15,7 +39,11 @@ export const calendarService = {
     scheduledDate: Date,
     aiRationale?: string,
     trainingPlanId?: string,
-    weekNumber?: number
+    weekNumber?: number,
+    // Bulk callers (plan builds) skip the per-entry intervals.icu upload and run
+    // a single reconcileIntervalsIcu() at the end instead — avoids 84 racing
+    // fire-and-forget uploads and cleans up a prior plan's orphaned events.
+    skipIntervalsAutoSync = false
   ): Promise<CalendarEntry> {
     const dateStr = scheduledDate.toISOString().split('T')[0];
 
@@ -45,7 +73,7 @@ export const calendarService = {
         .eq('id', athleteId)
         .single();
 
-      if (athlete?.intervals_icu_auto_sync) {
+      if (athlete?.intervals_icu_auto_sync && !skipIntervalsAutoSync) {
         // Sync in background (don't await - don't block the response)
         intervalsIcuService
           .uploadWorkout(athleteId, workoutId, scheduledDate, data.id)
@@ -322,6 +350,9 @@ export const calendarService = {
       throw new Error(`Failed to bulk schedule workouts: ${error.message}`);
     }
 
+    // These entries never hit the per-entry sync path — reconcile intervals.icu.
+    void this.reconcileIntervalsIcu(athleteId);
+
     return (data as CalendarEntry[]) || [];
   },
 
@@ -365,6 +396,10 @@ export const calendarService = {
     if (error) {
       throw new Error(`Failed to clear calendar: ${error.message}`);
     }
+
+    // Clearing locally orphans the intervals.icu events (their sync rows
+    // cascade-deleted). Reconcile wipes the now-stale future "Draft -" events.
+    void this.reconcileIntervalsIcu(athleteId);
 
     return { deletedCount: count || 0 };
   },
