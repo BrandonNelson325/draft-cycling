@@ -120,12 +120,33 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     handleSend(initialMessage);
   }, [route.params?.initialMessage, loading]);
 
+  // Whether we should keep the list pinned to the bottom. True on open and while
+  // the user is already near the bottom; set false when they scroll up to read
+  // history so we don't yank them back down mid-read.
+  const shouldAutoScrollRef = useRef(true);
+
+  const scrollToBottom = (animated: boolean) => {
+    if (shouldAutoScrollRef.current) {
+      flatListRef.current?.scrollToEnd({ animated });
+    }
+  };
+
   // Scroll to bottom on new messages, streaming tokens, and tool-progress updates
   useEffect(() => {
     if (activeMessages.length > 0) {
-      setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 100);
+      setTimeout(() => scrollToBottom(true), 100);
     }
   }, [activeMessages.length, loading, streamingContent, toolStatus]);
+
+  // Re-pin to the bottom whenever the chat regains focus (opened from a tab tap
+  // or navigated in from a prompt), so we never land the user mid-history.
+  useFocusEffect(
+    React.useCallback(() => {
+      shouldAutoScrollRef.current = true;
+      const t = setTimeout(() => scrollToBottom(false), 150);
+      return () => clearTimeout(t);
+    }, [])
+  );
 
   const handleSend = async (overrideText?: string) => {
     const text = overrideText || inputText.trim();
@@ -295,6 +316,19 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             }
             contentContainerStyle={styles.messages}
             showsVerticalScrollIndicator={false}
+            // Fires once row heights are actually measured — the reliable moment
+            // to land at the true bottom on open (a timed scrollToEnd lands short
+            // on a long history because off-screen rows aren't measured yet).
+            onContentSizeChange={() => scrollToBottom(false)}
+            // Track whether the user has scrolled up to read history; if they're
+            // within ~80px of the bottom, keep auto-scrolling, otherwise pause it.
+            onScroll={e => {
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              const distanceFromBottom =
+                contentSize.height - (contentOffset.y + layoutMeasurement.height);
+              shouldAutoScrollRef.current = distanceFromBottom < 80;
+            }}
+            scrollEventThrottle={16}
           />
         )}
 

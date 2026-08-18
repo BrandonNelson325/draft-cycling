@@ -102,6 +102,7 @@ function AppModalsInner() {
         loading={dailyMorning.loading}
         onRetrySync={dailyMorning.retrySync}
         onSkipToManual={dailyMorning.skipToManual}
+        onChatNavigate={navigateToChat}
       />
       <PostRideModal
         activity={showPostRide ? currentActivity : null}
