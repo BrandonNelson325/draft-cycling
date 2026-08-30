@@ -151,25 +151,35 @@ export default function FitnessTrendChart() {
   const ctlValues = data.map(d => d.ctl);
   const atlValues = data.map(d => d.atl);
   const tsbValues = data.map(d => d.tsb);
-  // All three share the same units (TSS/day), so one Y scale is correct. Form
-  // (TSB = Fitness − Fatigue) swings negative, so the domain must include the
-  // min TSB and (at least) 0 as the floor, with the max coming from Fitness.
-  const maxVal = Math.max(...ctlValues, ...atlValues, 1);
-  const minVal = Math.min(0, ...tsbValues);
-  const span = maxVal - minVal || 1;
   const n = data.length;
-
   const toX = (i: number) => PAD.left + (n > 1 ? (i / (n - 1)) * IW : IW / 2);
-  const toY = (v: number) => PAD.top + (1 - (v - minVal) / span) * IH;
+
+  // PRIMARY axis: Fitness + Fatigue (same units, directly comparable), floored
+  // at 0 so they sit in the upper band like Strava.
+  const maxVal = Math.max(...ctlValues, ...atlValues, 1);
+  const toY = (v: number) => PAD.top + (1 - v / maxVal) * IH;
+
+  // SECONDARY axis: Form (TSB) auto-scaled to its OWN range so its swings are
+  // visible and interweave with the other two (the Strava look), instead of
+  // being compressed at the bottom of the shared axis. Padded so the line never
+  // hugs the very edge and a flat series doesn't divide-by-zero.
+  let tsbLo = Math.min(...tsbValues);
+  let tsbHi = Math.max(...tsbValues);
+  const tsbPad = Math.max((tsbHi - tsbLo) * 0.15, 3);
+  tsbLo -= tsbPad;
+  tsbHi += tsbPad;
+  const tsbSpan = tsbHi - tsbLo || 1;
+  const toYForm = (v: number) => PAD.top + (1 - (v - tsbLo) / tsbSpan) * IH;
 
   const ctlPts = ctlValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
   const atlPts = atlValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
-  const tsbPts = tsbValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
+  const tsbPts = tsbValues.map((v, i) => ({ x: toX(i), y: toYForm(v) }));
   const ctlPath = buildPath(ctlPts);
   const atlPath = buildPath(atlPts);
   const tsbPath = buildPath(tsbPts);
-  // Zero baseline for Form — only draw it if the domain actually dips negative.
-  const zeroY = minVal < 0 ? toY(0) : null;
+  // Form's zero line (on Form's own scale) — the fresh/fatigued crossover.
+  // Only drawn when the Form range actually straddles zero.
+  const zeroY = tsbLo < 0 && tsbHi > 0 ? toYForm(0) : null;
   const gridYs = [0.25, 0.5, 0.75].map(p => PAD.top + (1 - p) * IH);
 
   // Sparse x-axis labels — ~5 evenly spaced so they don't overlap on 42 points.
@@ -245,11 +255,11 @@ export default function FitnessTrendChart() {
               />
             ))}
 
-            {/* Zero baseline for Form (only when the range dips negative) */}
+            {/* Form's zero line (fresh above / fatigued below), on Form's scale */}
             {zeroY !== null ? (
               <Path
                 path={`M ${PAD.left} ${zeroY.toFixed(1)} L ${(CHART_W - PAD.right).toFixed(1)} ${zeroY.toFixed(1)}`}
-                color="#334155"
+                color="rgba(167, 139, 250, 0.35)"
                 style="stroke"
                 strokeWidth={1}
               />
