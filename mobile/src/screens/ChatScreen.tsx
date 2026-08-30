@@ -141,24 +141,36 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   // the user is already near the bottom; set false when they scroll up to read
   // history so we don't yank them back down mid-read.
   const shouldAutoScrollRef = useRef(true);
+  // Latest known content height, from onContentSizeChange — used to jump to the
+  // TRUE bottom (scrollToOffset(contentHeight)) which can't land short the way
+  // scrollToEnd can while rows are still being measured.
+  const contentHeightRef = useRef(0);
 
-  const scrollToBottom = (animated: boolean) => {
-    if (shouldAutoScrollRef.current) {
-      flatListRef.current?.scrollToEnd({ animated });
+  // All programmatic scrolls are NON-animated on purpose: an animated scroll
+  // fires onMomentumScrollEnd when it finishes, and if the content grew during
+  // the animation that handler measured a position short of the bottom and
+  // wrongly flipped auto-scroll OFF — the "scrolls then stops short" bug. A
+  // non-animated jump produces no momentum events, so only real user flings can
+  // ever disable auto-scroll.
+  const scrollToBottom = () => {
+    if (!shouldAutoScrollRef.current) return;
+    if (contentHeightRef.current > 0) {
+      flatListRef.current?.scrollToOffset({ offset: contentHeightRef.current, animated: false });
+    } else {
+      flatListRef.current?.scrollToEnd({ animated: false });
     }
   };
 
-  // Fire several scrolls over a short window. A single scrollToEnd often lands
-  // short because message rows are still being measured/laid out (async), so we
-  // retry at increasing delays to reliably reach the true bottom on open/load.
-  const scrollToBottomSoon = (animated: boolean) => {
-    [0, 120, 350, 700].forEach((d) => setTimeout(() => scrollToBottom(animated), d));
+  // Fire several scrolls over a short window — rows lay out asynchronously, so
+  // one attempt often lands short; retry until the content settles.
+  const scrollToBottomSoon = () => {
+    [0, 60, 150, 350, 700].forEach((d) => setTimeout(scrollToBottom, d));
   };
 
   // Scroll to bottom on new messages, streaming tokens, and tool-progress updates
   useEffect(() => {
     if (activeMessages.length > 0) {
-      scrollToBottomSoon(true);
+      scrollToBottomSoon();
     }
   }, [activeMessages.length, loading, streamingContent, toolStatus]);
 
@@ -167,7 +179,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   useFocusEffect(
     React.useCallback(() => {
       shouldAutoScrollRef.current = true;
-      scrollToBottomSoon(false);
+      scrollToBottomSoon();
     }, [])
   );
 
@@ -339,14 +351,20 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             }
             contentContainerStyle={styles.messages}
             showsVerticalScrollIndicator={false}
-            // Fires once row heights are actually measured — the reliable moment
-            // to land at the true bottom on open (a timed scrollToEnd lands short
-            // on a long history because off-screen rows aren't measured yet).
-            onContentSizeChange={() => scrollToBottom(false)}
-            // Only a USER-initiated drag that ENDS away from the bottom disables
-            // auto-scroll. We evaluate on drag-end (not per-frame onScroll) so
-            // programmatic scroll-to-bottom during load/streaming never
-            // accidentally turns auto-scroll off and strands the user mid-history.
+            // Fires whenever total content height changes (rows finishing async
+            // layout, streaming tokens, etc.). We record the exact height and
+            // jump straight to it — scrollToOffset(contentHeight) lands on the
+            // TRUE bottom, unlike scrollToEnd which can stop short mid-layout.
+            onContentSizeChange={(_w, h) => {
+              contentHeightRef.current = h;
+              if (shouldAutoScrollRef.current) {
+                flatListRef.current?.scrollToOffset({ offset: h, animated: false });
+              }
+            }}
+            // Only a USER-initiated drag/fling that ENDS away from the bottom
+            // disables auto-scroll. Programmatic scrolls are non-animated (above)
+            // so they never fire momentum events — these handlers are therefore
+            // purely user-driven and can't strand the user mid-load.
             onScrollEndDrag={e => {
               const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
               const distanceFromBottom =
@@ -391,10 +409,11 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             returnKeyType="default"
             onFocus={() => {
               // When the keyboard opens, the FlatList shrinks but doesn't
-              // auto-scroll — so the latest message ends up hidden behind
-              // the keyboard. Force a scroll-to-end after the keyboard
-              // animation has had a moment to start.
-              setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 250);
+              // auto-scroll — so the latest message ends up hidden behind the
+              // keyboard. Re-pin to the bottom (non-animated, same reason as the
+              // other programmatic scrolls) once the keyboard starts animating.
+              shouldAutoScrollRef.current = true;
+              scrollToBottomSoon();
             }}
           />
           <TouchableOpacity

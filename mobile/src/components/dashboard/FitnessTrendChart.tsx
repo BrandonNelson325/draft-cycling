@@ -14,6 +14,14 @@ const IH = CHART_H - PAD.top - PAD.bottom;
 
 const FITNESS_COLOR = '#3b82f6'; // blue — CTL
 const FATIGUE_COLOR = '#f59e0b'; // amber — ATL
+const FORM_COLOR = '#a78bfa';    // violet — TSB
+
+const RANGES: { label: string; days: number }[] = [
+  { label: '6W', days: 42 },
+  { label: '3M', days: 90 },
+  { label: '6M', days: 182 },
+  { label: '1Y', days: 365 },
+];
 
 /** Monotone cubic Hermite interpolation → smooth SVG path without overshooting */
 function buildPath(pts: { x: number; y: number }[]): string {
@@ -75,26 +83,44 @@ export default function FitnessTrendChart() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [days, setDays] = useState(42);
   const { user } = useAuthStore();
 
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    chartsService.getFitnessTimeSeries(42).then(d => {
+    setError(false);
+    chartsService.getFitnessTimeSeries(days).then(d => {
       setData(d);
-      if (d.length > 0) setSelectedIndex(d.length - 1); // default to today
+      setSelectedIndex(d.length > 0 ? d.length - 1 : null); // default to today
       setLoading(false);
     }).catch((err) => {
       console.warn('[FitnessTrendChart] fetch error:', err?.response?.status, err?.response?.data?.error || err.message);
       setError(true);
       setLoading(false);
     });
-  }, [user?.id]);
+  }, [user?.id, days]);
+
+  const RangeFilter = (
+    <View style={styles.rangeRow}>
+      {RANGES.map(r => (
+        <Pressable
+          key={r.label}
+          onPress={() => setDays(r.days)}
+          style={[styles.rangePill, days === r.days && styles.rangePillActive]}
+          hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+        >
+          <Text style={[styles.rangeText, days === r.days && styles.rangeTextActive]}>{r.label}</Text>
+        </Pressable>
+      ))}
+    </View>
+  );
 
   if (loading) {
     return (
       <Card>
         <Text style={styles.title}>Fitness & Fatigue</Text>
+        {RangeFilter}
         <ActivityIndicator color="#3b82f6" style={{ marginVertical: 16 }} />
       </Card>
     );
@@ -104,6 +130,7 @@ export default function FitnessTrendChart() {
     return (
       <Card>
         <Text style={styles.title}>Fitness & Fatigue</Text>
+        {RangeFilter}
         <Text style={{ color: '#ef4444', fontSize: 13, marginVertical: 12 }}>
           Unable to load chart data. Pull down to refresh.
         </Text>
@@ -115,6 +142,7 @@ export default function FitnessTrendChart() {
     return (
       <Card>
         <Text style={styles.title}>Fitness & Fatigue</Text>
+        {RangeFilter}
         <Text style={styles.empty}>Not enough training history yet — keep riding and this fills in.</Text>
       </Card>
     );
@@ -122,17 +150,26 @@ export default function FitnessTrendChart() {
 
   const ctlValues = data.map(d => d.ctl);
   const atlValues = data.map(d => d.atl);
-  // Shared Y scale — CTL and ATL are the same units (TSS/day), so they're directly comparable.
+  const tsbValues = data.map(d => d.tsb);
+  // All three share the same units (TSS/day), so one Y scale is correct. Form
+  // (TSB = Fitness − Fatigue) swings negative, so the domain must include the
+  // min TSB and (at least) 0 as the floor, with the max coming from Fitness.
   const maxVal = Math.max(...ctlValues, ...atlValues, 1);
+  const minVal = Math.min(0, ...tsbValues);
+  const span = maxVal - minVal || 1;
   const n = data.length;
 
   const toX = (i: number) => PAD.left + (n > 1 ? (i / (n - 1)) * IW : IW / 2);
-  const toY = (v: number) => PAD.top + (1 - v / maxVal) * IH;
+  const toY = (v: number) => PAD.top + (1 - (v - minVal) / span) * IH;
 
   const ctlPts = ctlValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
   const atlPts = atlValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
+  const tsbPts = tsbValues.map((v, i) => ({ x: toX(i), y: toY(v) }));
   const ctlPath = buildPath(ctlPts);
   const atlPath = buildPath(atlPts);
+  const tsbPath = buildPath(tsbPts);
+  // Zero baseline for Form — only draw it if the domain actually dips negative.
+  const zeroY = minVal < 0 ? toY(0) : null;
   const gridYs = [0.25, 0.5, 0.75].map(p => PAD.top + (1 - p) * IH);
 
   // Sparse x-axis labels — ~5 evenly spaced so they don't overlap on 42 points.
@@ -168,8 +205,14 @@ export default function FitnessTrendChart() {
             <View style={[styles.legendDot, { backgroundColor: FATIGUE_COLOR }]} />
             <Text style={styles.legendText}>Fatigue</Text>
           </View>
+          <View style={styles.legendItem}>
+            <View style={[styles.legendDot, { backgroundColor: FORM_COLOR }]} />
+            <Text style={styles.legendText}>Form</Text>
+          </View>
         </View>
       </View>
+
+      {RangeFilter}
 
       {/* Selected day summary */}
       <View style={styles.summary}>
@@ -202,6 +245,16 @@ export default function FitnessTrendChart() {
               />
             ))}
 
+            {/* Zero baseline for Form (only when the range dips negative) */}
+            {zeroY !== null ? (
+              <Path
+                path={`M ${PAD.left} ${zeroY.toFixed(1)} L ${(CHART_W - PAD.right).toFixed(1)} ${zeroY.toFixed(1)}`}
+                color="#334155"
+                style="stroke"
+                strokeWidth={1}
+              />
+            ) : null}
+
             <Line
               p1={vec(toX(sel), PAD.top)}
               p2={vec(toX(sel), PAD.top + IH)}
@@ -209,10 +262,13 @@ export default function FitnessTrendChart() {
               strokeWidth={1}
             />
 
+            {/* Form drawn first (thinner) so Fitness/Fatigue read on top */}
+            {tsbPath ? <Path path={tsbPath} color={FORM_COLOR} style="stroke" strokeWidth={2} /> : null}
             {atlPath ? <Path path={atlPath} color={FATIGUE_COLOR} style="stroke" strokeWidth={2.5} /> : null}
             {ctlPath ? <Path path={ctlPath} color={FITNESS_COLOR} style="stroke" strokeWidth={2.5} /> : null}
 
-            {/* Only the selected-day markers, to keep 42-point lines clean */}
+            {/* Only the selected-day markers, to keep long lines clean */}
+            <Circle cx={tsbPts[sel].x} cy={tsbPts[sel].y} r={4.5} color={FORM_COLOR} />
             <Circle cx={atlPts[sel].x} cy={atlPts[sel].y} r={5} color={FATIGUE_COLOR} />
             <Circle cx={ctlPts[sel].x} cy={ctlPts[sel].y} r={5} color={FITNESS_COLOR} />
           </Canvas>
@@ -238,6 +294,14 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, color: '#94a3b8' },
+  rangeRow: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  rangePill: {
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+    backgroundColor: '#0f172a', borderWidth: 1, borderColor: '#1e293b',
+  },
+  rangePillActive: { backgroundColor: '#1e3a5f', borderColor: '#3b82f6' },
+  rangeText: { fontSize: 12, fontWeight: '600', color: '#64748b' },
+  rangeTextActive: { color: '#93c5fd' },
   summary: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: '#0f172a',
     borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 10,
