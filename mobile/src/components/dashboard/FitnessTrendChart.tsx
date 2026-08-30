@@ -200,7 +200,6 @@ export default function FitnessTrendChart() {
   const selCtl = Math.round(ctlValues[sel]);
   const selAtl = Math.round(atlValues[sel]);
   const selTsb = Math.round(data[sel].tsb);
-  const tsbColor = selTsb > 5 ? '#86efac' : selTsb < -15 ? '#fca5a5' : '#fcd34d';
 
   return (
     <Card>
@@ -224,21 +223,21 @@ export default function FitnessTrendChart() {
 
       {RangeFilter}
 
-      {/* Selected day summary */}
+      {/* Selected day summary — colors MUST match the chart lines + legend */}
       <View style={styles.summary}>
         <View style={styles.summaryItem}>
-          <Text style={[styles.summaryValue, { color: '#93c5fd' }]}>{selCtl}</Text>
-          <Text style={[styles.summaryLabel, { color: '#93c5fd' }]}>Fitness</Text>
+          <Text style={[styles.summaryValue, { color: FITNESS_COLOR }]}>{selCtl}</Text>
+          <Text style={[styles.summaryLabel, { color: FITNESS_COLOR }]}>Fitness</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Text style={[styles.summaryValue, { color: '#fcd34d' }]}>{selAtl}</Text>
-          <Text style={[styles.summaryLabel, { color: '#fcd34d' }]}>Fatigue</Text>
+          <Text style={[styles.summaryValue, { color: FATIGUE_COLOR }]}>{selAtl}</Text>
+          <Text style={[styles.summaryLabel, { color: FATIGUE_COLOR }]}>Fatigue</Text>
         </View>
         <View style={styles.summaryDivider} />
         <View style={styles.summaryItem}>
-          <Text style={[styles.summaryValue, { color: tsbColor }]}>{selTsb > 0 ? `+${selTsb}` : selTsb}</Text>
-          <Text style={[styles.summaryLabel, { color: tsbColor }]}>Form</Text>
+          <Text style={[styles.summaryValue, { color: FORM_COLOR }]}>{selTsb > 0 ? `+${selTsb}` : selTsb}</Text>
+          <Text style={[styles.summaryLabel, { color: FORM_COLOR }]}>Form</Text>
         </View>
       </View>
 
