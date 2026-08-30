@@ -63,25 +63,76 @@ export const weeklyMetricsService = {
     );
   },
 
+  /**
+   * Daily CTL/ATL/TSB series for the last `days` days, computed on the fly from
+   * activity TSS. There is NO persisted daily-metrics table (the old
+   * `training_status_history` read here never existed and always 500'd; the
+   * `athlete_metrics` table is defined in migration 001 but nothing populates
+   * it). So we replicate trainingLoadService.calculateTrainingLoad's per-day EMA
+   * here: warm up over 180 days (so the 42-day CTL EMA converges before the
+   * visible window starts at a realistic value, not 0), then emit one point per
+   * day for the requested window. Returns [] on error/no data so the UI shows a
+   * friendly "not enough history" state rather than an error.
+   */
   async getFitnessTimeSeries(athleteId: string, days: number = 42): Promise<DailyFitnessData[]> {
-    const { data, error } = await supabaseAdmin
-      .from('training_status_history')
-      .select('date, ctl, atl, tsb')
-      .eq('athlete_id', athleteId)
-      .gte('date', new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString())
-      .order('date', { ascending: true })
-      .limit(days);
+    try {
+      const CTL_TAU = 42;
+      const ATL_TAU = 7;
+      const WARMUP_DAYS = 180;
 
-    if (error) {
-      throw new Error(`Failed to fetch fitness time series: ${error.message}`);
+      const target = new Date();
+      target.setUTCHours(0, 0, 0, 0);
+      const windowStart = new Date(target);
+      windowStart.setDate(windowStart.getDate() - (days - 1));
+      const fetchStart = new Date(windowStart);
+      fetchStart.setDate(fetchStart.getDate() - WARMUP_DAYS);
+
+      const { data: activities, error } = await supabaseAdmin
+        .from('strava_activities')
+        .select('start_date, tss')
+        .eq('athlete_id', athleteId)
+        .gte('start_date', fetchStart.toISOString())
+        .lte('start_date', new Date().toISOString())
+        .not('tss', 'is', null)
+        .order('start_date', { ascending: true });
+
+      if (error) throw new Error(error.message);
+      if (!activities || activities.length === 0) return [];
+
+      // Sum TSS per calendar day (multiple rides collapse into one day).
+      const dailyTSS = new Map<string, number>();
+      for (const a of activities) {
+        const dayKey = new Date(a.start_date).toISOString().split('T')[0];
+        dailyTSS.set(dayKey, (dailyTSS.get(dayKey) || 0) + (a.tss || 0));
+      }
+
+      let ctl = 0;
+      let atl = 0;
+      const series: DailyFitnessData[] = [];
+      const current = new Date(fetchStart);
+      current.setUTCHours(0, 0, 0, 0);
+
+      while (current <= target) {
+        const dayKey = current.toISOString().split('T')[0];
+        const tss = dailyTSS.get(dayKey) || 0;
+        ctl = ctl + (tss - ctl) / CTL_TAU;
+        atl = atl + (tss - atl) / ATL_TAU;
+        if (current >= windowStart) {
+          series.push({
+            date: dayKey,
+            ctl: Math.round(ctl * 10) / 10,
+            atl: Math.round(atl * 10) / 10,
+            tsb: Math.round((ctl - atl) * 10) / 10,
+          });
+        }
+        current.setDate(current.getDate() + 1);
+      }
+
+      return series;
+    } catch (err) {
+      console.error('Failed to build fitness time series:', err);
+      return [];
     }
-
-    return data.map((row: any) => ({
-      date: row.date,
-      ctl: parseFloat(row.ctl) || 0,
-      atl: parseFloat(row.atl) || 0,
-      tsb: parseFloat(row.tsb) || 0,
-    }));
   },
 
   async getPowerZoneDistribution(athleteId: string, days: number = 30) {
