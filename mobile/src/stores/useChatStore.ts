@@ -1,4 +1,6 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { chatService, type ChatMessage, type ChatConversation } from '../services/chatService';
 
 interface ChatStore {
@@ -19,7 +21,7 @@ interface ChatStore {
   pollForBackgroundUpdates: (conversationId: string) => void;
 }
 
-export const useChatStore = create<ChatStore>((set, get) => ({
+export const useChatStore = create<ChatStore>()(persist((set, get) => ({
   conversations: [],
   activeConversationId: null,
   messages: {},
@@ -115,10 +117,15 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           onStart: (convId: string) => {
             conversationId = convId;
 
+            // ALWAYS adopt the server's conversation id as active. This is the
+            // single source of truth for which conversation we're in, so the
+            // NEXT message is guaranteed to be sent with the right id instead of
+            // null (which would spawn a new empty conversation and make the coach
+            // act like it has no history). Also seed the optimistic user message
+            // for a brand-new conversation.
+            set({ activeConversationId: convId });
             if (!initialConversationId) {
-              // New conversation
               set({
-                activeConversationId: convId,
                 messages: {
                   ...get().messages,
                   [convId]: [{ ...userMessage, conversation_id: convId }],
@@ -318,4 +325,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       activeConversationId: activeConversationId === id ? null : activeConversationId,
     });
   },
+}), {
+  name: 'chat-store',
+  storage: createJSONStorage(() => AsyncStorage),
+  // Persist ONLY the conversation pointer + list — not the full message map
+  // (which can grow large and is always re-fetched from the server on focus).
+  // Persisting activeConversationId is the actual fix: a JS reload / cold start /
+  // backgrounded-app relaunch no longer drops it to null, so follow-up messages
+  // keep going to the same conversation instead of spawning empty ones.
+  partialize: (state) => ({
+    activeConversationId: state.activeConversationId,
+    conversations: state.conversations,
+  }),
 }));

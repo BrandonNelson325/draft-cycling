@@ -10,6 +10,7 @@ import type { Workout } from '../services/workoutService';
 import CoachCard from '../components/dashboard/CoachCard';
 import MetricsCard from '../components/dashboard/MetricsCard';
 import WeeklyVolumeChart from '../components/dashboard/WeeklyVolumeChart';
+import FitnessTrendChart from '../components/dashboard/FitnessTrendChart';
 import PowerCurveChart from '../components/dashboard/PowerCurveChart';
 import FTPEstimateCard from '../components/dashboard/FTPEstimateCard';
 import RecentActivities from '../components/dashboard/RecentActivities';
@@ -92,6 +93,7 @@ export default function DashboardScreen() {
       >
         <CoachCard key={`coach-${refreshKey}`} onWorkoutPress={handleWorkoutPress} />
         <MetricsCard key={`metrics-${refreshKey}`} />
+        <FitnessTrendChart key={`fitness-${refreshKey}`} />
         <WeeklyVolumeChart key={`weekly-${refreshKey}`} />
         <PowerCurveChart key={`power-${refreshKey}`} />
         <FTPEstimateCard key={`ftp-${refreshKey}`} />

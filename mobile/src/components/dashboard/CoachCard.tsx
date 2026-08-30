@@ -27,7 +27,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [adjustmentBusy, setAdjustmentBusy] = useState(false);
 
   useEffect(() => {
@@ -257,35 +256,8 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
         </View>
       )}
 
-      {/* Expandable CTL/ATL details */}
-      {training && (
-        <View style={styles.detailsSection}>
-          <TouchableOpacity
-            onPress={() => setDetailsOpen(!detailsOpen)}
-            style={styles.detailsToggle}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons
-              name={detailsOpen ? 'chevron-up' : 'chevron-down'}
-              size={14}
-              color="#64748b"
-            />
-            <Text style={styles.detailsToggleText}>Fitness & fatigue details</Text>
-          </TouchableOpacity>
-          {detailsOpen && (
-            <View style={styles.detailsGrid}>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Fitness</Text>
-                <Text style={styles.detailValue}>{Math.round(training.ctl)}</Text>
-              </View>
-              <View style={styles.detailItem}>
-                <Text style={styles.detailLabel}>Fatigue</Text>
-                <Text style={styles.detailValue}>{Math.round(training.atl)}</Text>
-              </View>
-            </View>
-          )}
-        </View>
-      )}
+      {/* Fitness & fatigue now live in the always-visible FitnessTrendChart on
+          the dashboard (not hidden behind a toggle here). */}
 
       {/* Chat button */}
       <TouchableOpacity style={styles.chatButton} onPress={handleChatPress} activeOpacity={0.7}>

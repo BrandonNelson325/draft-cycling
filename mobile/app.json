@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.draftcycling.app",
-      "buildNumber": "120",
+      "buildNumber": "122",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "Draft reads your sleep, heart rate, and HRV data from Apple Health to give your coach a more accurate picture of your recovery.",
@@ -24,6 +24,7 @@
     },
     "android": {
       "package": "com.draftcycling.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",

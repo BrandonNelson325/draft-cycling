@@ -82,16 +82,33 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
       if (startingConversation.current) return;
       startingConversation.current = true;
       try {
+        // Wait for the persisted store (AsyncStorage) to finish hydrating before
+        // deciding anything — otherwise activeConversationId reads null on first
+        // mount and we'd start a NEW conversation even though a persisted one
+        // exists. Hydration is what keeps a follow-up ("yes", "schedule it")
+        // attached to the real conversation across a reload / cold start.
+        if (!useChatStore.persist.hasHydrated()) {
+          await new Promise<void>((resolve) => {
+            const unsub = useChatStore.persist.onFinishHydration(() => {
+              unsub?.();
+              resolve();
+            });
+          });
+        }
         await loadConversations();
         // Ensure there's an active conversation to send into before we send, so
         // nothing async is left in flight to clobber `loading` during the turn.
-        if (!useChatStore.getState().activeConversationId) {
+        const restoredId = useChatStore.getState().activeConversationId;
+        if (!restoredId) {
           const { conversations } = useChatStore.getState();
           if (conversations.length > 0) {
             await selectConversation(conversations[0].id);
           } else {
             await startConversation();
           }
+        } else if (!useChatStore.getState().messages[restoredId]) {
+          // Persisted the conversation pointer but not its messages — load them.
+          await refreshActiveMessages();
         }
         const initialMessage = route.params?.initialMessage;
         if (initialMessage && handledInitialMessageRef.current !== initialMessage) {
@@ -131,10 +148,17 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     }
   };
 
+  // Fire several scrolls over a short window. A single scrollToEnd often lands
+  // short because message rows are still being measured/laid out (async), so we
+  // retry at increasing delays to reliably reach the true bottom on open/load.
+  const scrollToBottomSoon = (animated: boolean) => {
+    [0, 120, 350, 700].forEach((d) => setTimeout(() => scrollToBottom(animated), d));
+  };
+
   // Scroll to bottom on new messages, streaming tokens, and tool-progress updates
   useEffect(() => {
     if (activeMessages.length > 0) {
-      setTimeout(() => scrollToBottom(true), 100);
+      scrollToBottomSoon(true);
     }
   }, [activeMessages.length, loading, streamingContent, toolStatus]);
 
@@ -143,8 +167,7 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   useFocusEffect(
     React.useCallback(() => {
       shouldAutoScrollRef.current = true;
-      const t = setTimeout(() => scrollToBottom(false), 150);
-      return () => clearTimeout(t);
+      scrollToBottomSoon(false);
     }, [])
   );
 
@@ -320,15 +343,22 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             // to land at the true bottom on open (a timed scrollToEnd lands short
             // on a long history because off-screen rows aren't measured yet).
             onContentSizeChange={() => scrollToBottom(false)}
-            // Track whether the user has scrolled up to read history; if they're
-            // within ~80px of the bottom, keep auto-scrolling, otherwise pause it.
-            onScroll={e => {
+            // Only a USER-initiated drag that ENDS away from the bottom disables
+            // auto-scroll. We evaluate on drag-end (not per-frame onScroll) so
+            // programmatic scroll-to-bottom during load/streaming never
+            // accidentally turns auto-scroll off and strands the user mid-history.
+            onScrollEndDrag={e => {
               const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
               const distanceFromBottom =
                 contentSize.height - (contentOffset.y + layoutMeasurement.height);
-              shouldAutoScrollRef.current = distanceFromBottom < 80;
+              shouldAutoScrollRef.current = distanceFromBottom < 120;
             }}
-            scrollEventThrottle={16}
+            onMomentumScrollEnd={e => {
+              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+              const distanceFromBottom =
+                contentSize.height - (contentOffset.y + layoutMeasurement.height);
+              shouldAutoScrollRef.current = distanceFromBottom < 120;
+            }}
           />
         )}
 

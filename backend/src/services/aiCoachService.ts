@@ -1863,12 +1863,18 @@ Format it clearly so I can follow it during my ride.`;
     athleteTz: string,
     clientDate?: string
   ): Promise<any[]> {
-    const { data: history } = await supabaseAdmin
+    // Load the most RECENT 50 messages (descending), then flip back to
+    // chronological order. Ordering ascending + limit 50 loaded the OLDEST 50
+    // instead, so any conversation past 50 messages silently dropped its recent
+    // context — the model would answer a fresh follow-up with no idea what just
+    // happened. Recent history is what matters for continuity.
+    const { data: recentDesc } = await supabaseAdmin
       .from('chat_messages')
       .select('role, content, created_at')
       .eq('conversation_id', convId)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(50);
+    const history = recentDesc ? [...recentDesc].reverse() : [];
 
     const messages: any[] = [];
     if (history && history.length > 0) {
