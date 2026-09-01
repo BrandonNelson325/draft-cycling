@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronDown, ChevronUp, Moon, Activity, Heart, Battery, TrendingUp, AlertCircle } from 'lucide-react';
+import { Moon, Activity, Heart, Battery, TrendingUp, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { FreshnessGauge } from './FreshnessGauge';
 import { WorkoutDetail } from '../workout/WorkoutDetail';
@@ -26,7 +26,6 @@ export function CoachCard() {
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [loadingWorkoutId, setLoadingWorkoutId] = useState<string | null>(null);
 
@@ -190,30 +189,8 @@ export function CoachCard() {
         {/* Wellness pills */}
         {healthData && <WellnessPills data={healthData} />}
 
-        {/* Expandable CTL/ATL details */}
-        {training && (
-          <div className="border-t pt-2">
-            <button
-              onClick={() => setDetailsOpen(!detailsOpen)}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600 transition-colors w-full"
-            >
-              {detailsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              <span>Fitness & fatigue details</span>
-            </button>
-            {detailsOpen && (
-              <div className="mt-2 grid grid-cols-2 gap-3">
-                <div className="border-l-2 border-blue-500 pl-2">
-                  <span className="text-[10px] text-gray-400 uppercase">Fitness</span>
-                  <p className="text-lg font-bold">{training.ctl.toFixed(1)}</p>
-                </div>
-                <div className="border-l-2 border-gray-300 pl-2">
-                  <span className="text-[10px] text-gray-400 uppercase">Fatigue</span>
-                  <p className="text-lg font-bold">{training.atl.toFixed(1)}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Fitness & fatigue now live in the always-visible FitnessTrendChart
+            on the dashboard (not hidden behind a toggle here). */}
 
         {/* Chat link */}
         <Link

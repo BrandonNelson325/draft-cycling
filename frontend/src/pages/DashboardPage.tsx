@@ -4,6 +4,7 @@ import { MetricsCard } from '../components/dashboard/MetricsCard';
 import { WeeklyVolumeChart } from '../components/dashboard/WeeklyVolumeChart';
 import { PowerCurveChart } from '../components/dashboard/PowerCurveChart';
 import { CoachCard } from '../components/dashboard/CoachCard';
+import { FitnessTrendChart } from '../components/dashboard/FitnessTrendChart';
 
 export function DashboardPage() {
 
@@ -14,6 +15,9 @@ export function DashboardPage() {
         <CoachCard />
         <MetricsCard />
       </div>
+
+      {/* Fitness & Fatigue trend — full width */}
+      <FitnessTrendChart />
 
       {/* Second Row: Weekly Volume + Power Curve */}
       <div className="grid gap-4 md:grid-cols-2">
