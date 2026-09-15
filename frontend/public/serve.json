@@ -1,0 +1,16 @@
+{
+  "cleanUrls": true,
+  "rewrites": [
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/login", "destination": "/index.html" },
+    { "source": "/plans", "destination": "/index.html" },
+    { "source": "/workouts", "destination": "/index.html" },
+    { "source": "/calendar", "destination": "/index.html" },
+    { "source": "/training-plan", "destination": "/index.html" },
+    { "source": "/chat", "destination": "/index.html" },
+    { "source": "/chat/:rest*", "destination": "/index.html" },
+    { "source": "/settings", "destination": "/index.html" },
+    { "source": "/privacy", "destination": "/index.html" },
+    { "source": "/strava/:rest*", "destination": "/index.html" }
+  ]
+}

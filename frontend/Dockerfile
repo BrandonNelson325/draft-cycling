@@ -25,4 +25,4 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx serve dist -s -p ${PORT:-3000}"]
+CMD ["sh", "-c", "npx serve dist -p ${PORT:-3000}"]
