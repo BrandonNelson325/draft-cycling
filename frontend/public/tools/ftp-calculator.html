@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>FTP & W/kg Calculator — Free Cycling Power Tool | Draft Cycling</title>
+<meta name="description" content="Free FTP and watts-per-kilogram calculator. Estimate your FTP from a 20-minute, 8-minute, or ramp test, find your W/kg, and see your rider category. No sign-up." />
+<link rel="canonical" href="https://draftcycling.com/tools/ftp-calculator" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="FTP & W/kg Calculator — Free Cycling Power Tool" />
+<meta property="og:description" content="Estimate your FTP, calculate your watts-per-kilogram, and see your rider category. Free, no sign-up." />
+<meta property="og:url" content="https://draftcycling.com/tools/ftp-calculator" />
+<meta property="og:image" content="https://draftcycling.com/logoSquare.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="/logoSquareTransparent.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "FTP & W/kg Calculator",
+  "applicationCategory": "HealthApplication",
+  "operatingSystem": "Web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "description": "Free FTP and watts-per-kilogram calculator for cyclists. Estimate FTP from a 20-minute, 8-minute, or ramp test and see your rider category.",
+  "url": "https://draftcycling.com/tools/ftp-calculator"
+}
+</script>
+<style>
+  :root{
+    --bg:#030712; --panel:#0b1220; --panel2:#111a2b; --border:#1f2937;
+    --text:#e5e7eb; --muted:#9ca3af; --faint:#6b7280;
+    --blue:#2563eb; --blue-hi:#3b82f6; --blue-lite:#60a5fa; --cyan:#22d3ee;
+    --good:#34d399; --warn:#fbbf24;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--blue-lite);text-decoration:none}
+  a:hover{color:#93c5fd}
+  .wrap{max-width:760px;margin:0 auto;padding:0 16px}
+  /* nav */
+  nav{position:sticky;top:0;z-index:20;background:rgba(3,7,18,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  nav img{height:34px;width:auto}
+  .cta-sm{background:var(--blue);color:#fff;font-weight:600;font-size:14px;padding:8px 16px;border-radius:10px}
+  .cta-sm:hover{background:var(--blue-hi);color:#fff}
+  /* hero */
+  header{padding:44px 0 8px;text-align:center}
+  h1{font-size:34px;line-height:1.15;font-weight:800;letter-spacing:-.02em;margin:0 0 12px}
+  .grad{background:linear-gradient(90deg,var(--blue-lite),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p{color:var(--muted);font-size:17px;max-width:560px;margin:0 auto}
+  /* card */
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin:22px 0}
+  .card h2{font-size:19px;font-weight:700;margin:0 0 4px}
+  .card .sub{color:var(--faint);font-size:13px;margin:0 0 18px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+  .row{display:flex;gap:14px;flex-wrap:wrap}
+  .row .field{flex:1;min-width:150px}
+  input[type=number]{
+    width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+    color:var(--text);font-size:18px;font-weight:600;padding:12px 14px;font-family:inherit;
+  }
+  input[type=number]:focus{outline:none;border-color:var(--blue-hi);box-shadow:0 0 0 3px rgba(37,99,235,.25)}
+  input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  /* segmented toggles */
+  .seg{display:inline-flex;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
+  .seg button{background:transparent;border:0;color:var(--muted);font-family:inherit;font-size:13px;font-weight:600;padding:7px 12px;border-radius:8px;cursor:pointer}
+  .seg button.on{background:var(--blue);color:#fff}
+  .toggles{display:flex;gap:20px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px}
+  .toggle-group{display:flex;flex-direction:column;gap:6px}
+  .hint{color:var(--faint);font-size:12px;margin-top:8px}
+  /* result */
+  .result{background:linear-gradient(160deg,#0d1830,#0b1220);border:1px solid var(--border);border-radius:var(--radius);padding:26px;text-align:center;margin-top:10px}
+  .bignum{font-size:52px;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .bignum span{font-size:22px;color:var(--muted);font-weight:600}
+  .cat{display:inline-block;margin-top:14px;font-weight:700;font-size:15px;padding:6px 16px;border-radius:999px;background:rgba(37,99,235,.15);border:1px solid rgba(59,130,246,.4);color:#93c5fd}
+  .ftp-out{color:var(--muted);font-size:14px;margin-top:12px}
+  .ftp-out b{color:var(--text)}
+  /* category ladder */
+  .ladder{margin-top:20px;display:grid;gap:6px}
+  .rung{display:flex;align-items:center;justify-content:space-between;font-size:13px;padding:9px 14px;border-radius:9px;background:var(--panel2);border:1px solid transparent;color:var(--muted)}
+  .rung.active{border-color:var(--blue-hi);background:rgba(37,99,235,.12);color:var(--text);font-weight:600}
+  .rung .rng{color:var(--faint);font-variant-numeric:tabular-nums}
+  .rung.active .rng{color:#93c5fd}
+  /* estimator */
+  details{margin-top:8px}
+  summary{cursor:pointer;color:var(--blue-lite);font-size:14px;font-weight:600;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary::before{content:'▸ ';color:var(--faint)}
+  details[open] summary::before{content:'▾ '}
+  .est-body{margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+  /* big CTA */
+  .promo{background:linear-gradient(160deg,#0e1b3a,#0b1220);border:1px solid #24345c;border-radius:var(--radius);padding:30px;text-align:center;margin:30px 0}
+  .promo h2{font-size:22px;margin:0 0 8px}
+  .promo p{color:var(--muted);margin:0 auto 20px;max-width:460px}
+  .btn{display:inline-block;background:var(--blue);color:#fff;font-weight:700;font-size:16px;padding:13px 28px;border-radius:12px}
+  .btn:hover{background:var(--blue-hi);color:#fff}
+  .promo .tiny{color:var(--faint);font-size:13px;margin-top:12px}
+  /* explainer */
+  .prose{color:var(--muted);font-size:15px}
+  .prose h2{color:var(--text);font-size:20px;margin:26px 0 10px}
+  .prose h3{color:var(--text);font-size:16px;margin:20px 0 6px}
+  .prose p{margin:0 0 12px}
+  .prose ul{margin:0 0 12px;padding-left:20px}
+  .prose li{margin:4px 0}
+  .faq dt{font-weight:700;color:var(--text);margin-top:16px}
+  .faq dd{margin:6px 0 0}
+  footer{border-top:1px solid var(--border);margin-top:40px;padding:26px 0;color:var(--faint);font-size:13px}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+  footer a{color:var(--muted)}
+  @media(max-width:520px){ h1{font-size:27px} .bignum{font-size:42px} }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a href="https://draftcycling.com/"><img src="/logo-dark.png" alt="Draft Cycling" /></a>
+    <a class="cta-sm" href="https://draftcycling.com/login?register=true">Try Draft Free</a>
+  </div>
+</nav>
+
+<div class="wrap">
+  <header>
+    <h1>FTP &amp; <span class="grad">Watts-per-Kilo</span> Calculator</h1>
+    <p>Find the two numbers that define your cycling fitness. Enter your FTP and weight — or estimate your FTP from a recent test. Free, no sign-up.</p>
+  </header>
+
+  <div class="card">
+    <div class="toggles">
+      <div class="toggle-group">
+        <label>Weight units</label>
+        <div class="seg" id="unitSeg">
+          <button data-unit="kg" class="on">kg</button>
+          <button data-unit="lb">lb</button>
+        </div>
+      </div>
+      <div class="toggle-group">
+        <label>Category chart</label>
+        <div class="seg" id="sexSeg">
+          <button data-sex="male" class="on">Men</button>
+          <button data-sex="female">Women</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="ftp">Your FTP (watts)</label>
+        <input id="ftp" type="number" inputmode="numeric" placeholder="e.g. 250" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label for="weight">Body weight (<span class="unitLbl">kg</span>)</label>
+        <input id="weight" type="number" inputmode="decimal" placeholder="e.g. 72" min="0" step="0.1" />
+      </div>
+    </div>
+    <p class="hint">Don't know your FTP? Estimate it below from a recent hard effort.</p>
+
+    <details id="estimator">
+      <summary>Estimate my FTP from a test →</summary>
+      <div class="est-body">
+        <div class="toggle-group" style="margin-bottom:12px">
+          <label>Test type</label>
+          <div class="seg" id="testSeg">
+            <button data-test="20" class="on">20-min</button>
+            <button data-test="8">8-min</button>
+            <button data-test="ramp">Ramp</button>
+            <button data-test="60">60-min</button>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label id="estLbl" for="estPower">Best 20-min average power (watts)</label>
+            <input id="estPower" type="number" inputmode="numeric" placeholder="e.g. 265" min="0" step="1" />
+          </div>
+        </div>
+        <p class="hint" id="estHint">FTP ≈ 95% of your best 20-minute power.</p>
+        <button class="cta-sm" id="applyEst" style="border:0;cursor:pointer;font-family:inherit;margin-top:6px">Use this as my FTP</button>
+      </div>
+    </details>
+  </div>
+
+  <div id="output" class="result" style="display:none">
+    <div class="bignum"><span id="wkgVal">–</span> <span>W/kg</span></div>
+    <div class="cat" id="catBadge">–</div>
+    <div class="ftp-out" id="ftpOut"></div>
+    <div class="ladder" id="ladder"></div>
+  </div>
+
+  <div class="promo">
+    <h2>Now turn that number into a plan</h2>
+    <p>Knowing your W/kg is step one. Draft is an AI cycling coach that builds a structured, adaptive plan to actually raise it — for your event, your schedule, and your bike. Less than two coffees a month.</p>
+    <a class="btn" href="https://draftcycling.com/login?register=true">Start your free 7-day trial</a>
+    <div class="tiny">No credit card to explore · Syncs with Strava · iOS app available</div>
+  </div>
+
+  <article class="prose">
+    <h2>What is FTP?</h2>
+    <p><strong>FTP (Functional Threshold Power)</strong> is the highest average power, in watts, you can hold for roughly an hour. It's the single most useful number in structured cycling training because nearly every workout target — endurance, tempo, sweet spot, threshold, VO2 max — is set as a percentage of it. Raise your FTP and every zone moves up with it.</p>
+
+    <h2>What is watts-per-kilogram (W/kg), and why does it matter more than raw watts?</h2>
+    <p>Two riders can both push 280 watts, but if one weighs 90&nbsp;kg and the other 65&nbsp;kg, they are not the same climber. <strong>W/kg</strong> — your FTP divided by your body weight — is what determines how fast you go uphill and how you stack up against other riders. On flat roads raw watts and aerodynamics matter more; the moment the road tilts up, W/kg is king.</p>
+    <p>To improve your W/kg you can raise the top (train to lift your FTP) or lower the bottom (lose non-functional weight) — most riders make the fastest gains by doing a bit of both, without ever under-fueling.</p>
+
+    <h2>How to estimate your FTP without a lab</h2>
+    <ul>
+      <li><strong>20-minute test:</strong> Warm up, then ride as hard as you can sustain for 20 minutes. FTP ≈ your average power × <strong>0.95</strong>. The most popular field test.</li>
+      <li><strong>8-minute test:</strong> Two 8-minute all-out efforts; take the best average × <strong>0.90</strong>. Shorter and less painful, slightly less precise.</li>
+      <li><strong>Ramp test:</strong> Power steps up every minute until you can't hold on. FTP ≈ <strong>75%</strong> of the average power of your best full minute. Quick and repeatable indoors.</li>
+      <li><strong>60-minute effort:</strong> If you have a genuine ~1-hour max effort (like a hard time trial), that average <em>is</em> your FTP.</li>
+    </ul>
+    <p>Whichever you use, test the same way each time so your numbers are comparable. Re-test every 4–6 weeks to track progress.</p>
+
+    <h2>Rider categories by W/kg</h2>
+    <p>The ranges in the calculator are based on the widely used Coggan power-profile framework, which maps threshold W/kg to broad ability levels from novice to world-class. They're a helpful gut-check, not a rulebook — real category racing depends on your local federation and results.</p>
+
+    <div class="faq">
+      <dl>
+        <dt>Is a good FTP the same for everyone?</dt>
+        <dd>No — that's exactly why W/kg exists. A "good" FTP for a 60&nbsp;kg rider is very different from a 90&nbsp;kg rider. Compare W/kg, and mostly compare yourself to your own past numbers.</dd>
+        <dt>How often should I retest?</dt>
+        <dd>Every 4–6 weeks during a training block. Testing too often just measures your fatigue, not your fitness.</dd>
+        <dt>Should I use my current weight or racing weight?</dt>
+        <dd>Use today's real weight for an honest W/kg. Chasing a lower number by under-eating tanks your power and your health — the goal is a higher ratio while fully fueled.</dd>
+      </dl>
+    </div>
+  </article>
+</div>
+
+<footer>
+  <div class="wrap">
+    <span>&copy; <span id="yr"></span> Draft Cycling</span>
+    <span>
+      <a href="https://draftcycling.com/blog/">Blog</a> ·
+      <a href="https://draftcycling.com/">Home</a> ·
+      <a href="https://draftcycling.com/login?register=true">Try Draft free</a>
+    </span>
+  </div>
+</footer>
+
+<script>
+(function(){
+  var state = { unit:'kg', sex:'male', test:'20' };
+  var LB = 2.2046226218;
+
+  var CATS = {
+    male: [
+      {name:'World class / Pro', min:5.5},
+      {name:'Cat 1 / Exceptional', min:4.6},
+      {name:'Cat 2 / Very strong', min:4.1},
+      {name:'Cat 3 / Strong', min:3.5},
+      {name:'Cat 4 / Moderate', min:2.9},
+      {name:'Cat 5 / Novice', min:2.3},
+      {name:'Beginner', min:0}
+    ],
+    female: [
+      {name:'World class / Pro', min:5.0},
+      {name:'Cat 1 / Exceptional', min:4.1},
+      {name:'Cat 2 / Very strong', min:3.6},
+      {name:'Cat 3 / Strong', min:3.0},
+      {name:'Cat 4 / Moderate', min:2.5},
+      {name:'Cat 5 / Novice', min:2.0},
+      {name:'Beginner', min:0}
+    ]
+  };
+  var TESTS = {
+    '20':  {factor:0.95, label:'Best 20-min average power (watts)', hint:'FTP ≈ 95% of your best 20-minute power.'},
+    '8':   {factor:0.90, label:'Best 8-min average power (watts)',  hint:'FTP ≈ 90% of your best 8-minute power.'},
+    'ramp':{factor:0.75, label:'Best 1-min power in a ramp test (watts)', hint:'FTP ≈ 75% of the average power of your best full minute.'},
+    '60':  {factor:1.00, label:'Best 60-min average power (watts)', hint:'A true 60-minute max effort is your FTP (100%).'}
+  };
+
+  function $(id){return document.getElementById(id)}
+  function seg(id, key){
+    $(id).addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      state[key] = b.dataset[key==='unit'?'unit':key==='sex'?'sex':'test'];
+      Array.prototype.forEach.call(this.children, function(c){ c.classList.toggle('on', c===b); });
+      onChange();
+    });
+  }
+  seg('unitSeg','unit'); seg('sexSeg','sex'); seg('testSeg','test');
+
+  // keep weight number when switching units (convert displayed value)
+  var lastUnit = 'kg';
+  $('unitSeg').addEventListener('click', function(e){
+    var b = e.target.closest('button'); if(!b) return;
+    var u = b.dataset.unit; if(u===lastUnit) return;
+    var w = parseFloat($('weight').value);
+    if(!isNaN(w)){ $('weight').value = u==='lb' ? Math.round(w*LB*10)/10 : Math.round(w/LB*10)/10; }
+    document.querySelectorAll('.unitLbl').forEach(function(el){el.textContent=u});
+    lastUnit=u; onChange();
+  });
+
+  function updateEstUI(){
+    var t = TESTS[state.test];
+    $('estLbl').textContent = t.label;
+    $('estHint').textContent = t.hint;
+  }
+  $('testSeg').addEventListener('click', updateEstUI);
+
+  $('applyEst').addEventListener('click', function(){
+    var p = parseFloat($('estPower').value);
+    if(isNaN(p)||p<=0){ $('estPower').focus(); return; }
+    var ftp = Math.round(p * TESTS[state.test].factor);
+    $('ftp').value = ftp;
+    onChange();
+    $('output').scrollIntoView({behavior:'smooth', block:'center'});
+  });
+
+  function onChange(){
+    var ftp = parseFloat($('ftp').value);
+    var wRaw = parseFloat($('weight').value);
+    if(isNaN(ftp)||ftp<=0||isNaN(wRaw)||wRaw<=0){ $('output').style.display='none'; return; }
+    var kg = state.unit==='lb' ? wRaw/LB : wRaw;
+    var wkg = ftp/kg;
+
+    $('output').style.display='block';
+    $('wkgVal').textContent = wkg.toFixed(2);
+    $('ftpOut').innerHTML = 'FTP <b>'+Math.round(ftp)+' W</b> ÷ <b>'+kg.toFixed(1)+' kg</b> weight';
+
+    var cats = CATS[state.sex];
+    var idx = cats.findIndex(function(c){ return wkg >= c.min; });
+    if(idx<0) idx = cats.length-1;
+    $('catBadge').textContent = cats[idx].name;
+
+    // ladder
+    var html='';
+    for(var i=0;i<cats.length;i++){
+      var lo = cats[i].min;
+      var hi = i===0 ? null : cats[i-1].min;
+      var rng = hi===null ? (lo.toFixed(1)+'+') : (lo.toFixed(1)+'–'+hi.toFixed(1));
+      html += '<div class="rung'+(i===idx?' active':'')+'"><span>'+cats[i].name+'</span><span class="rng">'+rng+' W/kg</span></div>';
+    }
+    $('ladder').innerHTML = html;
+  }
+
+  ['ftp','weight'].forEach(function(id){ $(id).addEventListener('input', onChange); });
+  $('yr').textContent = new Date().getFullYear();
+  updateEstUI();
+})();
+</script>
+</body>
+</html>
