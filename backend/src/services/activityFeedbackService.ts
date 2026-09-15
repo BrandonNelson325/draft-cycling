@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { activityMatchingService, type PlannedWorkoutInfo } from './activityMatchingService';
+import type { IntervalAnalysis } from './intervalAnalysisService';
 
 export interface UnacknowledgedActivity {
   id: string;
@@ -14,6 +15,7 @@ export interface UnacknowledgedActivity {
   calories: number | null;
   plannedWorkout: PlannedWorkoutInfo | null;
   matchConfidence: 'high' | 'partial' | 'low' | null;
+  intervalAnalysis: IntervalAnalysis | null;
 }
 
 export interface ActivityFeedback {
@@ -30,7 +32,7 @@ export const activityFeedbackService = {
 
     const { data, error } = await supabaseAdmin
       .from('strava_activities')
-      .select('id, strava_activity_id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data')
+      .select('id, strava_activity_id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data, interval_analysis')
       .eq('athlete_id', athleteId)
       .is('acknowledged_at', null)
       .gte('start_date', fourteenDaysAgo.toISOString())
@@ -76,6 +78,7 @@ export const activityFeedbackService = {
           calories: row.raw_data?.kilojoules ? Math.round(row.raw_data.kilojoules) : null,
           plannedWorkout,
           matchConfidence,
+          intervalAnalysis: (row.interval_analysis as IntervalAnalysis | null) ?? null,
         };
       })
     );

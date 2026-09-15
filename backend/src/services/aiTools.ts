@@ -441,7 +441,7 @@ export const AI_TOOLS: Tool[] = [
   {
     name: 'get_activity_details',
     description:
-      'Get full details for a specific ride/activity including power curve best efforts. Use the activity id from get_recent_activities or the RECENT RIDES section. Good for drill-down analysis of a particular ride.',
+      'Get full details for a specific ride/activity including power curve best efforts AND an interval/lap breakdown (`intervals`). When the ride was a structured interval workout, `intervals` contains the per-rep work efforts (duration, watts, %FTP, HR, cadence) plus fade, consistency, HR drift and strongest/weakest rep — use it to debrief the workout rep by rep. `intervals.hasIntervals:false` means it was not a structured interval session. Use the activity id from get_recent_activities or the RECENT RIDES section.',
     input_schema: {
       type: 'object',
       properties: {

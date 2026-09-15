@@ -15,6 +15,7 @@ import { clearSuggestionCache } from './dailyAnalysisService';
 import { trainingPlanJobService, registerPlanJobExecutor } from './trainingPlanJobService';
 import { mapWithConcurrency } from '../utils/concurrency';
 import { aiPlanDesignerService } from './aiPlanDesignerService';
+import { stravaService } from './stravaService';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -1295,6 +1296,22 @@ export const aiToolExecutor = {
       }
     }
 
+    // Interval breakdown. Use the stored analysis if present; otherwise build it
+    // lazily from Strava's lap detail (rides synced before this feature, or that
+    // skipped capture on bulk connect). `hasIntervals:false` is a valid result —
+    // it means the ride wasn't a structured interval session.
+    let intervals: any = activity.interval_analysis || null;
+    if (!intervals && activity.strava_activity_id) {
+      try {
+        intervals = await stravaService.buildIntervalAnalysisForActivity(athleteId, {
+          id: activity.id,
+          strava_activity_id: activity.strava_activity_id,
+        });
+      } catch (err) {
+        logger.error(`Lazy interval analysis failed for activity ${activity.id}:`, err);
+      }
+    }
+
     return {
       id: activity.id,
       name: activity.name,
@@ -1314,6 +1331,7 @@ export const aiToolExecutor = {
       perceived_effort: activity.perceived_effort,
       notes: activity.post_activity_notes,
       power_curve: powerCurve,
+      intervals,
     };
   },
 

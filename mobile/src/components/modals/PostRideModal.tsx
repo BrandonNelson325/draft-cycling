@@ -13,6 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import type { UnacknowledgedActivity, ActivityFeedback } from '../../services/activityFeedbackService';
+import { describeIntervalDebrief } from '../../services/activityFeedbackService';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getConversionUtils } from '../../utils/units';
 
@@ -64,6 +65,33 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
 
   // Default wasPlanned based on match confidence
   const effectiveWasPlanned = wasPlanned ?? (planned && activity.matchConfidence === 'high' ? true : null);
+
+  // Interval session debrief (only present for structured workouts with power).
+  const debrief = describeIntervalDebrief(activity.intervalAnalysis);
+  const plannedTss = planned?.plannedTSS ?? null;
+  const actualTss = activity.tss ?? null;
+  let tssVerdict: string | null = null;
+  if (plannedTss && actualTss != null) {
+    const ratio = actualTss / plannedTss;
+    tssVerdict = ratio >= 0.9 && ratio <= 1.1 ? 'on target' : ratio > 1.1 ? 'over' : 'under';
+  }
+
+  const openIntervalDebrief = async () => {
+    setSaving(true);
+    try {
+      await onAcknowledge({
+        perceived_effort: rpe ?? undefined,
+        notes: notes.trim() || undefined,
+        was_planned_workout: planned ? effectiveWasPlanned ?? undefined : undefined,
+        calendar_entry_id: planned?.calendarEntryId,
+      });
+      onNavigateToChat?.(
+        `Give me a full debrief on my interval workout "${activity.name || "today's ride"}" — how did my reps go (pacing, fade, consistency)${planned ? ' and did I hit the plan' : ''}?`
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!rpe) {
@@ -226,6 +254,23 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
             </View>
           )}
 
+          {debrief && (
+            <View style={styles.debriefCard}>
+              <Text style={styles.debriefLabel}>Session debrief</Text>
+              <Text style={styles.debriefHeadline}>{debrief.headline}</Text>
+              <Text style={styles.debriefVerdict}>{debrief.verdict}</Text>
+              {plannedTss && actualTss != null && (
+                <Text style={styles.debriefPlan}>
+                  Planned {Math.round(plannedTss)} TSS → you did {Math.round(actualTss)}
+                  {tssVerdict ? ` · ${tssVerdict}` : ''}
+                </Text>
+              )}
+              <TouchableOpacity style={styles.debriefBtn} onPress={openIntervalDebrief} disabled={saving}>
+                <Text style={styles.debriefBtnText}>Full debrief with coach →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
           <Text style={styles.question}>How hard was it? (RPE)</Text>
 
           <View style={styles.rpeRow}>
@@ -358,6 +403,29 @@ const styles = StyleSheet.create({
   plannedStats: { flexDirection: 'row', gap: 12 },
   plannedStat: { fontSize: 13, color: '#94a3b8' },
   plannedDesc: { fontSize: 12, color: '#64748b', lineHeight: 18 },
+  debriefCard: {
+    backgroundColor: '#1e293b',
+    borderRadius: 12,
+    padding: 14,
+    gap: 6,
+    borderLeftWidth: 3,
+    borderLeftColor: '#a78bfa',
+  },
+  debriefLabel: { fontSize: 13, fontWeight: '600', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 0.5 },
+  debriefHeadline: { fontSize: 15, fontWeight: '700', color: '#f1f5f9' },
+  debriefVerdict: { fontSize: 13, color: '#cbd5e1', lineHeight: 19 },
+  debriefPlan: { fontSize: 12, color: '#94a3b8' },
+  debriefBtn: {
+    marginTop: 4,
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    backgroundColor: '#312e5e',
+    borderWidth: 1,
+    borderColor: '#a78bfa',
+  },
+  debriefBtnText: { fontSize: 13, fontWeight: '600', color: '#c4b5fd' },
 
   // Match question
   matchQuestion: {

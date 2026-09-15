@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../ui/button';
 import type { UnacknowledgedActivity, ActivityFeedback } from '../../services/activityFeedbackService';
+import { describeIntervalDebrief } from '../../services/activityFeedbackService';
 
 interface PostRideModalProps {
   activity: UnacknowledgedActivity;
@@ -184,6 +185,23 @@ export function PostRideModal({
     setShowAdaptPrompt(false);
   };
 
+  // Interval session debrief (only for structured workouts with power).
+  const debrief = describeIntervalDebrief(activity.intervalAnalysis);
+  const plannedTss = planned?.plannedTSS ?? null;
+  const actualTss = activity.tss ?? null;
+  let tssVerdict: string | null = null;
+  if (plannedTss && actualTss != null) {
+    const ratio = actualTss / plannedTss;
+    tssVerdict = ratio >= 0.9 && ratio <= 1.1 ? 'on target' : ratio > 1.1 ? 'over' : 'under';
+  }
+
+  const handleIntervalDebrief = async () => {
+    await onAcknowledge(buildFeedback(selectedRpe ?? undefined));
+    onNavigateToChat?.(
+      `Give me a full debrief on my interval workout "${activity.name}" — how did my reps go (pacing, fade, consistency)${planned ? ' and did I hit the plan' : ''}?`
+    );
+  };
+
   const stats = [
     distance ? { label: 'Distance', value: distance } : null,
     duration ? { label: 'Duration', value: duration } : null,
@@ -222,6 +240,29 @@ export function PostRideModal({
 
           {/* Planned workout */}
           <PlannedWorkoutCard activity={activity} wasPlanned={wasPlanned} setWasPlanned={handleSetWasPlanned} showAdaptPrompt={showAdaptPrompt} onAdapt={handleAdapt} onDeclineAdapt={handleDeclineAdapt} />
+
+          {/* Interval session debrief */}
+          {debrief && (
+            <div className="rounded-xl border-l-4 border-violet-400 bg-violet-50 p-4 space-y-1.5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-700">Session debrief</p>
+              <p className="text-sm font-bold text-gray-800">{debrief.headline}</p>
+              <p className="text-sm text-gray-600">{debrief.verdict}</p>
+              {plannedTss && actualTss != null && (
+                <p className="text-xs text-gray-500">
+                  Planned {Math.round(plannedTss)} TSS → you did {Math.round(actualTss)}
+                  {tssVerdict ? ` · ${tssVerdict}` : ''}
+                </p>
+              )}
+              {onNavigateToChat && (
+                <button
+                  onClick={handleIntervalDebrief}
+                  className="mt-1 text-sm font-semibold text-violet-700 hover:text-violet-900"
+                >
+                  Full debrief with coach →
+                </button>
+              )}
+            </div>
+          )}
 
           {/* RPE */}
           <div>

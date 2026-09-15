@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../utils/supabase';
 import { stravaClient } from '../utils/strava';
 import { powerAnalysisService } from './powerAnalysisService';
 import { calculateTSS } from './trainingCalculations';
+import { trimLaps, analyzeIntervals } from './intervalAnalysisService';
 import { logger } from '../utils/logger';
 
 export const stravaService = {
@@ -166,11 +167,60 @@ export const stravaService = {
           } catch (err) {
             logger.error(`❌ Failed to analyze power for activity ${activity.id}:`, err);
           }
+
+          // Capture per-lap interval data for NEW powered rides only (one extra
+          // detail call per ride; skipped on bulk connect via skipPowerAnalysis).
+          if (!existingSet.has(activity.id)) {
+            try {
+              await this.buildIntervalAnalysisForActivity(athleteId, data, { accessToken, ftp });
+            } catch (err) {
+              logger.error(`❌ Failed to capture intervals for activity ${activity.id}:`, err);
+            }
+          }
         }
       }
     }
 
     return { synced: stored.length, total: rides.length, analyzed: analyzed.length, newIds };
+  },
+
+  /**
+   * Fetch a ride's laps from Strava's activity-detail endpoint, compute the
+   * interval breakdown, and persist both onto the strava_activities row.
+   * Returns the analysis. Used two ways:
+   *   1. Eagerly during incremental sync for new powered rides.
+   *   2. Lazily by the coach when it analyzes an older ride that predates this
+   *      feature (row has no `laps` yet) — see aiToolExecutor.getActivityDetails.
+   * `opts` lets the sync loop reuse its already-fetched token + FTP.
+   */
+  async buildIntervalAnalysisForActivity(
+    athleteId: string,
+    dbActivity: { id: string; strava_activity_id: number },
+    opts: { accessToken?: string; ftp?: number } = {}
+  ) {
+    const accessToken = opts.accessToken || (await this.ensureValidToken(athleteId));
+
+    let ftp = opts.ftp;
+    if (ftp == null) {
+      const { data: athlete } = await supabaseAdmin
+        .from('athletes')
+        .select('ftp')
+        .eq('id', athleteId)
+        .single();
+      ftp = athlete?.ftp || 0;
+    }
+
+    const detail: any = await stravaClient.getActivity(accessToken, dbActivity.strava_activity_id);
+    const laps = trimLaps(detail?.laps || []);
+    const analysis = analyzeIntervals(laps, ftp || 0);
+
+    await supabaseAdmin
+      .from('strava_activities')
+      .update({ laps, interval_analysis: analysis })
+      .eq('id', dbActivity.id)
+      .eq('athlete_id', athleteId);
+
+    return analysis;
   },
 
   async getActivityWithStreams(athleteId: string, stravaActivityId: number) {
