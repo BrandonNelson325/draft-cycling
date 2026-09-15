@@ -72,6 +72,18 @@ export function LandingPage() {
             <img src="/logo-dark.png" alt="Draft" className="h-10 w-auto" />
           </Link>
           <div className="flex items-center gap-4">
+            <a
+              href="/blog/"
+              className="hidden sm:inline text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Blog
+            </a>
+            <a
+              href="/tools/ftp-calculator"
+              className="hidden sm:inline text-sm text-gray-400 hover:text-white transition-colors"
+            >
+              Free Tools
+            </a>
             <Link
               to="/login"
               className="text-sm text-gray-400 hover:text-white transition-colors"
@@ -269,6 +281,8 @@ export function LandingPage() {
           <div className="flex gap-6 text-sm text-gray-500">
             <a href="#features" className="hover:text-gray-300 transition-colors">Features</a>
             <a href="#pricing" className="hover:text-gray-300 transition-colors">Pricing</a>
+            <a href="/blog/" className="hover:text-gray-300 transition-colors">Blog</a>
+            <a href="/tools/ftp-calculator" className="hover:text-gray-300 transition-colors">Free Tools</a>
             <a href="mailto:support@draftcycling.com" className="hover:text-gray-300 transition-colors">Support</a>
             <a href="/privacy" className="hover:text-gray-300 transition-colors">Privacy Policy</a>
           </div>
