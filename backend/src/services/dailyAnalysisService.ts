@@ -328,11 +328,26 @@ export const dailyAnalysisService = {
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
 
+    const DAY_MS = 1000 * 60 * 60 * 24;
+    const daysAgoOf = (d: string) => Math.floor((Date.now() - new Date(d).getTime()) / DAY_MS);
+
     const recentRideList = recentActivities
-      .map((a: any) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`)
+      .map((a: any) => {
+        const d = daysAgoOf(a.start_date);
+        const when = d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+        return `  - ${when} (${new Date(a.start_date).toLocaleDateString()}): ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS`;
+      })
       .join('\n');
+    const daysSinceLastRide = recentActivities.length
+      ? Math.min(...recentActivities.map((a: any) => daysAgoOf(a.start_date)))
+      : null;
+    const today = new Date();
 
     return `You are analyzing an athlete's training status for today.
+
+CURRENT DATE: ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+DAYS SINCE LAST RIDE: ${daysSinceLastRide == null ? 'no rides in the last 7 days' : daysSinceLastRide <= 0 ? 'rode today' : `${daysSinceLastRide} day(s) — not ridden since`}
+(Recovery from a hard effort/race only matters for ~24–72h after it — do NOT frame the athlete as needing recovery from an effort that's already 3+ days past.)
 
 YESTERDAY'S TRAINING:
 ${
@@ -820,11 +835,29 @@ Format as JSON:
     const yesterdayTSS = yesterdayActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
     const recentTotalTSS = recentActivities.reduce((sum, a) => sum + (a.tss || 0), 0);
 
+    const DAY_MS = 1000 * 60 * 60 * 24;
+    const daysAgoOf = (d: string) => Math.floor((Date.now() - new Date(d).getTime()) / DAY_MS);
+
     const recentRideList = recentActivities
-      .map((a) => `  - ${new Date(a.start_date).toLocaleDateString()}: ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS${a.perceived_effort ? `, RPE ${a.perceived_effort}/5` : ''}`)
+      .map((a) => {
+        const d = daysAgoOf(a.start_date);
+        const when = d <= 0 ? 'today' : d === 1 ? 'yesterday' : `${d} days ago`;
+        return `  - ${when} (${new Date(a.start_date).toLocaleDateString()}): ${a.name} — ${Math.round(a.moving_time_seconds / 60)}min, ${a.tss || 0} TSS${a.perceived_effort ? `, RPE ${a.perceived_effort}/5` : ''}`;
+      })
       .join('\n');
 
+    // Days since the MOST RECENT ride — the key recency signal. Without this the
+    // model over-weights a big race sitting in the 7-day list and prescribes
+    // post-race recovery days after the race is already behind the athlete.
+    const daysSinceLastRide = recentActivities.length
+      ? Math.min(...recentActivities.map((a) => daysAgoOf(a.start_date)))
+      : null;
+    const today = new Date();
+
     const base = `You are a cycling coach assessing an athlete's readiness for today.
+
+CURRENT DATE: ${today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+DAYS SINCE LAST RIDE: ${daysSinceLastRide == null ? 'no rides in the last 7 days' : daysSinceLastRide <= 0 ? 'rode today' : `${daysSinceLastRide} day(s) — the athlete has NOT ridden since then`}
 
 YESTERDAY'S TRAINING:
 ${
@@ -848,7 +881,12 @@ ${readinessBlock}
 LAST 7 DAYS (${recentActivities.length} rides, ${recentTotalTSS} total TSS, ${(recentTotalTSS / 7).toFixed(1)} avg TSS/day):
 ${recentRideList || '  (no rides)'}
 
-${fatigueProfileService.formatForPrompt(fatigueProfile)}`;
+${fatigueProfileService.formatForPrompt(fatigueProfile)}
+
+RECENCY & RECOVERY — do not get this wrong:
+- Recovery from a hard effort or race only matters in the ~24–72 HOURS after it. Do NOT prescribe post-race/post-effort recovery for an effort that is already 3+ days in the past — that recovery window has closed.
+- Use DAYS SINCE LAST RIDE above. If it's been 3+ days off, the athlete is already recovered (and starting to lose fitness) — the risk is DETRAINING, not under-recovery. Recommend getting back on the bike (an easy/endurance re-opener, or normal training if readiness is good) — NOT another rest day — unless acute readiness (poor sleep, suppressed HRV, elevated resting HR, illness) is genuinely bad TODAY.
+- A big-TSS ride in the LAST 7 DAYS list only justifies resting TODAY if it was today or yesterday. Weight the readiness recommendation above over a stale effort.`;
 
     if (hasPlannedWorkout && todayEntry?.workouts) {
       return `${base}
