@@ -13,7 +13,7 @@ import {
   Platform,
 } from 'react-native';
 import type { UnacknowledgedActivity, ActivityFeedback } from '../../services/activityFeedbackService';
-import { describeIntervalDebrief } from '../../services/activityFeedbackService';
+import { describeIntervalDebrief, describeRideSummary } from '../../services/activityFeedbackService';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { getConversionUtils } from '../../utils/units';
 
@@ -66,8 +66,10 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
   // Default wasPlanned based on match confidence
   const effectiveWasPlanned = wasPlanned ?? (planned && activity.matchConfidence === 'high' ? true : null);
 
-  // Interval session debrief (only present for structured workouts with power).
+  // Post-ride debrief. Interval rides get a rep breakdown; every other ride
+  // (races, free rides, endurance) gets a summary — so nothing goes un-debriefed.
   const debrief = describeIntervalDebrief(activity.intervalAnalysis);
+  const rideSummary = debrief ? null : describeRideSummary(activity);
   const plannedTss = planned?.plannedTSS ?? null;
   const actualTss = activity.tss ?? null;
   let tssVerdict: string | null = null;
@@ -76,7 +78,7 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
     tssVerdict = ratio >= 0.9 && ratio <= 1.1 ? 'on target' : ratio > 1.1 ? 'over' : 'under';
   }
 
-  const openIntervalDebrief = async () => {
+  const openDebrief = async (message: string) => {
     setSaving(true);
     try {
       await onAcknowledge({
@@ -85,13 +87,14 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
         was_planned_workout: planned ? effectiveWasPlanned ?? undefined : undefined,
         calendar_entry_id: planned?.calendarEntryId,
       });
-      onNavigateToChat?.(
-        `Give me a full debrief on my interval workout "${activity.name || "today's ride"}" — how did my reps go (pacing, fade, consistency)${planned ? ' and did I hit the plan' : ''}?`
-      );
+      onNavigateToChat?.(message);
     } finally {
       setSaving(false);
     }
   };
+
+  const intervalMsg = `Give me a full debrief on my interval workout "${activity.name || "today's ride"}" — how did my reps go (pacing, fade, consistency)${planned ? ' and did I hit the plan' : ''}?`;
+  const rideMsg = `Give me a debrief on my ride "${activity.name || "today's ride"}" — how hard was it (intensity vs threshold), any notable efforts, and what it means for my training${planned ? ' vs the plan' : ''}?`;
 
   const handleSubmit = async () => {
     if (!rpe) {
@@ -265,8 +268,25 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
                   {tssVerdict ? ` · ${tssVerdict}` : ''}
                 </Text>
               )}
-              <TouchableOpacity style={styles.debriefBtn} onPress={openIntervalDebrief} disabled={saving}>
+              <TouchableOpacity style={styles.debriefBtn} onPress={() => openDebrief(intervalMsg)} disabled={saving}>
                 <Text style={styles.debriefBtnText}>Full debrief with coach →</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {rideSummary && (
+            <View style={styles.debriefCard}>
+              <Text style={styles.debriefLabel}>Ride debrief</Text>
+              <Text style={styles.debriefHeadline}>{rideSummary.headline}</Text>
+              {rideSummary.detail && <Text style={styles.debriefVerdict}>{rideSummary.detail}</Text>}
+              {plannedTss && actualTss != null && (
+                <Text style={styles.debriefPlan}>
+                  Planned {Math.round(plannedTss)} TSS → you did {Math.round(actualTss)}
+                  {tssVerdict ? ` · ${tssVerdict}` : ''}
+                </Text>
+              )}
+              <TouchableOpacity style={styles.debriefBtn} onPress={() => openDebrief(rideMsg)} disabled={saving}>
+                <Text style={styles.debriefBtnText}>Debrief with coach →</Text>
               </TouchableOpacity>
             </View>
           )}

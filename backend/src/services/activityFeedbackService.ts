@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { activityMatchingService, type PlannedWorkoutInfo } from './activityMatchingService';
+import { powerAnalysisService } from './powerAnalysisService';
 import type { IntervalAnalysis } from './intervalAnalysisService';
 
 export interface UnacknowledgedActivity {
@@ -10,6 +11,10 @@ export interface UnacknowledgedActivity {
   distance_meters: number | null;
   moving_time_seconds: number | null;
   average_watts: number | null;
+  normalized_power: number | null;
+  intensity_factor: number | null; // NP / FTP, rounded to 2dp
+  best_5min_power: number | null;
+  best_20min_power: number | null;
   tss: number | null;
   average_heartrate: number | null;
   calories: number | null;
@@ -42,6 +47,14 @@ export const activityFeedbackService = {
       throw new Error(`Failed to fetch unacknowledged activities: ${error.message}`);
     }
 
+    // FTP for intensity-factor math (so races/free rides get a summary too).
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes')
+      .select('ftp')
+      .eq('id', athleteId)
+      .single();
+    const ftp = athlete?.ftp || 0;
+
     // For each activity, check if there's a planned workout for that day
     const activities = await Promise.all(
       (data || []).map(async (row) => {
@@ -65,6 +78,22 @@ export const activityFeedbackService = {
           // Non-fatal — just skip matching info
         }
 
+        const np = row.raw_data?.weighted_average_watts ?? null;
+        const intensityFactor = np && ftp ? Math.round((np / ftp) * 100) / 100 : null;
+
+        // Best 5- and 20-min power for a ride summary highlight (races/free rides).
+        let best5min: number | null = null;
+        let best20min: number | null = null;
+        try {
+          const curve = await powerAnalysisService.getActivityPowerCurve(athleteId, row.strava_activity_id);
+          if (curve) {
+            best5min = curve.power_5min ?? null;
+            best20min = curve.power_20min ?? null;
+          }
+        } catch {
+          // No power curve for this ride — fine, highlights just stay null.
+        }
+
         return {
           id: row.id,
           name: row.name,
@@ -73,6 +102,10 @@ export const activityFeedbackService = {
           distance_meters: row.distance_meters,
           moving_time_seconds: row.moving_time_seconds,
           average_watts: row.average_watts,
+          normalized_power: np,
+          intensity_factor: intensityFactor,
+          best_5min_power: best5min,
+          best_20min_power: best20min,
           tss: row.tss,
           average_heartrate: row.raw_data?.average_heartrate ?? null,
           calories: row.raw_data?.kilojoules ? Math.round(row.raw_data.kilojoules) : null,

@@ -36,6 +36,10 @@ export interface UnacknowledgedActivity {
   distance_meters: number | null;
   moving_time_seconds: number | null;
   average_watts: number | null;
+  normalized_power: number | null;
+  intensity_factor: number | null;
+  best_5min_power: number | null;
+  best_20min_power: number | null;
   tss: number | null;
   average_heartrate: number | null;
   calories: number | null;
@@ -78,6 +82,43 @@ export function describeIntervalDebrief(
   }
   if (s.hr_drift_bpm != null && s.hr_drift_bpm >= 8) verdict += ` HR drifted +${s.hr_drift_bpm} bpm.`;
   return { headline, verdict };
+}
+
+/**
+ * One-glance summary for a NON-interval ride (race, free ride, endurance) so
+ * every meaningful ride gets a post-ride debrief, not just structured workouts.
+ * Pure. Returns null when there's nothing worth summarizing (no power + no TSS).
+ */
+export function describeRideSummary(a: {
+  intensity_factor: number | null;
+  tss: number | null;
+  best_5min_power: number | null;
+  best_20min_power: number | null;
+  average_watts: number | null;
+}): { headline: string; detail: string | null } | null {
+  const hasSomething = a.intensity_factor != null || a.tss != null || a.average_watts != null;
+  if (!hasSomething) return null;
+
+  const if_ = a.intensity_factor;
+  let label = 'Ride';
+  if (if_ != null) {
+    label = if_ >= 1.05 ? 'Very hard ride' : if_ >= 0.95 ? 'Hard ride' : if_ >= 0.85 ? 'Solid ride' : if_ >= 0.75 ? 'Moderate ride' : 'Easy ride';
+  }
+  const parts = [label];
+  if (if_ != null) parts.push(`IF ${if_.toFixed(2)}`);
+  if (a.tss != null) parts.push(`${Math.round(a.tss)} TSS`);
+  const headline = parts.join(' · ');
+
+  let detail: string | null = null;
+  if (a.best_5min_power != null || a.best_20min_power != null) {
+    const bits: string[] = [];
+    if (a.best_5min_power != null) bits.push(`best 5-min ${Math.round(a.best_5min_power)}W`);
+    if (a.best_20min_power != null) bits.push(`20-min ${Math.round(a.best_20min_power)}W`);
+    detail = bits.join(' · ');
+  } else if (a.average_watts != null) {
+    detail = `avg ${Math.round(a.average_watts)}W`;
+  }
+  return { headline, detail };
 }
 
 export const activityFeedbackService = {
