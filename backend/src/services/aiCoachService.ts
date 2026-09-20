@@ -8,6 +8,7 @@ import { AI_TOOLS } from './aiTools';
 import { athletePreferencesService, type AthletePreferences } from './athletePreferencesService';
 import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
 import { logger } from '../utils/logger';
+import { ageFromDob, mastersGuidance } from '../utils/age';
 
 // Advisor tool: Opus provides strategic guidance to Sonnet for complex reasoning
 // (schedule conflicts, periodization decisions, workout sequencing).
@@ -312,6 +313,9 @@ export const aiCoachService = {
   buildSystemPrompt(context: AthleteContext, clientDate?: string): string {
     const { athlete, recentRides, powerRecords, ftpEstimation, trainingStatus, preferences, healthData, dailyCheckIn, rpeHistory, fatigueProfile } = context;
 
+    const age = ageFromDob(athlete.date_of_birth);
+    const mastersBlock = mastersGuidance(age);
+
     // Use client-provided date, else athlete timezone, else UTC
     const athleteTz = athlete.timezone || 'America/Los_Angeles';
     const isoDate = clientDate || new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date());
@@ -347,7 +351,9 @@ ATHLETE PROFILE:
 ${athlete.ftp && athlete.weight_kg ? `- Power-to-Weight: ${(athlete.ftp / athlete.weight_kg).toFixed(2)}W/kg` : ''}
 - Experience Level: ${athlete.experience_level || 'Not set — ask the athlete (beginner: 0-2 years structured training, intermediate: 2-5 years, advanced: 5+ years)'}
 - Weekly Training Hours: ${athlete.weekly_training_hours ? `${athlete.weekly_training_hours} hours/week` : 'Not set — ask the athlete how many hours per week they can train'}
+${age ? `- Age: ${age}` : ''}${athlete.max_hr ? `\n- Max HR: ${athlete.max_hr} bpm (measured)` : ''}${athlete.resting_hr ? `\n- Resting HR: ${athlete.resting_hr} bpm` : ''}
 
+${mastersBlock ? `\n${mastersBlock}` : ''}
 TRAINING GOALS:
 ${preferences.training_goal || 'Not set - Ask the athlete about their goals (event, target date, what they want to improve)'}
 

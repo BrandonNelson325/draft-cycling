@@ -8,6 +8,7 @@ import {
   normalizeAiPlan,
 } from './trainingPlanService';
 import { TrainingPlan } from '../types/trainingPlan';
+import { ageFromDob, mastersGuidance } from '../utils/age';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -72,7 +73,7 @@ export const aiPlanDesignerService = {
   async designPlan(athleteId: string, params: any): Promise<TrainingPlan> {
     const { data: athlete } = await supabaseAdmin
       .from('athletes')
-      .select('ftp, weight_kg, experience_level, unit_system, timezone, full_name')
+      .select('ftp, weight_kg, experience_level, unit_system, timezone, full_name, date_of_birth, max_hr, resting_hr')
       .eq('id', athleteId)
       .single();
 
@@ -114,6 +115,8 @@ export const aiPlanDesignerService = {
     } catch { /* optional */ }
 
     const wkg = athlete.weight_kg ? (athlete.ftp / athlete.weight_kg).toFixed(2) : null;
+    const age = ageFromDob(athlete.date_of_birth);
+    const mastersBlock = mastersGuidance(age);
     const availLines = availableDays
       .slice()
       .sort((a, b) => a.day - b.day)
@@ -130,7 +133,8 @@ ${params.route_notes ? `ROUTE / RACE NOTES: ${params.route_notes}\n` : ''}${para
 ATHLETE:
 - FTP: ${athlete.ftp}W${wkg ? ` (${wkg} W/kg)` : ''}
 - Experience: ${athlete.experience_level || 'unknown'}
-- ${powerLine || 'Limited power-record data.'}
+${age ? `- Age: ${age}\n` : ''}${athlete.max_hr ? `- Max HR: ${athlete.max_hr} bpm\n` : ''}- ${powerLine || 'Limited power-record data.'}
+${mastersBlock ? `\n${mastersBlock}` : ''}
 
 PLAN WINDOW: starts ${startIso} (a Monday), event ${eventIso}, ${weeksUntil} weeks.
 
@@ -146,7 +150,7 @@ DESIGN REQUIREMENTS:
 5. Every workout needs a one-sentence rationale that a smart athlete would respect.
 6. duration_minutes must fit within that day's available hours.
 7. For INTERVAL sessions (tempo/sweet_spot/threshold/vo2max/anaerobic), prescribe the exact structure with reps + work_minutes + rest_minutes (e.g. a 2×12 sweet spot = reps 2, work_minutes 12, rest_minutes 4). We synthesize the intervals at the correct power for the type from these numbers, and the workout is NAMED from them — so the structure you give is what the athlete sees and rides. Make warmup + (reps × (work_minutes + rest_minutes)) + cooldown fit inside duration_minutes; the rest of the time becomes easy spinning. Omit reps/work_minutes/rest_minutes for steady endurance and recovery rides.
-
+${mastersBlock ? `8. Honor the AGE-AWARE COACHING guidance above: respect the hard-days-per-week ceiling for this athlete's age, separate hard days with easy/rest days (this overrides the "hard days may run back-to-back" allowance in requirement 2), and give recovery weeks and the taper a touch more room.\n` : ''}
 Return the full week-by-week plan via submit_training_plan now.`;
 
     logger.info(`[PlanDesigner] Designing ${weeksUntil}wk plan for athlete ${athleteId} with Opus`);
