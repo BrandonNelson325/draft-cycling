@@ -52,7 +52,13 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     refreshActiveMessages,
   } = useChatStore();
 
-  const activeMessages = activeConversationId ? messages[activeConversationId] || [] : [];
+  // Always render strictly in timestamp order. Guards against a turn that
+  // completes/surfaces late (e.g. a slow or retried turn) appearing BELOW newer
+  // messages — which read as the coach answering an old question mid-topic.
+  // Stable sort keeps same-timestamp messages (user then assistant) in order.
+  const activeMessages = (activeConversationId ? messages[activeConversationId] || [] : [])
+    .slice()
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   // Refetch on focus so a plan that finished building in the background (its
   // result message + any server-side recovery message) shows up when the user

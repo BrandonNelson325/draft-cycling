@@ -53,14 +53,20 @@ export function ChatThread({ messages, loading, toolStatus }: ChatThreadProps) {
   }, [loading]);
 
   // Safety check for messages — keep empty assistant messages (streaming placeholders)
-  const safeMessages = (messages || []).filter((msg) => {
-    try {
-      return msg && msg.id && msg.role && (msg.content || msg.role === 'assistant');
-    } catch (error) {
-      console.error('Error filtering message:', msg, error);
-      return false;
-    }
-  });
+  const safeMessages = (messages || [])
+    .filter((msg) => {
+      try {
+        return msg && msg.id && msg.role && (msg.content || msg.role === 'assistant');
+      } catch (error) {
+        console.error('Error filtering message:', msg, error);
+        return false;
+      }
+    })
+    // Always render strictly in timestamp order, so a turn that completes/surfaces
+    // late can never appear BELOW newer messages (which reads as the coach
+    // answering an old question mid-topic). Stable for equal timestamps.
+    .slice()
+    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
   if (safeMessages.length === 0 && !loading) {
     return (
