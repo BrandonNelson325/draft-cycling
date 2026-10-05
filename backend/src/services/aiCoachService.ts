@@ -143,7 +143,7 @@ export const aiCoachService = {
       supabaseAdmin.from('athletes').select('*').eq('id', athleteId).single(),
       supabaseAdmin
         .from('strava_activities')
-        .select('id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data, perceived_effort, post_activity_notes')
+        .select('id, strava_activity_id, name, start_date, distance_meters, moving_time_seconds, average_watts, tss, raw_data, perceived_effort, post_activity_notes, interval_analysis')
         .eq('athlete_id', athleteId)
         .gte('start_date', twoWeeksAgo.toISOString())
         .order('start_date', { ascending: false })
@@ -226,6 +226,26 @@ export const aiCoachService = {
         }
       }
     }
+
+    // Attach each recent ride's power curve (best efforts) to the 3 most recent
+    // rides. Without this the coach has only NP in context, decides it already
+    // has "enough", skips get_activity_details, and pads a ride debrief with the
+    // training plan. Having the real numbers in context removes that failure
+    // mode entirely — it no longer depends on the model choosing to call a tool.
+    const ridesForDetail = (recentRides || []).slice(0, 3);
+    await Promise.all(
+      ridesForDetail.map(async (ride: any) => {
+        if (!ride.strava_activity_id) return;
+        try {
+          ride._powerCurve = await powerAnalysisService.getActivityPowerCurve(
+            athleteId,
+            ride.strava_activity_id
+          );
+        } catch {
+          // Non-fatal — the ride line just omits best efforts.
+        }
+      })
+    );
 
     return {
       athlete,
@@ -606,6 +626,33 @@ USE THIS PROFILE TO:
           prompt += ` — "${ride.post_activity_notes}"`;
         }
         prompt += '\n';
+
+        // Detail line for the most recent rides: IF + best efforts + interval
+        // structure. This is the data a debrief actually needs, pre-loaded so
+        // the coach never has to say "let me pull it up" or fall back to the plan.
+        const detail: string[] = [];
+        if (raw.weighted_average_watts && athlete.ftp) {
+          detail.push(`IF ${(raw.weighted_average_watts / athlete.ftp).toFixed(2)}`);
+        }
+        const pc = ride._powerCurve;
+        if (pc) {
+          const efforts = [
+            pc.power_1min ? `1min ${Math.round(pc.power_1min)}W` : null,
+            pc.power_5min ? `5min ${Math.round(pc.power_5min)}W` : null,
+            pc.power_20min ? `20min ${Math.round(pc.power_20min)}W` : null,
+            pc.power_60min ? `60min ${Math.round(pc.power_60min)}W` : null,
+          ].filter(Boolean);
+          if (efforts.length) detail.push(`best efforts — ${efforts.join(', ')}`);
+        }
+        const ia = ride.interval_analysis;
+        if (ia?.hasIntervals && ia.summary) {
+          detail.push(
+            `intervals: ${ia.structure_label} @ ${ia.summary.avg_pct_ftp ?? '?'}% FTP, fade ${ia.summary.fade_pct ?? '?'}%`
+          );
+        }
+        if (detail.length) {
+          prompt += `   └ ${detail.join(' | ')}\n`;
+        }
       });
 
       // Detect if athlete already rode today
