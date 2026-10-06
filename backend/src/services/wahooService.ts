@@ -31,7 +31,14 @@ class WahooService {
       client_id: this.config.clientId,
       response_type: 'code',
       redirect_uri: this.config.redirectUri,
-      scope: 'workouts_write plans_write user_read',
+      // Only scopes GRANTED to the Wahoo app (id 1649, production) may be
+      // requested — asking for an ungranted scope fails the authorize call.
+      // Reads are included so we can reconcile what we've already pushed
+      // rather than tracking it blind. `offline_data` is what unlocks
+      // `workout_summary` webhooks (refresh tokens are issued regardless, per
+      // Wahoo support). Changing this list forces connected athletes to
+      // re-authorize, so keep it in sync with the portal deliberately.
+      scope: 'user_read workouts_read workouts_write plans_read plans_write offline_data',
       state: fullState,
     });
     return `${WAHOO_OAUTH_URL}/authorize?${params.toString()}`;

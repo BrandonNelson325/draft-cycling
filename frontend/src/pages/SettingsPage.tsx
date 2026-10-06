@@ -5,6 +5,7 @@ import { ProfileEditForm } from '../components/settings/ProfileEditForm';
 import { AccountInfo } from '../components/settings/AccountInfo';
 import { StravaConnect } from '../components/strava/StravaConnect';
 import { IntervalsIcuConnect } from '../components/settings/IntervalsIcuConnect';
+import { WahooConnect } from '../components/settings/WahooConnect';
 import { WelcomeModal } from '../components/modals/WelcomeModal';
 import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
@@ -96,10 +97,7 @@ export function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            <Button disabled className="bg-gray-600 text-white opacity-60 cursor-not-allowed">
-              Connect Wahoo
-            </Button>
-            <p className="text-xs text-muted-foreground mt-2">Coming soon — connect to Intervals.icu above to sync workouts to your Wahoo head unit now.</p>
+            <WahooConnect />
           </CardContent>
         </Card>
 

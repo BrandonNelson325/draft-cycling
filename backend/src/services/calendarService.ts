@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { CalendarEntry, ScheduleWorkoutDTO, UpdateCalendarEntryDTO } from '../types/calendar';
 import { intervalsIcuService } from './intervalsIcuService';
-import { wahooService } from './wahooService';
+import { integrationSyncService } from './integrationSyncService';
 import { logger } from '../utils/logger';
 import { localDayToUTCRange, utcToLocalDate } from '../utils/timezone';
 
@@ -65,39 +65,19 @@ export const calendarService = {
       throw new Error(`Failed to schedule workout: ${error.message}`);
     }
 
-    // Auto-sync to Intervals.icu if enabled
+    // Mirror to every connected integration (intervals.icu, Wahoo, …).
+    // Fire-and-forget inside; never blocks or fails the scheduling.
     try {
-      const { data: athlete } = await supabaseAdmin
-        .from('athletes')
-        .select('intervals_icu_auto_sync, wahoo_auto_sync, wahoo_access_token')
-        .eq('id', athleteId)
-        .single();
-
-      if (athlete?.intervals_icu_auto_sync && !skipIntervalsAutoSync) {
-        // Sync in background (don't await - don't block the response)
-        intervalsIcuService
-          .uploadWorkout(athleteId, workoutId, scheduledDate, data.id)
-          .then(() => {
-            logger.debug(`✅ Auto-synced workout ${workoutId} to Intervals.icu`);
-          })
-          .catch((err) => {
-            logger.error(`❌ Auto-sync to Intervals.icu failed:`, err.message);
-          });
-      }
-
-      if (athlete?.wahoo_auto_sync && athlete?.wahoo_access_token) {
-        wahooService
-          .uploadWorkout(athleteId, workoutId, scheduledDate, data.id)
-          .then(() => {
-            logger.debug(`Auto-synced workout ${workoutId} to Wahoo`);
-          })
-          .catch((err) => {
-            logger.error(`Auto-sync to Wahoo failed:`, err.message);
-          });
-      }
+      await integrationSyncService.mirrorUpload(
+        athleteId,
+        workoutId,
+        scheduledDate,
+        data.id,
+        skipIntervalsAutoSync ? ['intervals_icu'] : []
+      );
     } catch (syncError) {
       // Log but don't fail the scheduling
-      logger.error('Error checking auto-sync settings:', syncError);
+      logger.error('Error mirroring workout to integrations:', syncError);
     }
 
     return data as CalendarEntry;
@@ -121,11 +101,11 @@ export const calendarService = {
       .eq('athlete_id', athleteId)
       .eq('scheduled_date', dateStr);
 
-    for (const e of existing || []) {
-      intervalsIcuService
-        .deleteSyncedEventForCalendarEntry(athleteId, e.id)
-        .catch((err) => logger.warn(`[Intervals.icu] Delete on rest day failed: ${err.message}`));
-    }
+    // Capture remote ids BEFORE the DELETE cascades workout_syncs away.
+    const refs = await integrationSyncService.captureForDeletion(
+      athleteId,
+      (existing || []).map((e: any) => e.id)
+    );
 
     // Remove any existing entries for this date first
     await supabaseAdmin
@@ -133,6 +113,8 @@ export const calendarService = {
       .delete()
       .eq('athlete_id', athleteId)
       .eq('scheduled_date', dateStr);
+
+    integrationSyncService.deleteRemotes(athleteId, refs);
 
     const { data, error } = await supabaseAdmin
       .from('calendar_entries')
@@ -203,9 +185,9 @@ export const calendarService = {
 
     // Mirror the move to intervals.icu in the background (no-op when not synced).
     if (data.workout_id) {
-      intervalsIcuService
-        .resyncCalendarEntryMove(athleteId, data.id, data.workout_id, newDate)
-        .catch((err) => logger.warn(`[Intervals.icu] Move resync failed: ${err.message}`));
+      integrationSyncService
+        .mirrorMove(athleteId, data.id, data.workout_id, newDate)
+        .catch((err) => logger.warn(`[Sync] Move resync failed: ${err.message}`));
     }
 
     return data as CalendarEntry;
@@ -254,9 +236,9 @@ export const calendarService = {
     if ((dateChanged || workoutChanged) && data.workout_id) {
       const [y, m, d] = (data.scheduled_date as string).split('-').map(Number);
       const newDate = new Date(y, m - 1, d);
-      intervalsIcuService
-        .resyncCalendarEntryMove(athleteId, data.id, data.workout_id, newDate)
-        .catch((err) => logger.warn(`[Intervals.icu] Update resync failed: ${err.message}`));
+      integrationSyncService
+        .mirrorMove(athleteId, data.id, data.workout_id, newDate)
+        .catch((err) => logger.warn(`[Sync] Update resync failed: ${err.message}`));
     }
 
     return data as CalendarEntry;
@@ -266,13 +248,11 @@ export const calendarService = {
    * Delete a calendar entry
    */
   async deleteEntry(entryId: string, athleteId: string): Promise<void> {
-    // Delete the mirrored intervals.icu event BEFORE deleting our row, since
-    // the workout_syncs FK cascades on calendar_entry deletion and we'd lose
-    // the external_id we need to call intervals.icu with. Fire-and-forget so
-    // a slow / failing third-party doesn't block the user's calendar action.
-    intervalsIcuService
-      .deleteSyncedEventForCalendarEntry(athleteId, entryId)
-      .catch((err) => logger.warn(`[Intervals.icu] Delete on calendar remove failed: ${err.message}`));
+    // CAPTURE remote ids FIRST (awaited, fast local read). workout_syncs
+    // cascades on calendar_entry deletion, so once the DELETE below runs the
+    // external_ids are gone forever and the remote events would be orphaned —
+    // which is exactly how adapted workouts ended up duplicated.
+    const refs = await integrationSyncService.captureForDeletion(athleteId, [entryId]);
 
     const { error } = await supabaseAdmin
       .from('calendar_entries')
@@ -283,6 +263,9 @@ export const calendarService = {
     if (error) {
       throw new Error(`Failed to delete calendar entry: ${error.message}`);
     }
+
+    // Now the slow third-party deletes, using ids captured before the cascade.
+    integrationSyncService.deleteRemotes(athleteId, refs);
   },
 
   /**

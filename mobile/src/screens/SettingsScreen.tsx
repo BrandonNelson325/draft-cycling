@@ -877,13 +877,47 @@ export default function SettingsScreen({ navigation }: any) {
           <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>Wahoo</Text>
         </View>
         <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.btn, { backgroundColor: '#334155', opacity: 0.6 }]}
-            disabled={true}
-          >
-            <Text style={styles.btnText}>Connect Wahoo</Text>
-          </TouchableOpacity>
-          <Text style={{ color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 }}>Coming soon — connect to Intervals.icu above to sync workouts to your Wahoo head unit now.</Text>
+          {wahooConnected ? (
+            <>
+              <View style={styles.stravaConnected}>
+                <View style={styles.stravaStatus}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.stravaText}>Connected</Text>
+                </View>
+              </View>
+              <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 4 }}>
+                Your prescribed workouts are pushed to your Wahoo account and appear on your ELEMNT.
+              </Text>
+              <View style={styles.notifRow}>
+                <View>
+                  <Text style={styles.notifLabel}>Auto-sync workouts</Text>
+                  <Text style={styles.notifHint}>Push planned workouts to Wahoo</Text>
+                </View>
+                <Switch
+                  value={wahooAutoSync}
+                  onValueChange={handleWahooAutoSyncToggle}
+                  trackColor={{ false: '#334155', true: '#3b82f6' }}
+                  thumbColor="#fff"
+                />
+              </View>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                <TouchableOpacity
+                  style={[styles.stravaBtn, { borderColor: '#ef4444' }]}
+                  onPress={handleDisconnectWahoo}
+                >
+                  <Text style={[styles.stravaBtnText, { color: '#ef4444' }]}>Disconnect</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.btn, { backgroundColor: '#1d4ed8' }, wahooLoading && styles.btnDisabled]}
+              onPress={handleConnectWahoo}
+              disabled={wahooLoading}
+            >
+              <Text style={styles.btnText}>{wahooLoading ? 'Connecting…' : 'Connect Wahoo'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* Garmin Section */}
