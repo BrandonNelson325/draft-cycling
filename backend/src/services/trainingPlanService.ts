@@ -2019,6 +2019,30 @@ export const trainingPlanService = {
 
       removedCount = deletedEntries?.length || 0;
 
+      // Plan-generated rest markers ("Planned rest day") are inserted without a
+      // training_plan_id by the template path, so the delete above misses them —
+      // a deleted plan left its Sundays behind. Remove FUTURE ones inside this
+      // plan's date range. Rest days set separately carry a different rationale
+      // and are kept.
+      const { data: planRow } = await supabaseAdmin
+        .from('training_plans').select('start_date, end_date, event_date').eq('id', planId).eq('athlete_id', athleteId).single();
+      const todayIso = new Date().toISOString().split('T')[0];
+      const rangeStart = planRow?.start_date && planRow.start_date > todayIso ? planRow.start_date : todayIso;
+      const rangeEnd = planRow?.end_date || planRow?.event_date;
+      if (rangeEnd) {
+        const { data: restRemoved } = await supabaseAdmin
+          .from('calendar_entries')
+          .delete()
+          .eq('athlete_id', athleteId)
+          .eq('entry_type', 'rest')
+          .is('workout_id', null)
+          .eq('ai_rationale', 'Planned rest day')
+          .gte('scheduled_date', rangeStart)
+          .lte('scheduled_date', rangeEnd)
+          .select('id');
+        removedCount += restRemoved?.length || 0;
+      }
+
       // Delete workouts linked to this plan
       await supabaseAdmin
         .from('workouts')

@@ -16,7 +16,8 @@
     "test:intervals": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyIntervalAnalysis.ts",
     "eval:plans": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/evalPlanQuality.ts",
     "eval:plans:designer": "ts-node -r dotenv/config src/scripts/evalPlanQuality.ts --designer",
-    "test:ftp": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyFtpTests.ts"
+    "test:ftp": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyFtpTests.ts",
+    "test:live-state": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyLiveState.ts"
   },
   "keywords": [],
   "author": "",
