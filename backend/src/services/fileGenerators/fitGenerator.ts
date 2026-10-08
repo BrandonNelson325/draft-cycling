@@ -77,7 +77,11 @@ export const fitGenerator = {
     let customTargetValueHigh: number | undefined;
 
     // Determine target type and values based on interval type
-    if (interval.type === 'ramp' && interval.power_low && interval.power_high) {
+    if (interval.open) {
+      // Max effort (sprint / FTP test): no power target, so ERG can't cap it.
+      targetType = 'open';
+      targetValue = 0;
+    } else if (interval.type === 'ramp' && interval.power_low && interval.power_high) {
       targetType = 'power';
       customTargetValueLow = Math.round(ftp * (interval.power_low / 100));
       customTargetValueHigh = Math.round(ftp * (interval.power_high / 100));

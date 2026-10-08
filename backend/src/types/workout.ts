@@ -17,6 +17,9 @@ export interface WorkoutInterval {
   type: IntervalType;
   cadence?: number; // Target cadence (optional)
   repeat?: number; // Number of times to repeat this interval
+  open?: boolean; // Max effort (sprint / FTP test) — exporters emit free ride / open target, never ERG-locked
+  ftp_test?: boolean; // The 20-min FTP test block — FTP = 95% of its average
+  endurance?: boolean; // Post-set Z2 fill — aerobic volume, not a rep
 }
 
 export interface Workout {

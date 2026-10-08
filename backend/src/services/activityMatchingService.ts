@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { logger } from '../utils/logger';
+import { FTP_TEST_NOTE_PREFIX } from './ftpTestService';
 
 export interface MatchResult {
   calendarEntryId: string;
@@ -148,8 +149,14 @@ export const activityMatchingService = {
         { tss: planned.plannedTSS, duration_minutes: planned.plannedDuration }
       );
 
+      // FTP tests are completed (and annotated) by ftpTestService — don't
+      // overwrite the result note.
+      const { data: existing } = await supabaseAdmin
+        .from('calendar_entries').select('notes').eq('id', planned.calendarEntryId).single();
+      const isProcessedTest = (existing?.notes || '').startsWith(FTP_TEST_NOTE_PREFIX);
+
       // Auto-complete if high confidence
-      if (match.confidence === 'high') {
+      if (match.confidence === 'high' && !isProcessedTest) {
         const { error } = await supabaseAdmin
           .from('calendar_entries')
           .update({

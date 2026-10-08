@@ -48,8 +48,10 @@ function formatInterval(interval: WorkoutInterval, repeat?: number): string[] {
   const lines = [
     '=INTERVAL=',
     `INTERVAL_NAME=${name}`,
-    `PERCENT_FTP_LO=${Math.max(0, power - 2)}`,
-    `PERCENT_FTP_HI=${power + 2}`,
+    // Max efforts (sprints, FTP test): wide band with the target as the floor
+    // so a trainer in ERG doesn't pin the rider at it.
+    `PERCENT_FTP_LO=${interval.open ? Math.max(0, power - 5) : Math.max(0, power - 2)}`,
+    `PERCENT_FTP_HI=${interval.open ? power + 100 : power + 2}`,
     `MESG_DURATION_SEC>${interval.duration}`,
   ];
 

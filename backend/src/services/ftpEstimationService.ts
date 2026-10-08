@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
+import { ftpTestService } from './ftpTestService';
 
 /**
  * FTP Estimation — Critical Power Model
@@ -239,6 +240,13 @@ export const ftpEstimationService = {
   async autoUpdateFTP(athleteId: string): Promise<boolean> {
     const now = new Date().toISOString();
     try {
+      // A completed FTP test is the truth — it wins over estimation this round.
+      const test = await ftpTestService.applyPendingFtpTests(athleteId).catch((err) => {
+        logger.warn('[FTP test] processing failed, falling back to estimation:', err);
+        return null;
+      });
+      if (test) return test.committed;
+
       const estimation = await this.estimateFTP(athleteId);
 
       const { data: athlete } = await supabaseAdmin

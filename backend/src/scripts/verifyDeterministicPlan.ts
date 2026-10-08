@@ -22,7 +22,7 @@ function check(label: string, cond: boolean, detail?: string) {
 }
 
 // ---- Mock the 3 DB touchpoints (not the logic under test) ----
-const athleteRow = { ftp: 250, timezone: 'America/Denver' };
+const athleteRow: any = { ftp: 250, timezone: 'America/Denver' };
 (supabaseAdmin as any).from = () => {
   const b: any = { select: () => b, eq: () => b, single: async () => ({ data: athleteRow, error: null }) };
   return b;
@@ -153,7 +153,7 @@ const CAP_BY_DAY: Record<number, number> = { 0: 0, 1: 1.5, 2: 2, 3: 1.5, 4: 2, 5
     for (const x of w.workouts) {
       if (x.workout_type !== 'recovery') continue;
       const prev = byDay.get(x.day_of_week - 1);
-      const prevIsHard = !!prev && /Long|Threshold|VO2|Tempo/.test(prev.name);
+      const prevIsHard = !!prev && /Long|Threshold|VO2|Tempo|Sweet Spot|Anaerobic|Sprint|FTP Test/.test(prev.name);
       if (!prevIsHard) { recoveryMisplaced = `week ${w.week_number}: recovery on day ${x.day_of_week} not after a hard day`; break; }
     }
     if (recoveryMisplaced) break;
@@ -174,7 +174,9 @@ const CAP_BY_DAY: Record<number, number> = { 0: 0, 1: 1.5, 2: 2, 3: 1.5, 4: 2, 5
   }
 
   // ---- Second scenario: rider wants all 7 days, no rest day ----
-  console.log('\n--- 7-day availability (no rest day) ---');
+  // Riding every day is an ADVANCED pattern — the level profile sets the ceiling.
+  console.log('\n--- 7-day availability (no rest day), advanced rider ---');
+  athleteRow.experience_level = 'advanced';
   const plan7 = await trainingPlanService.generatePlan('athlete-2', {
     goal_event: '200-mile TTT',
     event_date: eventDate,
@@ -191,6 +193,16 @@ const CAP_BY_DAY: Record<number, number> = { 0: 0, 1: 1.5, 2: 2, 3: 1.5, 4: 2, 5
 
   const everyWeekHasRecovery = plan7.weeks.every((w) => w.workouts.some((x) => x.workout_type === 'recovery'));
   check('7-day plan builds recovery rides into EVERY week (load is managed)', everyWeekHasRecovery, 'recovery present each week');
+
+  // Same availability for an intermediate → capped at 6 riding days (one rest day).
+  athleteRow.experience_level = 'intermediate';
+  const planInt = await trainingPlanService.generatePlan('athlete-3', {
+    goal_event: '200-mile TTT', event_date: eventDate, current_fitness_level: 'intermediate', weekly_hours: 0,
+    strengths: [], weaknesses: [], preferences: { indoor_outdoor: 'both', zwift_availability: false },
+    daily_hours: { sunday: 1, monday: 1.5, tuesday: 2, wednesday: 1.5, thursday: 2, friday: 1.5, saturday: 5 },
+  } as any);
+  const maxDaysInt = Math.max(...planInt.weeks.map((w) => new Set(w.workouts.map((x) => x.day_of_week)).size));
+  check('7-day availability, intermediate → at most 6 riding days', maxDaysInt <= 6, `max ${maxDaysInt} days/wk`);
 
   console.log(`\n${failures === 0 ? '✅ ALL CHECKS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

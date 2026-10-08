@@ -5,6 +5,9 @@ import { calendarService } from './calendarService';
 import { athletePreferencesService } from './athletePreferencesService';
 import { logger } from '../utils/logger';
 import { mapWithConcurrency } from '../utils/concurrency';
+import { Level, LEVEL_PROFILES, resolveLevel, recoveryRideAllowance, fuelingNote, Limiter, analyzePowerProfile, eventRelevantLimiter } from '../utils/coachingLevels';
+import { isFtpTestWorkout } from '../utils/ftpTest';
+import { powerAnalysisService } from './powerAnalysisService';
 import {
   TrainingPlanConfig,
   TrainingPlan,
@@ -101,6 +104,7 @@ function intensityFactorFor(type: string): number {
     case 'threshold': return 0.93;
     case 'vo2max': return 1.06;
     case 'anaerobic': return 1.15;
+    case 'sprint': return 0.78; // a few seconds of max effort inside an aerobic ride
     default: return 0.75;
   }
 }
@@ -113,10 +117,15 @@ function intensityFactorFor(type: string): number {
  */
 export function describeIntervals(intervals: any[]): string | null {
   if (!Array.isArray(intervals)) return null;
+  // Race-specific formats (over-unders, 30/30s, surges, late sets) carry their
+  // own label — counting their segments would just say "18 intervals".
+  const labeled = intervals.find((iv) => iv?.type === 'work' && typeof iv.label === 'string');
+  if (labeled) return labeled.label;
   // Expand repeat counts the same way the visualizer does, so the label matches.
   const work: { duration: number; power: number }[] = [];
   for (const iv of intervals) {
     if (iv?.type !== 'work') continue;
+    if (iv.endurance) continue; // post-set Z2 fill — aerobic volume, not a rep
     const count = Math.max(1, Number(iv.repeat) || 1);
     const power = Number(iv.power ?? iv.power_high ?? iv.power_low) || 0;
     for (let i = 0; i < count; i++) work.push({ duration: Number(iv.duration) || 0, power });
@@ -144,11 +153,31 @@ export function describeIntervals(intervals: any[]): string | null {
 // is always physiologically correct; the coach may only choose rep count / work
 // & rest length (see buildIntervalsFromStructure). Default work/rest lengths are
 // used when the coach doesn't specify a structure.
+// Time left over after an interval set is ridden as Z2 endurance, not at the
+// between-rep recovery power. 68% FTP = low/mid Z2 — a touch under a steady
+// endurance ride (70%) since the legs are pre-fatigued from the intervals.
+// Remainders shorter than 10 min aren't a real aerobic block; they stay easy spin.
+const ENDURANCE_FILL_POWER = 68;
+const ENDURANCE_FILL_MIN_SEC = 600;
+
+// Session SIZE is level-dependent and lives in utils/coachingLevels.ts
+// (defaultReps / maxWorkMinutes). Before, a default session filled the WHOLE
+// time box with reps — a 2-hour anaerobic day became "26 × 40 sec @ 130%".
+
+/** Efforts that progress by getting LONGER (vs. short efforts that add reps). */
+const LONG_EFFORT_TYPES = new Set(['threshold', 'sweet_spot', 'tempo']);
+
 const INTERVAL_SPECS: Record<string, { workPower: number; restPower: number; workSec: number; restSec: number }> = {
   threshold:  { workPower: 93,  restPower: 60, workSec: 480, restSec: 180 }, // 8-min threshold reps
   sweet_spot: { workPower: 90,  restPower: 60, workSec: 720, restSec: 240 }, // 12-min sweet-spot blocks
   vo2max:     { workPower: 110, restPower: 55, workSec: 180, restSec: 120 }, // 3-min VO2 reps
-  anaerobic:  { workPower: 130, restPower: 50, workSec: 40,  restSec: 200 }, // 40s bursts
+  // Anaerobic capacity: 30s at the top of Z6 (was 40s @ 130% — too soft to be
+  // anaerobic work, closer to a hard VO2 effort).
+  anaerobic:  { workPower: 150, restPower: 50, workSec: 30,  restSec: 270 }, // 30s @ 150%
+  // Neuromuscular sprints: short, MAXIMAL, full recovery. The target is a floor
+  // — the cue is "all-out". Previously 'sprint' had no spec and silently became
+  // a steady 70% endurance ride named "Endurance Ride".
+  sprint:     { workPower: 200, restPower: 50, workSec: 15,  restSec: 285 }, // 15s max sprints
   tempo:      { workPower: 82,  restPower: 62, workSec: 900, restSec: 180 }, // 15-min tempo blocks
 };
 
@@ -176,17 +205,41 @@ function assembleIntervals(
   let remaining = available;
   let reps = 0;
   while (remaining >= workLen + restLen && (maxReps == null || reps < maxReps)) {
-    out.push({ duration: workLen, power: workPower, type: 'work' });
+    // Sprints are MAX efforts: `open` tells exporters not to lock power (ERG
+    // would cap a sprint at the target). The power stays as a floor/guide.
+    out.push(type === 'sprint'
+      ? { duration: workLen, power: workPower, type: 'work', open: true }
+      : { duration: workLen, power: workPower, type: 'work' });
     out.push({ duration: restLen, power: restPower, type: 'rest' });
     remaining -= workLen + restLen;
     reps++;
   }
-  if (remaining > 0) out.push({ duration: remaining, power: restPower, type: 'rest' });
+  if (remaining > 0) {
+    // Leftover time after the reps. It used to be filled at `restPower` — the
+    // BETWEEN-REP recovery power (50–62% FTP). That's right for 2–4 min between
+    // VO2 reps, but stretched across the rest of a 2-hour day it meant ~an hour
+    // of Z1 (e.g. 5 × 3 min VO2 then 70 min at 55%) — junk volume an advanced
+    // rider called out. A real block of leftover time is aerobic work, so ride
+    // it as Z2 endurance. Short remainders stay easy spin.
+    if (remaining >= ENDURANCE_FILL_MIN_SEC) {
+      // type 'work' so every exporter (ZWO/FIT/Wahoo) renders it as a normal
+      // steady block at Z2; `endurance: true` tells describeIntervals and the
+      // visualizer caption NOT to count it as a rep ("5 × 3 min", not "6 intervals").
+      out.push({ duration: remaining, power: ENDURANCE_FILL_POWER, type: 'work', endurance: true });
+    } else {
+      out.push({ duration: remaining, power: restPower, type: 'rest' });
+    }
+  }
   out.push({ duration: cool, power: 55, type: 'cooldown' });
   return { intervals: out, reps };
 }
 
-export function buildIntervalsForType(type: string, durationMinutes: number): any[] {
+export function buildIntervalsForType(
+  type: string,
+  durationMinutes: number,
+  level: Level = 'intermediate',
+  progressionStep = 0 // week within a loading block: +1 rep per step, capped by the level's work ceiling
+): any[] {
   const total = durationMinutes * 60;
   const spec = INTERVAL_SPECS[type];
   if (!spec) {
@@ -201,8 +254,26 @@ export function buildIntervalsForType(type: string, durationMinutes: number): an
       { duration: cool, power: 55, type: 'cooldown' },
     ];
   }
-  // Interval type, no explicit structure → fill the time with default-size reps.
-  return assembleIntervals(type, total, spec.workSec, spec.restSec, spec.workPower, spec.restPower).intervals;
+  // Interval type, no explicit structure → a sensible default session (capped
+  // reps); the remaining time is ridden as Z2 endurance by assembleIntervals.
+  // Progressive overload inside a block, the way coaches do it: LONG efforts
+  // get longer (2×8 → 2×10 → 2×12 threshold), SHORT efforts get more reps
+  // (5×3 → 6×3 → 7×3 VO2). Never past the level's ceiling on total work time.
+  const profile = LEVEL_PROFILES[level];
+  const step = Math.max(0, progressionStep);
+  const maxWorkSec = (profile.maxWorkMinutes[type] ?? Infinity) * 60;
+  let reps = profile.defaultReps[type] ?? 3;
+  let workSec = spec.workSec;
+  if (LONG_EFFORT_TYPES.has(type)) {
+    workSec = Math.round((spec.workSec * (1 + 0.25 * step)) / 30) * 30;
+    if (reps * workSec > maxWorkSec) workSec = Math.max(spec.workSec, Math.floor(maxWorkSec / reps / 30) * 30);
+  } else {
+    reps += step;
+  }
+  if (reps * workSec > maxWorkSec) reps = Math.max(1, Math.floor(maxWorkSec / workSec));
+  return assembleIntervals(
+    type, total, workSec, spec.restSec, spec.workPower, spec.restPower, reps
+  ).intervals;
 }
 
 /**
@@ -212,18 +283,131 @@ export function buildIntervalsForType(type: string, durationMinutes: number): an
  * Returns null when the structure is invalid or doesn't apply (steady types, or
  * not even one rep fits) so the caller falls back to buildIntervalsForType.
  */
+export type SessionFormat = 'standard' | 'over_under' | 'micro' | 'surges' | 'late';
+export const SESSION_FORMATS: SessionFormat[] = ['standard', 'over_under', 'micro', 'surges', 'late'];
+
+/** Which formats make physiological sense for which types. */
+const FORMAT_TYPES: Record<Exclude<SessionFormat, 'standard'>, Set<string>> = {
+  over_under: new Set(['threshold', 'sweet_spot']),
+  micro: new Set(['vo2max']),
+  surges: new Set(['tempo', 'sweet_spot', 'threshold']),
+  late: new Set(['sprint', 'anaerobic', 'vo2max', 'threshold']),
+};
+
+/**
+ * Race-specific session formats — what wins races beyond steady reps:
+ *  - over_under: threshold reps alternating 2′ under / 1′ over (clearing lactate
+ *    while still on the gas — how racing actually feels)
+ *  - micro: VO2 sets of 30/30s (lots of VO2 time with repeated surges — crits)
+ *  - surges: sustained tempo/SS/threshold with a 15s kick every 2 min
+ *    (road race / crit simulation)
+ *  - late: the set goes at the END of the ride, after the aerobic block
+ *    (sprinting / attacking on tired legs — stage and road race finales)
+ * Code owns the physiology; total work is clamped to the level's ceiling.
+ * Returns null when the format doesn't apply or nothing fits.
+ */
+export function buildFormattedIntervals(
+  type: string,
+  durationMinutes: number,
+  s: { reps?: number; work_minutes?: number; rest_minutes?: number; format?: string },
+  level: Level = 'intermediate'
+): any[] | null {
+  const format = s.format as SessionFormat;
+  if (!format || format === 'standard' || !FORMAT_TYPES[format as Exclude<SessionFormat, 'standard'>]?.has(type)) return null;
+  const spec = INTERVAL_SPECS[type];
+  if (!spec) return null;
+  const profile = LEVEL_PROFILES[level];
+
+  let reps = Math.round(Number(s.reps)) || profile.defaultReps[type] || 3;
+  reps = Math.max(1, Math.min(reps, 24));
+  const restSec = Number.isFinite(Number(s.rest_minutes)) && Number(s.rest_minutes) >= 0
+    ? Math.min(1800, Math.round(Number(s.rest_minutes) * 60)) : spec.restSec;
+  let repSec = Math.round((Number(s.work_minutes) || spec.workSec / 60) * 60);
+
+  // One rep's segments + how much of it counts as hard work.
+  let segs: any[] = [];
+  let workPerRep = 0;
+  let label = '';
+  const pct = (p: number) => `${p}%`;
+  if (format === 'over_under') {
+    const [under, over] = type === 'threshold' ? [95, 108] : [88, 100];
+    repSec = Math.max(360, Math.round(repSec / 180) * 180);
+    for (let t = 0; t < repSec; t += 180) {
+      segs.push({ duration: 120, power: under, type: 'work' }, { duration: 60, power: over, type: 'work' });
+    }
+    workPerRep = repSec;
+    label = `{reps} × ${repSec / 60} min over-unders (${under}/${over}%)`;
+  } else if (format === 'micro') {
+    repSec = Math.max(300, Math.round(repSec / 60) * 60);
+    for (let t = 0; t < repSec; t += 60) {
+      segs.push({ duration: 30, power: 120, type: 'work' }, { duration: 30, power: 50, type: 'rest' });
+    }
+    workPerRep = repSec / 2;
+    label = `{reps} × ${repSec / 60} min of 30/30s @ 120%`;
+  } else if (format === 'surges') {
+    repSec = Math.max(360, Math.round(repSec / 120) * 120);
+    for (let t = 0; t < repSec; t += 120) {
+      segs.push({ duration: 105, power: spec.workPower, type: 'work' }, { duration: 15, power: 150, type: 'work' });
+    }
+    workPerRep = repSec;
+    label = `{reps} × ${repSec / 60} min @ ${pct(spec.workPower)} w/ 15s surges`;
+  } else if (format === 'late') {
+    repSec = Math.max(8, repSec);
+    segs = [type === 'sprint'
+      ? { duration: repSec, power: spec.workPower, type: 'work', open: true }
+      : { duration: repSec, power: spec.workPower, type: 'work' }];
+    workPerRep = repSec;
+    const len = repSec < 60 ? `${repSec} sec` : `${Math.round(repSec / 60)} min`;
+    label = `{reps} × ${len} @ ${pct(spec.workPower)} at the end of the ride`;
+  }
+
+  const maxWorkSec = (profile.maxWorkMinutes[type] ?? Infinity) * 60;
+  if (reps * workPerRep > maxWorkSec) reps = Math.max(1, Math.floor(maxWorkSec / workPerRep));
+
+  const total = durationMinutes * 60;
+  const warm = Math.min(600, Math.round(total * 0.15));
+  const cool = Math.min(300, Math.round(total * 0.1));
+  const available = total - warm - cool;
+  while (reps > 0 && reps * (repSec + restSec) > available) reps--;
+  if (reps < 1) return null;
+
+  const finalLabel = label.replace('{reps}', String(reps));
+  const set: any[] = [];
+  for (let r = 0; r < reps; r++) {
+    set.push(...segs.map((x) => ({ ...x, label: finalLabel })));
+    set.push({ duration: restSec, power: spec.restPower, type: 'rest' });
+  }
+  const remaining = available - reps * (repSec + restSec);
+  const fill = remaining >= ENDURANCE_FILL_MIN_SEC
+    ? [{ duration: remaining, power: ENDURANCE_FILL_POWER, type: 'work', endurance: true }]
+    : remaining > 0 ? [{ duration: remaining, power: spec.restPower, type: 'rest' }] : [];
+
+  return [
+    { duration: warm, power: 60, type: 'warmup' },
+    ...(format === 'late' ? [...fill, ...set] : [...set, ...fill]),
+    { duration: cool, power: 55, type: 'cooldown' },
+  ];
+}
+
 export function buildIntervalsFromStructure(
   type: string,
   durationMinutes: number,
-  s: { reps?: number; work_minutes?: number; rest_minutes?: number }
+  s: { reps?: number; work_minutes?: number; rest_minutes?: number },
+  level: Level = 'intermediate'
 ): any[] | null {
   const spec = INTERVAL_SPECS[type];
   if (!spec) return null; // steady ride — no rep structure
 
-  const reps = Math.round(Number(s.reps));
+  let reps = Math.round(Number(s.reps));
   const workSec = Math.round(Number(s.work_minutes) * 60);
   if (!Number.isFinite(reps) || reps < 1 || reps > 24) return null;
-  if (!Number.isFinite(workSec) || workSec < 20 || workSec > 3600) return null;
+  if (!Number.isFinite(workSec) || workSec < 8 || workSec > 3600) return null; // ≥8s so 10–15s sprints are valid
+
+  // Code owns physiology: clamp the prescribed structure to this training
+  // age's ceiling on total work time (e.g. a beginner can't be given 8×4 VO2
+  // even if the model asks). Work-time based, so it's fair to any rep length.
+  const maxWorkSec = (LEVEL_PROFILES[level].maxWorkMinutes[type] ?? Infinity) * 60;
+  if (reps * workSec > maxWorkSec) reps = Math.max(1, Math.floor(maxWorkSec / workSec));
 
   let restSec = Math.round(Number(s.rest_minutes) * 60);
   if (!Number.isFinite(restSec) || restSec < 0) restSec = spec.restSec;
@@ -258,12 +442,13 @@ const TYPE_LABELS: Record<string, { name: string; description: string }> = {
   threshold: { name: 'Threshold Intervals', description: 'Sub/at-threshold intervals to lift FTP' },
   vo2max: { name: 'VO2max Intervals', description: 'High-intensity 3-min VO2max efforts' },
   anaerobic: { name: 'Anaerobic Bursts', description: 'Short, very hard efforts above VO2max' },
+  sprint: { name: 'Sprint Efforts', description: 'All-out maximal sprints with full recovery — the target is a minimum, go max' },
 };
 
 /** Build one workout of a given type, sized to durationMinutes, on a given day. */
-function buildWorkout(type: string, durationMinutes: number, dayOfWeek: number, rationale?: string): WorkoutTemplate {
+function buildWorkout(type: string, durationMinutes: number, dayOfWeek: number, rationale?: string, level: Level = 'intermediate', progressionStep = 0): WorkoutTemplate {
   const label = TYPE_LABELS[type] || TYPE_LABELS.endurance;
-  const intervals = buildIntervalsForType(type, durationMinutes);
+  const intervals = buildIntervalsForType(type, durationMinutes, level, progressionStep);
   // Name from the ACTUAL synthesized structure so the title always matches the
   // interval graphic (e.g. "Threshold Intervals · 3 × 8 min @ 93%").
   const structure = describeIntervals(intervals);
@@ -295,17 +480,21 @@ export function buildWorkoutFromSpec(spec: {
   reps?: number;
   work_minutes?: number;
   rest_minutes?: number;
-}): WorkoutTemplate {
+  format?: string; // race-specific session format (see buildFormattedIntervals)
+}, level: Level = 'intermediate'): WorkoutTemplate {
   const fallback = TYPE_LABELS[spec.workout_type] || TYPE_LABELS.endurance;
-  const structured =
-    spec.reps != null || spec.work_minutes != null
+  const formatted = spec.format
+    ? buildFormattedIntervals(spec.workout_type, spec.duration_minutes, spec, level)
+    : null;
+  const structured = formatted ??
+    (spec.reps != null || spec.work_minutes != null
       ? buildIntervalsFromStructure(spec.workout_type, spec.duration_minutes, {
           reps: spec.reps,
           work_minutes: spec.work_minutes,
           rest_minutes: spec.rest_minutes,
-        })
-      : null;
-  const intervals = structured ?? buildIntervalsForType(spec.workout_type, spec.duration_minutes);
+        }, level)
+      : null);
+  const intervals = structured ?? buildIntervalsForType(spec.workout_type, spec.duration_minutes, level);
   // We synthesize the intervals, so the NAME must describe the structure we
   // actually built — never the model's claimed structure (which could say
   // "2×12" while the builder produced 3×8). Base label reflects the true type
@@ -326,7 +515,7 @@ export function buildWorkoutFromSpec(spec: {
 }
 
 const VALID_WORKOUT_TYPES = new Set([
-  'recovery', 'endurance', 'long', 'tempo', 'sweet_spot', 'threshold', 'vo2max', 'anaerobic',
+  'recovery', 'endurance', 'long', 'tempo', 'sweet_spot', 'threshold', 'vo2max', 'anaerobic', 'sprint',
 ]);
 
 /**
@@ -340,10 +529,200 @@ const VALID_WORKOUT_TYPES = new Set([
  * Throws if the result is empty/unusable so the caller can fall back to the
  * deterministic engine.
  */
+const QUALITY_WORKOUT_TYPES = new Set(['threshold', 'sweet_spot', 'vo2max', 'anaerobic', 'tempo', 'sprint']);
+const isQualityWorkout = (w: WorkoutTemplate) => QUALITY_WORKOUT_TYPES.has(w.workout_type) || isFtpTestWorkout(w);
+
+export { isFtpTestWorkout };
+
+/**
+ * The 20-minute FTP test. FTP = 95% of the 20-min average. The 20-min block is
+ * `open` (exported as free ride / open target — ERG must never cap a test) and
+ * carries a ~100% pacing guide. Non-beginners do a 5-min hard effort first to
+ * take the edge off anaerobic capacity (classic Coggan/Allen protocol);
+ * beginners skip it — it mostly ruins their pacing.
+ */
+export function buildFtpTestWorkout(dayOfWeek: number, level: Level = 'intermediate'): WorkoutTemplate {
+  const intervals: any[] = [
+    { duration: 600, power: 60, type: 'warmup' },
+  ];
+  for (let i = 0; i < 3; i++) {
+    intervals.push({ duration: 60, power: 100, type: 'work' });
+    intervals.push({ duration: 60, power: 55, type: 'rest' });
+  }
+  intervals.push({ duration: 300, power: 60, type: 'rest' });
+  if (level !== 'beginner') {
+    intervals.push({ duration: 300, power: 105, type: 'work' });
+    intervals.push({ duration: 600, power: 55, type: 'rest' });
+  }
+  intervals.push({ duration: 1200, power: 100, type: 'work', open: true, ftp_test: true });
+  intervals.push({ duration: 600, power: 50, type: 'cooldown' });
+  const duration = Math.round(intervals.reduce((s, iv) => s + iv.duration, 0) / 60);
+  return {
+    name: 'FTP Test · 20 min',
+    description:
+      'Your best sustainable 20 minutes — FTP is set to 95% of the average. Start at the guide (≈ current FTP), ' +
+      'hold steady, and only push harder in the final 5 minutes. Ride it fresh, ideally indoors or on a steady road.',
+    workout_type: 'custom',
+    duration_minutes: duration,
+    day_of_week: dayOfWeek,
+    intervals,
+    rationale: 'FTP test at the start of the block — re-sets every training zone so the next block keeps pushing you as you get stronger.',
+  };
+}
+
+/**
+ * Put FTP tests into a plan: week 1 (baseline) and the first loading week after
+ * each recovery week (fresh legs → accurate result, and the new FTP drives the
+ * whole next block). Base/build only, ≥4 weeks apart. In the chosen week the
+ * test replaces a quality session, on a day with room for it whose previous day
+ * isn't the long ride or another quality session. Mutates `weeks`.
+ */
+/** Append level-scaled fueling guidance to every session long enough to need it. Mutates. */
+export function addFuelingGuidance(weeks: TrainingWeek[], level: Level = 'intermediate'): void {
+  for (const w of weeks) for (const x of w.workouts) {
+    const note = fuelingNote(x.duration_minutes, isQualityWorkout(x), level);
+    if (note && !x.description.includes('Fuel:')) x.description = `${x.description} ${note}`.trim();
+  }
+}
+
+export function scheduleFtpTests(
+  weeks: TrainingWeek[],
+  capByDay: Map<number, number>,
+  level: Level = 'intermediate'
+): void {
+  const mins = weeks.map((w) => w.workouts.reduce((s, x) => s + x.duration_minutes, 0));
+  const isRecovery = weeks.map((w, i) => {
+    const prev = mins.slice(Math.max(0, i - 3), i);
+    return /recovery/i.test(w.notes || '') || (prev.length > 0 && mins[i] < 0.8 * Math.max(...prev));
+  });
+  const test = buildFtpTestWorkout(0, level);
+  let lastTestWeek = -99;
+
+  weeks.forEach((w, i) => {
+    if (w.phase !== 'base' && w.phase !== 'build') return;
+    if (isRecovery[i]) return;
+    const blockStart = i === 0 || isRecovery[i - 1];
+    if (!blockStart || i - lastTestWeek < 4) return;
+
+    // THE long ride = the longest non-quality ride (quality days can be just
+    // as long — a duration tie used to exclude every quality day as a "long ride").
+    const easy = w.workouts.filter((x) => !isQualityWorkout(x));
+    const longRide = easy.length ? easy.reduce((a, b) => (b.duration_minutes > a.duration_minutes ? b : a)) : null;
+    const byDay = new Map(w.workouts.map((x) => [x.day_of_week, x]));
+    const hardBefore = (day: number) => {
+      const prev = byDay.get((day + 6) % 7);
+      return !!prev && (isQualityWorkout(prev) || prev === longRide);
+    };
+    // Turning an easy day into a test must not create a quality run longer
+    // than the level allows.
+    const qualityDays = w.workouts.filter(isQualityWorkout).map((x) => x.day_of_week);
+    const atCap = qualityDays.length >= LEVEL_PROFILES[level].qualityPerWeek[1];
+    const stackOk = (x: WorkoutTemplate) =>
+      isQualityWorkout(x) ||
+      (!atCap && longestWeekRun([...qualityDays, x.day_of_week]) <= LEVEL_PROFILES[level].maxStackedQuality);
+    const fits = (x: WorkoutTemplate) => ((capByDay.get(x.day_of_week) || 0) * 60) >= test.duration_minutes;
+    const candidates = w.workouts.filter((x) => fits(x) && x !== longRide && stackOk(x));
+    const pick =
+      candidates.find((x) => isQualityWorkout(x) && !hardBefore(x.day_of_week)) ||
+      candidates.find((x) => isQualityWorkout(x)) ||
+      candidates.find((x) => !hardBefore(x.day_of_week));
+    if (!pick) return;
+
+    w.workouts = w.workouts.map((x) => (x === pick ? buildFtpTestWorkout(pick.day_of_week, level) : x));
+    w.tss = weekTss(w.workouts);
+    lastTestWeek = i;
+  });
+}
+
+const weekTss = (workouts: WorkoutTemplate[]) => Math.round(
+  workouts.reduce((s, x) => {
+    const IF = intensityFactorFor(x.workout_type);
+    return s + (x.duration_minutes / 60) * IF * IF * 100;
+  }, 0)
+);
+
+/**
+ * Hard training-age limits the model is TOLD but doesn't always follow (the
+ * plan-quality eval caught Opus giving a beginner 6 riding days and stacking
+ * quality across a week boundary). Enforced in code, in place:
+ *  1. riding days/week ≤ the level's ceiling — drops recovery rides first,
+ *     then the shortest endurance rides; never the long ride or quality.
+ *  2. consecutive quality days ≤ maxStackedQuality, checked across week
+ *     boundaries (Sat → next Sun) — the later session becomes Z2 endurance.
+ */
+export function enforceLevelInvariants(weeks: TrainingWeek[], level: Level, intensityPreference?: string | null): void {
+  const profile = LEVEL_PROFILES[level];
+  const toEndurance = (x: WorkoutTemplate, why: string) =>
+    buildWorkout('endurance', x.duration_minutes, x.day_of_week, why, level);
+  const mins = weeks.map((w) => w.workouts.reduce((s, x) => s + x.duration_minutes, 0));
+  const isRecoveryWeek = (i: number) => {
+    const prev = mins.slice(Math.max(0, i - 3), i);
+    return prev.length > 0 && mins[i] < 0.8 * Math.max(...prev);
+  };
+
+  // 0a. Quality sessions per week ≤ the level's ceiling (taper excepted —
+  //     short openers). Extra sessions, latest first, become Z2 endurance.
+  weeks.forEach((w) => {
+    if (w.phase === 'taper') return;
+    const quality = w.workouts.filter(isQualityWorkout).sort((a, b) => a.day_of_week - b.day_of_week);
+    const extra = new Set(quality.slice(profile.qualityPerWeek[1]).filter((x) => !isFtpTestWorkout(x)));
+    if (extra.size) w.workouts = w.workouts.map((x) => (extra.has(x)
+      ? toEndurance(x, 'Steady Z2 endurance — one quality session fewer this week so the others land.') : x));
+  });
+
+  // 0b. Z1 recovery rides in a loading week ≤ the level's allowance. Keeps the
+  //     ones right after hard work (esp. after a 2+ day block); extras → Z2.
+  const allowance = recoveryRideAllowance(level, intensityPreference);
+  weeks.forEach((w, i) => {
+    if (w.phase === 'taper' || isRecoveryWeek(i)) return;
+    const byDay = new Map(w.workouts.map((x) => [x.day_of_week, x]));
+    const hard = (d: number) => { const x = byDay.get((d + 7) % 7); return !!x && isQualityWorkout(x); };
+    const recs = w.workouts.filter((x) => x.workout_type === 'recovery');
+    const afterBlock = (x: WorkoutTemplate) => hard(x.day_of_week - 1) && hard(x.day_of_week - 2);
+    const ranked = recs
+      .filter((x) => !afterBlock(x))
+      .sort((a, b) => Number(hard(b.day_of_week - 1)) - Number(hard(a.day_of_week - 1)));
+    const extra = new Set(ranked.slice(allowance));
+    if (extra.size) w.workouts = w.workouts.map((x) => (extra.has(x)
+      ? toEndurance(x, 'Aerobic Z2 endurance — easy days stay productive; true recovery spins are saved for after the hardest work.') : x));
+  });
+
+  for (const w of weeks) {
+    const maxDays = profile.ridingDaysPerWeek[1];
+    if (w.workouts.length <= maxDays) continue;
+    const longest = Math.max(...w.workouts.map((x) => x.duration_minutes));
+    const rank = (x: WorkoutTemplate) =>
+      x.workout_type === 'recovery' ? 0 : isQualityWorkout(x) ? 2 : 1;
+    const droppable = w.workouts
+      .filter((x) => !(x.workout_type === 'endurance' && x.duration_minutes === longest))
+      .sort((a, b) => rank(a) - rank(b) || a.duration_minutes - b.duration_minutes);
+    const drop = new Set(droppable.slice(0, w.workouts.length - maxDays));
+    w.workouts = w.workouts.filter((x) => !drop.has(x));
+  }
+
+  let prevAbs = -99;
+  let run = 0;
+  weeks.forEach((w, wi) => {
+    w.workouts = w.workouts.map((x) => {
+      if (!isQualityWorkout(x)) return x;
+      const abs = wi * 7 + x.day_of_week;
+      run = abs === prevAbs + 1 ? run + 1 : 1;
+      if (run > profile.maxStackedQuality) {
+        run = 0;
+        return buildWorkout('endurance', x.duration_minutes, x.day_of_week,
+          'Steady Z2 endurance — kept aerobic so the quality sessions either side of it land.', level);
+      }
+      prevAbs = abs;
+      return x;
+    });
+    w.tss = weekTss(w.workouts);
+  });
+}
+
 export function normalizeAiPlan(
   aiWeeks: any[],
   availableDays: { day: number; cap: number }[],
-  meta: { goal_event: string; eventIso: string; startIso: string; athleteId: string }
+  meta: { goal_event: string; eventIso: string; startIso: string; athleteId: string; level?: Level; intensityPreference?: string | null }
 ): TrainingPlan {
   if (!Array.isArray(aiWeeks) || aiWeeks.length === 0) {
     throw new Error('AI plan has no weeks');
@@ -381,7 +760,8 @@ export function normalizeAiPlan(
         reps: numOrUndef(wk?.reps),
         work_minutes: numOrUndef(wk?.work_minutes),
         rest_minutes: numOrUndef(wk?.rest_minutes),
-      }));
+        format: typeof wk?.format === 'string' ? wk.format : undefined,
+      }, meta.level ?? 'intermediate'));
     }
 
     const workouts = [...byDay.values()].sort((a, b) => a.day_of_week - b.day_of_week);
@@ -396,6 +776,7 @@ export function normalizeAiPlan(
   }
 
   if (weeks.length === 0) throw new Error('AI plan had no schedulable workouts after normalization');
+  enforceLevelInvariants(weeks, meta.level ?? 'intermediate', meta.intensityPreference);
 
   return {
     id: uuidv4(),
@@ -407,6 +788,66 @@ export function normalizeAiPlan(
     total_tss: weeks.reduce((s, w) => s + w.tss, 0),
     created_at: new Date().toISOString(),
   };
+}
+
+export type EventKind = 'stage_race' | 'crit' | 'road_race' | 'time_trial' | 'endurance_event' | 'general';
+
+/** Best-effort event type from the goal text — drives race-specific sessions in the fallback. */
+export function detectEventKind(goal: string | null | undefined): EventKind {
+  const g = (goal || '').toLowerCase();
+  if (/stage race|stage-race|multi-?day|tour of|\d+[- ]day/.test(g)) return 'stage_race';
+  if (/crit|criterium|circuit race|kermesse/.test(g)) return 'crit';
+  if (/time trial|\btt\b|ttt|hill ?climb/.test(g)) return 'time_trial';
+  if (/road race|race|cat \d|category/.test(g)) return 'road_race';
+  if (/fondo|century|sportive|gravel|charity|\d+ ?(mi|mile|km)/.test(g)) return 'endurance_event';
+  return 'general';
+}
+
+/** Days are adjacent within a repeating week (Saturday → next Sunday counts). */
+function weekAdjacent(a: number, b: number): boolean {
+  const d = Math.abs(a - b);
+  return d === 1 || d === 6;
+}
+
+/** Longest run of consecutive weekdays in a repeating week (wraps Sat → Sun). */
+function longestWeekRun(days: number[]): number {
+  const set = new Set(days);
+  if (set.size === 7) return 7;
+  let best = 0;
+  for (const d of set) {
+    if (set.has((d + 6) % 7)) continue; // not the start of a run
+    let n = 0;
+    while (set.has((d + n) % 7)) n++;
+    best = Math.max(best, n);
+  }
+  return best;
+}
+
+/**
+ * Drop available days down to `maxDays` riding days. The long-ride day (index 0,
+ * most time) is always kept. Removes the lowest-time day first; ties go to the
+ * day whose removal best breaks up long streaks (prefer the day after the long
+ * ride). Input and output are sorted by cap desc.
+ */
+export function trimRidingDays(
+  availableDays: { day: number; cap: number }[],
+  maxDays: number
+): { day: number; cap: number }[] {
+  const kept = [...availableDays];
+  if (kept.length === 0) return kept;
+  const longDay = kept[0].day;
+  while (kept.length > maxDays) {
+    const minCap = Math.min(...kept.slice(1).map((d) => d.cap));
+    const candidates = kept.slice(1).filter((d) => d.cap === minCap);
+    const scored = candidates.map((c) => ({
+      c,
+      run: longestWeekRun(kept.filter((d) => d !== c).map((d) => d.day)),
+      afterLong: c.day === (longDay + 1) % 7 ? 0 : 1,
+    }));
+    scored.sort((a, b) => a.run - b.run || a.afterLong - b.afterLong);
+    kept.splice(kept.indexOf(scored[0].c), 1);
+  }
+  return kept;
 }
 
 /**
@@ -494,7 +935,7 @@ export const trainingPlanService = {
     // null, which then surfaced as a misleading "Athlete FTP not set" error.)
     const { data: athlete, error: athleteErr } = await supabaseAdmin
       .from('athletes')
-      .select('ftp, timezone')
+      .select('ftp, timezone, experience_level, weight_kg')
       .eq('id', athleteId)
       .single();
 
@@ -539,7 +980,26 @@ export const trainingPlanService = {
       // week. Volume across weeks (base ramp → recovery dip → taper) is handled
       // by scaling each day's ride as (that day's hours × the week's volume
       // factor) — NOT by dropping days. This is fully dynamic to availability.
-      weeks = this.generatePerDayWeeks(athlete.ftp, phases, availableDays);
+      const eventKind = detectEventKind(`${config.goal_event || ''} ${(config as any).route_notes || ''}`);
+      let limiter: Limiter | null = null;
+      try {
+        const prs = await powerAnalysisService.getPersonalRecords(athleteId);
+        limiter = eventRelevantLimiter(analyzePowerProfile(prs, athlete.ftp, (athlete as any).weight_kg).limiters, eventKind);
+      } catch { /* optional */ }
+      weeks = this.generatePerDayWeeks(
+        athlete.ftp, phases, availableDays,
+        resolveLevel((athlete as any).experience_level),
+        (preferences as any).intensity_preference,
+        eventKind,
+        limiter
+      );
+      // Real 20-min FTP tests at block starts (unless the athlete opted for
+      // estimation only) — without them FTP stalls and the plan stops pushing.
+      if ((preferences as any).ftp_test_preference !== 'ai_estimation') {
+        scheduleFtpTests(weeks, new Map(availableDays.map((d) => [d.day, d.cap])),
+          resolveLevel((athlete as any).experience_level));
+      }
+      addFuelingGuidance(weeks, resolveLevel((athlete as any).experience_level));
     } else {
       const minDuration = getMinDuration(config.weekly_hours);
       weeks = this.generateWeeklyStructure(athleteId, athlete.ftp, config, phases, currentCTL, restDays);
@@ -637,8 +1097,40 @@ export const trainingPlanService = {
   generatePerDayWeeks(
     ftp: number,
     phases: PhaseDurations,
-    availableDays: { day: number; cap: number }[] // pre-sorted by cap desc
+    allAvailableDays: { day: number; cap: number }[], // pre-sorted by cap desc
+    level: Level = 'intermediate',
+    intensityPreference?: string | null,
+    eventKind: EventKind = 'general',
+    limiter: Limiter | null = null // event-relevant weakness from the power profile
   ): TrainingWeek[] {
+    const profile = LEVEL_PROFILES[level];
+    // Racers (not beginners) get race-specific formats in build/peak; types are
+    // written 'type:format' and split when the workout is built.
+    const racer = level !== 'beginner' && ['stage_race', 'road_race', 'crit'].includes(eventKind);
+    const buildTypes = !racer ? ['threshold', 'tempo', 'threshold']
+      : eventKind === 'crit' ? ['threshold:over_under', 'vo2max:micro', 'tempo']
+      : ['threshold:over_under', 'tempo', 'threshold'];
+    const peakTypes = !racer ? ['vo2max', 'threshold', 'tempo']
+      : eventKind === 'crit' ? ['vo2max:micro', 'sweet_spot:surges', 'sprint']
+      : ['vo2max', 'threshold:over_under', 'sprint:late'];
+    // Work the event-relevant limiter: it takes the tempo slot in build and the
+    // last quality slot in peak (beginners keep the simple progression).
+    if (limiter && level !== 'beginner') {
+      const sess = limiter === 'vo2max' ? 'vo2max' : limiter;
+      const swapIn = (types: string[], fallbackIdx: number) => {
+        if (types.some((t) => t.startsWith(sess))) return;
+        const i = types.findIndex((t) => t.startsWith('tempo'));
+        types[i >= 0 ? i : fallbackIdx] = sess;
+      };
+      swapIn(buildTypes, 1);
+      swapIn(peakTypes, peakTypes.length - 1);
+    }
+    // Stage races: quality days back-to-back (fatigue resistance) in build/peak.
+    const stackQuality = eventKind === 'stage_race' && profile.maxStackedQuality >= 2;
+    // Being AVAILABLE every day doesn't mean riding every day — a beginner
+    // offered 7 days rides at most 5. Trim to the level's ceiling.
+    const availableDays = trimRidingDays(allAvailableDays, profile.ridingDaysPerWeek[1]);
+    const recoveryAllowance = recoveryRideAllowance(level, intensityPreference);
     const STRUCTURED_MAX = 120; // minutes — cap on intensity-ride length
     const round5 = (m: number) => Math.round(m / 5) * 5;
 
@@ -662,6 +1154,11 @@ export const trainingPlanService = {
         case 'long': return 'Your day with the most time — long aerobic endurance to build the durability this goal demands.';
         case 'recovery': return 'Deliberate easy recovery the day after hard work — flushes the legs and lets the hard sessions stick.';
         case 'intensity':
+          if (type === 'threshold:over_under') return 'Over-unders — holding threshold through surges, the way races are actually ridden.';
+          if (type === 'vo2max:micro') return '30/30s — big VO2 time with repeated accelerations, like a crit.';
+          if (type === 'sweet_spot:surges') return 'Sustained power with a kick every 2 minutes — race simulation.';
+          if (type === 'sprint:late') return 'Sprints at the END of the ride — races are decided on tired legs.';
+          if (type === 'sprint') return 'Max sprints on fresh legs to build peak power.';
           return type === 'vo2max' ? 'VO2max intervals to raise your aerobic ceiling.'
             : type === 'threshold' ? 'Threshold work to lift sustainable power (FTP).'
             : 'Tempo to build aerobic strength without deep fatigue.';
@@ -672,55 +1169,107 @@ export const trainingPlanService = {
     const weeks: TrainingWeek[] = [];
     let weekNumber = 1;
 
-    const pushWeek = (phase: TrainingPhase, factor: number, intensityTypes: string[], notes?: string) => {
+    const pushWeek = (phase: TrainingPhase, factor: number, phaseTypes: string[], notes?: string, isRecoveryWeek = false, step = 0) => {
+      // Quality sessions per week scale with training age — a beginner doesn't
+      // get the 3 build-phase quality days an advanced rider does.
+      const intensityTypes = isRecoveryWeek ? phaseTypes : phaseTypes.slice(0, profile.qualityPerWeek[1]);
+
       // 1. Assign a role to each available day by time: the biggest day is the
       //    long ride, the next-biggest are the phase's intensity sessions, the
       //    rest start as easy endurance.
+      //    Quality days are chosen biggest-first but must respect the level's
+      //    spacing: beginners never get quality next to another hard day (incl.
+      //    the long ride); others never exceed maxStackedQuality in a row.
+      //    Fewer quality sessions beats badly-spaced ones.
       const roleByDay = new Map<number, { type: string; kind: RideKind; cap: number }>();
+      const longDay = availableDays[0].day;
+      const qualityDays: number[] = [];
+      let candidates = availableDays.slice(1);
+      if (stackQuality && !isRecoveryWeek && (phase === 'build' || phase === 'peak') && candidates.length > 1) {
+        // Pull the best day adjacent to the top quality day up to 2nd place.
+        const first = candidates[0].day;
+        const adj = candidates.find((d) => weekAdjacent(d.day, first) && d.cap * 60 >= 60);
+        if (adj) candidates = [candidates[0], adj, ...candidates.slice(1).filter((d) => d !== adj)];
+      }
+      for (const d of candidates) {
+        if (qualityDays.length >= intensityTypes.length) break;
+        const ok = profile.maxStackedQuality <= 1
+          ? !weekAdjacent(d.day, longDay) && !qualityDays.some((q) => weekAdjacent(q, d.day))
+          : longestWeekRun([...qualityDays, d.day]) <= profile.maxStackedQuality;
+        if (ok) qualityDays.push(d.day);
+      }
       availableDays.forEach((d, idx) => {
         if (idx === 0) { roleByDay.set(d.day, { type: 'long', kind: 'long', cap: d.cap }); return; }
-        const it = intensityTypes[idx - 1];
-        roleByDay.set(d.day, it
-          ? { type: it, kind: 'intensity', cap: d.cap }
+        const qi = qualityDays.indexOf(d.day);
+        roleByDay.set(d.day, qi >= 0
+          ? { type: intensityTypes[qi], kind: 'intensity', cap: d.cap }
           : { type: 'endurance', kind: 'easy', cap: d.cap });
       });
 
-      // 2. Place recovery DELIBERATELY: an easy day that immediately follows a
-      //    hard day (in weekday order) becomes a short recovery spin. Hard days
-      //    CAN run back-to-back (intentional overload) — but the day after a
-      //    hard block is active recovery, not just more endurance.
+      // 2. Place Z1 recovery DELIBERATELY, scaled to training age. Easy days are
+      //    Z2 endurance by default. Previously EVERY easy day after a hard day
+      //    became a Z1 spin for everyone — a beginner's rule that gave an
+      //    advanced "prefers-volume" rider a Z1 ride every Wednesday.
+      //    - beginner ('after-every-hard'): recovery after any hard day
+      //    - intermediate / advanced ('after-hardest-only'): only after the long
+      //      ride or a VO2/anaerobic day, and only up to the weekly allowance
+      //    Recovery weeks keep the generous rule — that's what they're for.
       const ordered = [...availableDays].sort((a, b) => a.day - b.day);
-      for (let i = 1; i < ordered.length; i++) {
+      const isHardest = (r: { kind: RideKind; type: string }) =>
+        r.kind === 'long' || (r.kind === 'intensity' && /^(vo2max|anaerobic|sprint)/.test(r.type));
+      const everyHard = isRecoveryWeek || profile.recoveryRidePolicy === 'after-every-hard';
+      const allowance = isRecoveryWeek ? Infinity : recoveryAllowance;
+      let placed = 0;
+      // Walk the week starting AFTER the long ride so its following day is
+      // considered first (wraps Sat → Sun: the day after a Saturday long ride is
+      // the most deserving recovery day and used to be skipped entirely).
+      const longIdx = ordered.findIndex((d) => d.day === availableDays[0].day);
+      const n = ordered.length;
+      for (let k = 1; k < n && placed < allowance; k++) {
+        const i = (longIdx + k) % n;
+        const prevIdx = (i - 1 + n) % n;
         const cur = roleByDay.get(ordered[i].day)!;
-        const prev = roleByDay.get(ordered[i - 1].day)!;
-        const adjacent = ordered[i].day - ordered[i - 1].day === 1;
-        if (cur.kind === 'easy' && adjacent && (prev.kind === 'long' || prev.kind === 'intensity')) {
+        const prev = roleByDay.get(ordered[prevIdx].day)!;
+        const adjacent = (ordered[prevIdx].day + 1) % 7 === ordered[i].day;
+        const prevQualifies = everyHard ? (prev.kind === 'long' || prev.kind === 'intensity') : isHardest(prev);
+        if (cur.kind === 'easy' && adjacent && prevQualifies) {
           cur.kind = 'recovery';
           cur.type = 'recovery';
+          placed++;
         }
       }
 
-      // 3. If they train 6+ days a week, GUARANTEE at least one recovery ride.
-      //    Place it deliberately: prefer the day right after the long ride, then
-      //    any day after a hard day, then (on an all-easy recovery/taper week)
-      //    the lowest-time day.
-      if (availableDays.length >= 6 && ![...roleByDay.values()].some((r) => r.kind === 'recovery')) {
+      // 3. Beginners/intermediates training 6+ days get at least one recovery
+      //    ride. Advanced riders do NOT — 6 days with one rest day is normal for
+      //    them, and their easy days stay Z2.
+      if (level !== 'advanced' && recoveryAllowance > 0 &&
+          availableDays.length >= 6 && ![...roleByDay.values()].some((r) => r.kind === 'recovery')) {
         const easies = [...roleByDay.entries()].filter(([, r]) => r.kind === 'easy');
         const longDay = availableDays[0].day;
         let pick =
-          easies.find(([day]) => day === longDay + 1) ||
+          // (longDay + 1) % 7 — Saturday (6) → Sunday (0). Plain +1 never matched
+          // a Saturday long ride, the most common case.
+          easies.find(([day]) => day === (longDay + 1) % 7) ||
           easies.find(([day]) => {
             const prev = roleByDay.get(day - 1);
             return prev && (prev.kind === 'long' || prev.kind === 'intensity');
           }) ||
-          easies.sort((a, b) => a[1].cap - b[1].cap)[0];
+          // Arbitrary lowest-time day ONLY on an all-easy recovery week. In a
+          // loading week a recovery ride must follow hard work — if no easy day
+          // does, the week simply doesn't need one.
+          (isRecoveryWeek ? easies.sort((a, b) => a[1].cap - b[1].cap)[0] : undefined);
         if (pick) { pick[1].kind = 'recovery'; pick[1].type = 'recovery'; }
       }
 
       // 4. Build the workouts, each with a deliberate rationale.
       const workouts: WorkoutTemplate[] = [];
       for (const [day, r] of roleByDay) {
-        workouts.push(buildWorkout(r.type, sizeDay(r.cap, factor, r.kind), day, rationaleFor(r.kind, r.type)));
+        const [baseType, format] = r.type.split(':');
+        const dur = sizeDay(r.cap, factor, r.kind);
+        workouts.push(format
+          ? buildWorkoutFromSpec({ workout_type: baseType, duration_minutes: dur, day_of_week: day, format,
+              rationale: rationaleFor(r.kind, r.type) }, level)
+          : buildWorkout(r.type, dur, day, rationaleFor(r.kind, r.type), level, step));
       }
       workouts.sort((a, b) => a.day_of_week - b.day_of_week);
       const tss = Math.round(
@@ -732,28 +1281,48 @@ export const trainingPlanService = {
       weeks.push({ week_number: weekNumber++, phase, tss, workouts, notes });
     };
 
-    // BASE — 4-week blocks: 3 loading (ramping) + 1 recovery. One tempo quality day.
+    // Recovery-week cadence is ONE counter across base + build (it used to reset
+    // at the phase boundary, so a short base ran straight into build: 4+ loading
+    // weeks with no recovery). Base: (recoveryWeekEvery - 1) loading weeks then
+    // recovery (beginner 2:1, others 3:1). Build loads harder → at most 2:1.
+    let loadingRun = 0;
+    const nextIsRecovery = (maxLoading: number) => loadingRun >= maxLoading;
+
+    // BASE — aerobic-first, ramping loading weeks + recovery.
+    const baseMaxLoading = profile.recoveryWeekEvery - 1;
     for (let i = 0; i < phases.base; i++) {
-      const pos = i % 4;
-      const isRec = pos === 3;
-      const factor = isRec ? 0.6 : [0.78, 0.86, 0.94][pos];
-      pushWeek('base', factor, isRec ? [] : ['tempo'],
-        isRec ? 'Recovery week — easy, reduced volume' : pos === 2 ? 'Peak loading week' : undefined);
+      const isRec = nextIsRecovery(baseMaxLoading);
+      const pos = loadingRun; // 0,1,2 within the current block
+      const factor = isRec ? 0.6 : [0.78, 0.86, 0.94][Math.min(pos, 2)];
+      // One quality day for beginners, two (sweet spot + tempo) for riders who
+      // can absorb it.
+      const baseQuality = level === 'beginner' ? ['tempo'] : ['sweet_spot', 'tempo'];
+      pushWeek('base', factor, isRec ? [] : baseQuality,
+        isRec ? 'Recovery week — easy, reduced volume' : pos === baseMaxLoading - 1 ? 'Peak loading week' : undefined, isRec,
+        isRec ? 0 : pos);
+      loadingRun = isRec ? 0 : loadingRun + 1;
     }
 
-    // BUILD — 3-week blocks: 2 loading + 1 recovery. Threshold-focused.
+    // BUILD — threshold-focused, 2 loading + 1 recovery.
+    // Weeks carried over from base count toward the base cadence, so build
+    // doesn't open with a recovery week; build weeks themselves cap at 2 in a row.
+    const buildMaxLoading = Math.min(2, baseMaxLoading);
+    let buildRun = 0;
     for (let i = 0; i < phases.build; i++) {
-      const pos = i % 3;
-      const isRec = pos === 2;
+      const isRec = nextIsRecovery(baseMaxLoading) || buildRun >= buildMaxLoading;
+      buildRun = isRec ? 0 : buildRun + 1;
+      const pos = Math.min(buildRun - 1, 1);
       const factor = isRec ? 0.62 : [0.9, 1.0][pos];
-      pushWeek('build', factor, isRec ? ['tempo'] : ['threshold', 'tempo', 'threshold'],
-        isRec ? 'Recovery week — easy, reduced volume' : pos === 1 ? 'Peak loading week' : undefined);
+      pushWeek('build', factor, isRec ? ['tempo'] : buildTypes,
+        isRec ? 'Recovery week — easy, reduced volume' : pos === 1 ? 'Peak loading week' : undefined, isRec,
+        isRec ? 0 : buildRun - 1);
+      loadingRun = isRec ? 0 : loadingRun + 1;
     }
 
     // PEAK — high intensity, near-full volume.
     for (let i = 0; i < phases.peak; i++) {
       const factor = Math.min(1.0, 0.95 + i * 0.02);
-      pushWeek('peak', factor, ['vo2max', 'threshold', 'tempo'], 'Peak phase — race-specific intensity');
+      pushWeek('peak', factor, peakTypes, 'Peak phase — race-specific intensity');
     }
 
     // TAPER — same days, sharply reduced volume, keep a little intensity.

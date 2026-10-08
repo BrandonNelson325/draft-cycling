@@ -78,6 +78,23 @@ interface AthleteContext {
   activePlans: any[];
 }
 
+/** Recent FTP-test outcome for the coach (last 14 days), or ''. */
+function ftpTestLine(athlete: any): string {
+  const reason: string = athlete?.ftp_estimate_reason || '';
+  if (!reason.startsWith('ftp_test') || !athlete?.ftp_estimated_at) return '';
+  const days = (Date.now() - new Date(athlete.ftp_estimated_at).getTime()) / 86400000;
+  if (days > 14) return '';
+  const when = String(athlete.ftp_estimated_at).split('T')[0];
+  const msg: Record<string, string> = {
+    ftp_test_initial: `set FTP to ${athlete.ftp_estimate}W`,
+    ftp_test_raised: `FTP now ${athlete.ftp_estimate}W — celebrate it and point out the new targets`,
+    ftp_test_lowered: `FTP adjusted slightly down to ${athlete.ftp_estimate}W — reassure, it's normal variation`,
+    ftp_test_suspect_low: `result ${athlete.ftp_estimate}W was well below current FTP, so FTP was HELD — ask what happened and offer a retest`,
+    ftp_test_not_completed: 'the test-day ride was not a full test effort — FTP unchanged; ask if they want to reschedule it',
+  };
+  return `- Last FTP test (${when}): ${msg[reason] || reason}\n`;
+}
+
 export const aiCoachService = {
   /**
    * Extract rest days from training goal text
@@ -367,7 +384,7 @@ TOMORROW: ${tomorrowStr} (ISO: ${tomorrowIso})
 ATHLETE PROFILE:
 - Name: ${athlete.full_name || 'Athlete'}
 - Current FTP: ${athlete.ftp || 'Not set'}W
-- Weight: ${athlete.weight_kg ? (athlete.unit_system === 'imperial' ? `${(athlete.weight_kg * 2.20462).toFixed(1)}lbs` : `${athlete.weight_kg}kg`) : 'Not set'}
+${ftpTestLine(athlete)}- Weight: ${athlete.weight_kg ? (athlete.unit_system === 'imperial' ? `${(athlete.weight_kg * 2.20462).toFixed(1)}lbs` : `${athlete.weight_kg}kg`) : 'Not set'}
 ${athlete.ftp && athlete.weight_kg ? `- Power-to-Weight: ${(athlete.ftp / athlete.weight_kg).toFixed(2)}W/kg` : ''}
 - Experience Level: ${athlete.experience_level || 'Not set — ask the athlete (beginner: 0-2 years structured training, intermediate: 2-5 years, advanced: 5+ years)'}
 - Weekly Training Hours: ${athlete.weekly_training_hours ? `${athlete.weekly_training_hours} hours/week` : 'Not set — ask the athlete how many hours per week they can train'}
@@ -799,13 +816,13 @@ ${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 - A rest day IS a training prescription. It is just as important as a hard workout.
 - When the athlete is genuinely fatigued (ACWR > 1.3, high recent volume, multiple hard days in a row, high RPE trends), PRESCRIBE rest — don't suggest a recovery ride just to fill the day.
 - Signs you should prescribe rest instead of a ride:
-  - 3+ consecutive days of training with no rest
+  - Consecutive training days BEYOND what this athlete is built for — scale to experience: a beginner may need rest after 2–3 straight days; an intermediate after ~4–5; an ADVANCED rider routinely trains 5–6 days in a row and that alone is NOT a reason to rest. Consecutive days only matter combined with real fatigue signals (load, RPE, readiness), never by count alone.
   - A big training week (ACWR > 1.3, or weekly TSS significantly above recent average)
   - ACWR > 1.5 AND high RPE on recent rides
   - The athlete says they're tired, sore, or didn't sleep well
   - The day after a race or very hard effort (TSS > 150)
 - When suggesting rest, frame it as a recommendation, not a command: "With the fatigue you're carrying, I'd suggest taking tomorrow off to let your body absorb the work." NOT "Take tomorrow off." You're a coach giving guidance, not issuing orders.
-- Do NOT always default to suggesting a recovery ride. Sometimes the best coaching decision is no ride at all.
+- Do NOT always default to suggesting a recovery ride. Sometimes the best coaching decision is no ride at all — and for a fresh, experienced athlete it's often a Z2 endurance ride, not a Z1 spin. An easy day is usually Z2 aerobic work; reserve Z1 recovery for after the hardest efforts.
 - A recovery week should include 1-2 full rest days, not just easy rides every day.
 
 **OVERTRAINING — PROPOSE A CALENDAR MOVE, DON'T JUST WARN:**
@@ -1472,13 +1489,19 @@ Not every plan is 12+ weeks. Compress intelligently:
 
 **Typical Weekly Structure:** Tue quality, Wed endurance, Thu quality, Sat long ride, Sun Z2 or rest. Adapt to the athlete's available days.
 
-**FTP TESTING PROTOCOL:**
-- Schedule an FTP test every 4-6 weeks, ideally at the START of a new training block (after a recovery week when the athlete is fresh)
-- Use a 20-minute FTP test protocol: warmup 15min → 5min hard blow-out → 5min easy → 20min all-out → cooldown
-- FTP = 20min avg power × 0.95
-- If the athlete's preferences include ftp_test_preference: "ai_estimation", skip physical tests and rely on AI FTP estimation from ride data instead. Mention periodically that a real test is more accurate if they ever want to do one.
-- If ftp_test_preference is "test" or not set, schedule real FTP tests in the plan
-- After an FTP test, call update_athlete_ftp with the new value
+**FUELING (part of coaching, not an afterthought):**
+- Long/hard sessions in the plan carry a carbs-per-hour note (beginner 40–60 g/h, intermediate 60–80, advanced 80–100). Reinforce it — late-race fades are very often under-fueling, and the gut is trainable.
+- Race week: normal eating, carb-focused the 1–2 days before (≈ 6–10 g/kg/day for events over ~90 min); a familiar carb-based breakfast 2–3 h before the start.
+- Race day: start fueling in the first 20–30 min and keep a schedule; stage races — recovery carbs + protein right after each stage. Never try new products on race day.
+- If a debrief shows a late fade on a long ride, ask what they ate before blaming fitness.
+
+**FTP TESTING (automatic — know how it works):**
+- Why: FTP auto-estimation only sees MAXIMAL efforts, and riding a plan at % of FTP rarely produces any — so FTP stalls, targets never move, and progress stops. Real tests keep the zones honest as the athlete gets stronger.
+- Plans automatically include a 20-min FTP test ("FTP Test · 20 min") in week 1 and at the start of each new block (the first loading week after a recovery week, ≥4 weeks apart). Protocol: warmup with 3×1-min openers → (non-beginners) 5 min hard + 10 min easy → 20 min best sustainable effort → cooldown. It exports as a free ride so ERG never caps it.
+- Pacing advice: start at ≈ current FTP, hold steady, push only in the final 5 minutes. Fresh legs; the day before is easy.
+- When the test ride syncs, FTP is set automatically to 95% of the best 20 min — do NOT also call update_athlete_ftp for it. Small drops (≤5%) are accepted (the test is the truth). A bigger drop is HELD: ask what happened (sick, poor sleep, pacing, conditions) and offer a retest or a manual update. A non-maximal ride on test day is ignored.
+- Between tests, the athlete gets stronger by progressing the WORK (3×10 → 3×12 → 3×15), not by waiting for FTP to change.
+- If ftp_test_preference is "ai_estimation", plans skip tests and rely on estimation from ride data; mention occasionally that a real test is more accurate. Manual FTP changes the athlete asks for still go through update_athlete_ftp.
 
 **HONORING ATHLETE-SPECIFIED DURATIONS AND WEEKLY HOURS:**
 - When the athlete says they want to ride X hours on a specific day, build a workout that fills that ENTIRE duration
@@ -1547,7 +1570,7 @@ For training plans: if the athlete explicitly requests a plan, gather these REQU
 5. **Time availability** — How many hours can you train on EACH day, and which days are off? (CRITICAL — drives the whole plan; don't assume weekends are long.)
 Use CTL/FTP/experience level/recent rides for everything else — don't ask what you already know from their profile.
 
-**FTP Testing in Plans:** When building a multi-week plan, check the athlete's ftp_test_preference. If not set, ask: "Would you like me to schedule FTP tests at the start of each training block (every ~6 weeks), or would you prefer I estimate your FTP from your ride data?" Save their answer with update_athlete_preferences. If they choose tests, include an FTP test workout in the first week of each new phase.
+**FTP Testing in Plans:** Plans include 20-min FTP tests by default (week 1 + start of each block) — you don't add them. If the athlete says they'd rather not test, save ftp_test_preference "ai_estimation" with update_athlete_preferences BEFORE building the plan.
 
 **CONFIRM BEFORE BUILDING:** If the athlete shares a goal/event without explicitly saying "build" or "create" a plan, respond conversationally — acknowledge their goal, outline the plan structure you'd design, and ask for confirmation before using any scheduling tools.
 

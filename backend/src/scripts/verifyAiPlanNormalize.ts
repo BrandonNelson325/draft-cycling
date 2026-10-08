@@ -6,7 +6,7 @@
  *
  * Run: npm run test:ai-plan
  */
-import { availableDaysFromDailyHours, normalizeAiPlan } from '../services/trainingPlanService';
+import { availableDaysFromDailyHours, normalizeAiPlan, buildWorkoutFromSpec, buildIntervalsForType } from '../services/trainingPlanService';
 
 let failures = 0;
 function check(label: string, cond: boolean, detail?: string) {
@@ -88,6 +88,81 @@ let threwEmpty = false;
 try { normalizeAiPlan([], availableDays, { goal_event: 'x', eventIso: '2026-09-12', startIso: '2026-06-15', athleteId: 'a' }); }
 catch { threwEmpty = true; }
 check('Throws on empty plan (triggers deterministic fallback)', threwEmpty);
+
+// ---- Level invariants: the exact failures the plan-quality eval caught from Opus ----
+const everyDay = availableDaysFromDailyHours({ monday: 1, tuesday: 1, wednesday: 1, thursday: 1, friday: 1, saturday: 2, sunday: 1 });
+const meta = { goal_event: 'fondo', eventIso: '2026-09-12', startIso: '2026-06-15', athleteId: 'a', level: 'beginner' as const };
+const beginnerPlan = normalizeAiPlan([
+  { phase: 'build', workouts: [
+    { day_of_week: 0, workout_type: 'endurance', duration_minutes: 60 },
+    { day_of_week: 1, workout_type: 'recovery', duration_minutes: 40 },
+    { day_of_week: 2, workout_type: 'threshold', duration_minutes: 60 },
+    { day_of_week: 3, workout_type: 'endurance', duration_minutes: 50 },
+    { day_of_week: 4, workout_type: 'endurance', duration_minutes: 60 },
+    { day_of_week: 5, workout_type: 'endurance', duration_minutes: 45 },
+    { day_of_week: 6, workout_type: 'tempo', duration_minutes: 120 },
+  ] },
+  // Sat tempo (week 1) → Sun VO2 (week 2): stacked across the week boundary.
+  { phase: 'build', workouts: [
+    { day_of_week: 0, workout_type: 'vo2max', duration_minutes: 60 },
+    { day_of_week: 2, workout_type: 'threshold', duration_minutes: 60 },
+    { day_of_week: 6, workout_type: 'endurance', duration_minutes: 120 },
+  ] },
+], everyDay, meta);
+const w1 = beginnerPlan.weeks[0].workouts;
+check('Beginner: riding days capped at 5', w1.length === 5, `${w1.length} days`);
+check('Beginner: recovery ride dropped before quality', !w1.some((x) => x.workout_type === 'recovery') && w1.filter((x) => ['threshold', 'tempo'].includes(x.workout_type)).length === 2);
+const sun2 = beginnerPlan.weeks[1].workouts.find((x) => x.day_of_week === 0);
+check('Beginner: quality stacked across week boundary → demoted to endurance', sun2?.workout_type === 'endurance', sun2?.workout_type);
+const advPlan = normalizeAiPlan([{ phase: 'build', workouts: [
+  { day_of_week: 2, workout_type: 'threshold', duration_minutes: 60 },
+  { day_of_week: 3, workout_type: 'vo2max', duration_minutes: 60 },
+  { day_of_week: 4, workout_type: 'sweet_spot', duration_minutes: 60 },
+] }], everyDay, { ...meta, level: 'advanced' });
+check('Advanced: deliberate 3-day block is kept', advPlan.weeks[0].workouts.every((x) => x.workout_type !== 'endurance'));
+
+// ---- Sprints: used to silently become a 70% "Endurance Ride" ----
+const sprintSpec = buildWorkoutFromSpec({ workout_type: 'sprint', duration_minutes: 75, day_of_week: 2, reps: 8, work_minutes: 0.25, rest_minutes: 5 }, 'advanced');
+check('Sprint (structured) → real 8 × 15s max sprints', /8 × 15 sec @ 200%/.test(sprintSpec.name), sprintSpec.name);
+const sprintDefault = buildIntervalsForType('sprint', 60, 'intermediate');
+const sprintReps = sprintDefault.filter((iv: any) => iv.type === 'work' && !iv.endurance);
+check('Sprint (default) → short maximal reps, not a steady ride', sprintReps.length >= 4 && sprintReps.every((iv: any) => iv.duration <= 20 && iv.power >= 150), `${sprintReps.length} reps`);
+const beginnerSprint = buildWorkoutFromSpec({ workout_type: 'sprint', duration_minutes: 90, day_of_week: 2, reps: 15, work_minutes: 0.25, rest_minutes: 4 }, 'beginner');
+check('Beginner sprint volume clamped (≤1.5 min of sprinting)', /^Sprint Efforts · 6 × 15 sec/.test(beginnerSprint.name), beginnerSprint.name);
+
+// ---- Opus over-prescribing: quality cap + Z1 allowance enforced in code ----
+const loadWeek = (workouts: any[]) => ({ phase: 'build', workouts });
+const capPlan = normalizeAiPlan([
+  loadWeek([{ day_of_week: 2, workout_type: 'vo2max', duration_minutes: 60 }, { day_of_week: 3, workout_type: 'endurance', duration_minutes: 60 },
+    { day_of_week: 4, workout_type: 'anaerobic', duration_minutes: 60 }, { day_of_week: 6, workout_type: 'sprint', duration_minutes: 120 }]),
+], everyDay, { ...meta, level: 'beginner' });
+const capQ = capPlan.weeks[0].workouts.filter((x) => ['vo2max', 'anaerobic', 'sprint'].includes(x.workout_type)).length;
+check('Beginner: 3 quality sessions → capped at 2', capQ === 2, `${capQ}`);
+const z1Plan = normalizeAiPlan([
+  loadWeek([{ day_of_week: 1, workout_type: 'recovery', duration_minutes: 60 }, { day_of_week: 2, workout_type: 'threshold', duration_minutes: 60 },
+    { day_of_week: 3, workout_type: 'endurance', duration_minutes: 60 }, { day_of_week: 4, workout_type: 'vo2max', duration_minutes: 60 },
+    { day_of_week: 5, workout_type: 'recovery', duration_minutes: 50 }, { day_of_week: 6, workout_type: 'endurance', duration_minutes: 120 }]),
+], everyDay, { ...meta, level: 'advanced', intensityPreference: 'prefers-volume' });
+const z1Left = z1Plan.weeks[0].workouts.filter((x) => x.workout_type === 'recovery').length;
+check('Advanced prefers-volume: Z1 rides beyond allowance → Z2', z1Left === 0, `${z1Left} left`);
+
+// ---- Race-specific formats ----
+const sumSec = (ivs: any[]) => ivs.reduce((t, iv) => t + iv.duration, 0);
+const ou = buildWorkoutFromSpec({ workout_type: 'threshold', duration_minutes: 90, day_of_week: 2, reps: 3, work_minutes: 9, rest_minutes: 4, format: 'over_under' }, 'advanced');
+check('Over-unders: named + real 2′/1′ alternation', /3 × 9 min over-unders \(95\/108%\)/.test(ou.name) && ou.intervals.some((iv: any) => iv.power === 108 && iv.duration === 60), ou.name);
+check('Over-unders: sums to duration', sumSec(ou.intervals) === 90 * 60);
+const micro = buildWorkoutFromSpec({ workout_type: 'vo2max', duration_minutes: 75, day_of_week: 2, reps: 3, work_minutes: 8, rest_minutes: 5, format: 'micro' }, 'intermediate');
+check('30/30s: sets of 30s @ 120%', /3 × 8 min of 30\/30s @ 120%/.test(micro.name) && micro.intervals.filter((iv: any) => iv.power === 120).length === 24, micro.name);
+const late = buildWorkoutFromSpec({ workout_type: 'sprint', duration_minutes: 120, day_of_week: 6, reps: 6, work_minutes: 0.25, rest_minutes: 4, format: 'late' }, 'advanced');
+const fillIdx = late.intervals.findIndex((iv: any) => iv.endurance);
+const firstSprint = late.intervals.findIndex((iv: any) => iv.open);
+check('Late sprints: aerobic block FIRST, sprints at the end', fillIdx > 0 && firstSprint > fillIdx, late.name);
+const begOu = buildWorkoutFromSpec({ workout_type: 'threshold', duration_minutes: 90, day_of_week: 2, reps: 4, work_minutes: 12, format: 'over_under' }, 'beginner');
+check('Formats respect the level work ceiling (beginner ≤25 min threshold)', /^Threshold Intervals · 2 × 12 min over-unders/.test(begOu.name), begOu.name);
+const badFmt = buildWorkoutFromSpec({ workout_type: 'endurance', duration_minutes: 90, day_of_week: 2, format: 'over_under' }, 'advanced');
+check('Format on a type it does not fit → ignored safely', badFmt.name === 'Endurance Ride');
+const sprintKept = normalizeAiPlan([{ phase: 'peak', workouts: [{ day_of_week: 2, workout_type: 'sprint', duration_minutes: 60, reps: 8, work_minutes: 0.25 }] }], everyDay, { ...meta, level: 'advanced' });
+check('normalizeAiPlan keeps sprint sessions (was coerced to endurance)', /Sprint Efforts/.test(sprintKept.weeks[0].workouts[0].name), sprintKept.weeks[0].workouts[0].name);
 
 console.log(`\n${failures === 0 ? '✅ ALL CHECKS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

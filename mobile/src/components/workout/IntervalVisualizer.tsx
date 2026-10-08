@@ -54,7 +54,12 @@ export default function IntervalVisualizer({ intervals }: IntervalVisualizerProp
   // from the SAME expanded intervals the bars are drawn from — so the label can
   // never disagree with the graphic (or with a stale stored workout name).
   const structureCaption = (() => {
-    const work = expanded.filter((iv) => iv.type === 'work');
+    // Race-specific formats (over-unders, 30/30s, surges, late sets) carry their
+    // own label from the backend — counting segments would say "18 intervals".
+    const labeled = expanded.find((iv) => iv.type === 'work' && typeof (iv as any).label === 'string');
+    if (labeled) return (labeled as any).label as string;
+    // Skip the post-set Z2 endurance fill — it's aerobic volume, not a rep.
+    const work = expanded.filter((iv) => iv.type === 'work' && !(iv as any).endurance);
     if (work.length <= 1) return null;
     const first = work[0];
     const allSame = work.every((w) => w.duration === first.duration);

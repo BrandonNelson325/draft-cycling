@@ -76,6 +76,10 @@ ${intervals}
       case 'work':
       case 'rest':
       default: {
+        // Max efforts (sprints, FTP test) are free ride — ERG would cap them.
+        if (interval.open) {
+          return `    <FreeRide Duration="${duration}" FlatRoad="1"/>`;
+        }
         const power = (interval.power || (interval.type === 'rest' ? 50 : 100)) / 100;
         const cadence = interval.cadence ? ` Cadence="${interval.cadence}"` : '';
         return `    <SteadyState Duration="${duration}" Power="${power.toFixed(2)}"${cadence}/>`;
