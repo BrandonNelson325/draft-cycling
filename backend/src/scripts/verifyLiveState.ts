@@ -10,8 +10,11 @@
  * Run: npm run test:live-state
  */
 import { formatLiveState } from '../utils/liveState';
+import { findStateContradictions } from '../utils/stateGuard';
 import { aiCoachService } from '../services/aiCoachService';
 import { supabaseAdmin } from '../utils/supabase';
+import { aiToolExecutor } from '../services/aiToolExecutor';
+import { trainingPlanJobService } from '../services/trainingPlanJobService';
 
 let failures = 0;
 function check(label: string, cond: boolean, detail?: string) {
@@ -84,6 +87,45 @@ function check(label: string, cond: boolean, detail?: string) {
   // A failing snapshot must never block the message.
   const safe = await aiCoachService.buildMessageHistory('conv', ask, 'America/Denver', '2026-10-08', async () => { throw new Error('db down'); });
   check('Snapshot failure → message still sent unchanged', safe[safe.length - 1].content === ask);
+
+  // ---- State-claim guard (code check on the finished reply) ----
+  const none = { activePlans: 0, upcomingWorkouts: 0, workoutToday: false, rodeToday: false };
+  const incidentReply = "You already have this plan built and running — I set it up for you back on October 4th. What's on your calendar right now should include today's VO2max session.";
+  const found = findStateContradictions(incidentReply, none);
+  check('Guard catches the incident reply (plan + calendar claims)', found.length >= 2, found.length + ' contradictions');
+  check('Guard: "your plan is built" with no plan → flagged', findStateContradictions('Good news, your plan is built.', none).length === 1);
+  check('Guard: "nice ride this morning" with no ride → flagged', findStateContradictions('Nice ride this morning! Now recover.', none).length === 1);
+  check("Guard: \"today's threshold session\" with nothing today → flagged",
+    findStateContradictions("Let's talk about today's threshold session.", { ...none, upcomingWorkouts: 5 }).length === 1);
+  // Must NOT flag truthful replies
+  const fine = [
+    'Your calendar is currently empty. Want me to build the plan now?',
+    "You don't have an active plan right now — let's build one.",
+    "I'm building your plan now — it'll be on your calendar in a minute or two.",
+    'Nothing is scheduled today. An easy hour of Z2 would be perfect.',
+    'Want me to plan a ride for today?',
+  ];
+  check('Guard: truthful replies are never flagged', fine.every((r) => findStateContradictions(r, none).length === 0),
+    fine.filter((r) => findStateContradictions(r, none).length).join(' | '));
+  check('Guard: real plan + real ride → nothing flagged',
+    findStateContradictions(incidentReply + ' Nice ride this morning!', { activePlans: 1, upcomingWorkouts: 12, workoutToday: true, rodeToday: true }).length === 0);
+  check('Guard: plan build queued this turn → "plan is built" not flagged',
+    findStateContradictions('Your plan is built and landing on your calendar now.', none, { stateChangePending: true }).length === 0);
+
+  // ---- Code check: never silently build over an active plan ----
+  let enqueued = 0;
+  (trainingPlanJobService as any).enqueue = async () => { enqueued++; return { id: 'job-1' }; };
+  const activeRows = [{ goal_event: 'Stage race', start_date: '2026-10-05', end_date: '2026-12-14' }];
+  (supabaseAdmin as any).from = () => {
+    const b: any = { select: () => b, eq: () => b, then: (r: any) => r({ data: activeRows, error: null }) };
+    return b;
+  };
+  const call = (input: any) => aiToolExecutor.executeTools('athlete', [{ id: 't1', type: 'tool_use', name: 'generate_training_plan', input } as any], 'conv');
+  const blocked: any = (await call({ goal_event: 'Gran fondo', event_date: '2027-03-20' }))[0];
+  const blockedBody = JSON.stringify(blocked);
+  check('Active plan + no decision → build refused, coach told to ask', /ACTIVE_PLAN_EXISTS/.test(blockedBody) && enqueued === 0);
+  await call({ goal_event: 'Gran fondo', event_date: '2027-03-20', existing_plan_action: 'replace' });
+  check('Decision given ("replace") → build queued', enqueued === 1);
 
   console.log(`\n${failures === 0 ? '✅ ALL CHECKS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

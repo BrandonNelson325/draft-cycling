@@ -20,6 +20,8 @@ export interface ChatConversation {
 export interface StreamCallbacks {
   onStart: (conversationId: string) => void;
   onToken: (text: string) => void;
+  /** Server corrected the reply after streaming (state-claim guard) — replace the streamed text. */
+  onReplace?: (text: string) => void;
   onProgress: (message: string) => void;
   onDone: () => void;
   onError: (error: string) => void;
@@ -82,6 +84,9 @@ export const chatService = {
                 break;
               case 'token':
                 callbacks.onToken(event.text);
+                break;
+              case 'replace':
+                callbacks.onReplace?.(event.text);
                 break;
               case 'progress':
                 callbacks.onProgress(event.message || 'Working on it...');

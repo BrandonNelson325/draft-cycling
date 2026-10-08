@@ -38,6 +38,7 @@ export function formatLiveState(s: LiveStateInput): string {
   } else {
     lines.push(`- Active training plans (${s.activePlans.length}): ` + s.activePlans
       .map((p) => `"${p.goal_event}" (${p.start_date ?? '?'} → ${p.end_date ?? p.event_date ?? '?'})`).join('; ') + '.');
+    lines.push('  ↳ If the athlete asks for a NEW plan: tell them about the active plan above FIRST and ask whether to replace it or keep both — before gathering details or building.');
   }
 
   // Calendar

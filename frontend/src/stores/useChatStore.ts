@@ -168,6 +168,20 @@ export const useChatStore = create<ChatStore>()(
                 requestAnimationFrame(flushTokens);
               }
             },
+            // The server's state-claim guard rewrote the reply (it contradicted
+            // the athlete's real plan/calendar) — show the corrected version.
+            onReplace: (text) => {
+              tokenBuffer = '';
+              const convId = resolvedConvId || get().activeConversationId;
+              if (!convId) return;
+              const convMessages = get().messages[convId] || [];
+              const idx = convMessages.findIndex((m) => m.id === streamingId);
+              if (idx !== -1) {
+                const updated = [...convMessages];
+                updated[idx] = { ...updated[idx], content: text };
+                set({ messages: { ...get().messages, [convId]: updated } });
+              }
+            },
             onDone: async () => {
               set({ toolStatus: null });
               // Flush any tokens that didn't make it through rAF yet

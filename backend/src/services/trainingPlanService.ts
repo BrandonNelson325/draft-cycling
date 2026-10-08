@@ -2006,6 +2006,35 @@ export const trainingPlanService = {
   /**
    * Delete training plan. Optionally remove associated calendar entries and workouts.
    */
+  /**
+   * Retire every OTHER active plan when a new one replaces it: remove their
+   * FUTURE, uncompleted calendar entries (+ planned rest markers) and cancel
+   * them. Past/completed history is kept. Building a new plan used to leave the
+   * old one "active" (3 active stage-race plans after one afternoon).
+   */
+  async retireActivePlans(athleteId: string, exceptPlanId: string): Promise<string[]> {
+    const { data: active } = await supabaseAdmin
+      .from('training_plans').select('id, goal_event, end_date, event_date')
+      .eq('athlete_id', athleteId).eq('status', 'active').neq('id', exceptPlanId);
+    const todayIso = new Date().toISOString().split('T')[0];
+    const retired: string[] = [];
+    for (const p of active || []) {
+      await supabaseAdmin.from('calendar_entries').delete()
+        .eq('athlete_id', athleteId).eq('training_plan_id', p.id)
+        .gte('scheduled_date', todayIso).eq('completed', false);
+      const end = p.end_date || p.event_date;
+      if (end) {
+        await supabaseAdmin.from('calendar_entries').delete()
+          .eq('athlete_id', athleteId).eq('entry_type', 'rest').is('workout_id', null)
+          .eq('ai_rationale', 'Planned rest day').gte('scheduled_date', todayIso).lte('scheduled_date', end);
+      }
+      await supabaseAdmin.from('training_plans').update({ status: 'cancelled' }).eq('id', p.id).eq('athlete_id', athleteId);
+      retired.push(p.goal_event);
+    }
+    if (retired.length) logger.info(`[retireActivePlans] ${athleteId}: replaced ${retired.join(', ')}`);
+    return retired;
+  },
+
   async deletePlan(planId: string, athleteId: string, removeWorkouts: boolean = false): Promise<{ removedCount: number }> {
     let removedCount = 0;
 

@@ -10,6 +10,8 @@ import { fatigueProfileService, type FatigueProfile } from './fatigueProfileServ
 import { logger } from '../utils/logger';
 import { ageFromDob, mastersGuidance } from '../utils/age';
 import { formatLiveState } from '../utils/liveState';
+import { findStateContradictions, describeFacts, StateFacts } from '../utils/stateGuard';
+import { localDayToUTCRange } from '../utils/timezone';
 
 // Advisor tool: Opus provides strategic guidance to Sonnet for complex reasoning
 // (schedule conflicts, periodization decisions, workout sequencing).
@@ -2091,6 +2093,60 @@ Format it clearly so I can follow it during my ride.`;
     });
   },
 
+  /** Fresh facts for the state-claim guard, read at the END of the turn (tools may have changed things). */
+  async getStateFacts(athleteId: string, athleteTz: string, todayIso: string): Promise<StateFacts> {
+    const { start, end } = localDayToUTCRange(todayIso, athleteTz);
+    const [{ count: plans }, { data: entries }, { count: rides }] = await Promise.all([
+      supabaseAdmin.from('training_plans').select('id', { count: 'exact', head: true }).eq('athlete_id', athleteId).eq('status', 'active'),
+      supabaseAdmin.from('calendar_entries').select('scheduled_date, entry_type, workout_id').eq('athlete_id', athleteId).gte('scheduled_date', todayIso).limit(60),
+      supabaseAdmin.from('strava_activities').select('id', { count: 'exact', head: true }).eq('athlete_id', athleteId).gte('start_date', start).lt('start_date', end),
+    ]);
+    const workouts = (entries || []).filter((e: any) => e.entry_type !== 'rest' && e.workout_id);
+    return {
+      activePlans: plans || 0,
+      upcomingWorkouts: workouts.length,
+      workoutToday: workouts.some((e: any) => e.scheduled_date === todayIso),
+      rodeToday: (rides || 0) > 0,
+    };
+  },
+
+  /**
+   * CODE check on a finished reply: if it asserts a plan / scheduled workout /
+   * today's ride the database contradicts, force a rewrite from the real state.
+   * Never throws — on any failure the original reply goes out.
+   */
+  async enforceStateTruth(args: {
+    athleteId: string; athleteTz: string; todayIso: string; reply: string;
+    system: any; messages: any[]; turnMessages?: any[];
+  }): Promise<{ text: string; corrected: boolean }> {
+    try {
+      const asyncTools = new Set(['generate_training_plan', 'schedule_plan_from_templates', 'schedule_training_plan_template']);
+      const stateChangePending = (args.turnMessages || []).some((m: any) =>
+        Array.isArray(m?.content) && m.content.some((b: any) => b?.type === 'tool_use' && asyncTools.has(b.name)));
+      const facts = await this.getStateFacts(args.athleteId, args.athleteTz, args.todayIso);
+      const problems = findStateContradictions(args.reply, facts, { stateChangePending });
+      if (!problems.length) return { text: args.reply, corrected: false };
+
+      logger.warn(`[StateGuard] ${args.athleteId}: reply contradicted DB — ${problems.join(' | ')}`);
+      const resp: any = await anthropic.beta.messages.create({
+        model: SONNET,
+        max_tokens: 1500,
+        system: args.system,
+        messages: [
+          ...args.messages,
+          { role: 'assistant', content: args.reply },
+          { role: 'user', content: `[STATE CHECK FAILED — automated, not from the athlete]\n${problems.map((p) => `- ${p}`).join('\n')}\nThe database right now: ${describeFacts(facts)}.\nRewrite your whole reply to the athlete from scratch, based ONLY on the real current state. Keep everything else that was right. Do not mention this check or apologise for it.` },
+        ],
+        betas: ['advisor-tool-2026-03-01'],
+      });
+      const text = resp.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n').trim();
+      return text ? { text, corrected: true } : { text: args.reply, corrected: false };
+    } catch (err) {
+      logger.warn('[StateGuard] check failed — sending original reply:', err);
+      return { text: args.reply, corrected: false };
+    }
+  },
+
   /**
    * Chat with AI coach (with tool calling support)
    */
@@ -2277,7 +2333,12 @@ Format it clearly so I can follow it during my ride.`;
 
       // Extract text response
       const textContent = finalResponse.content.filter((block: any) => block.type === 'text');
-      const aiResponse = textContent.length > 0 ? textContent.map((block: any) => block.text).join('\n') : 'I completed your request but encountered an issue generating a response. Please check your calendar.';
+      const rawResponse = textContent.length > 0 ? textContent.map((block: any) => block.text).join('\n') : 'I completed your request but encountered an issue generating a response. Please check your calendar.';
+      const todayIsoGuard = clientDate || new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date());
+      const { text: aiResponse } = await this.enforceStateTruth({
+        athleteId, athleteTz, todayIso: todayIsoGuard, reply: rawResponse,
+        system: cachedSystem, messages, turnMessages: conversationMessages,
+      });
 
       // User message was already persisted earlier; only the assistant remains.
       await this.persistAssistantMessage(convId, athleteId, aiResponse);
@@ -2525,8 +2586,17 @@ Format it clearly so I can follow it during my ride.`;
 
       const firstMessage = await firstStream.finalMessage();
 
+      const todayIsoGuard = clientDate || new Intl.DateTimeFormat('en-CA', { timeZone: athleteTz }).format(new Date());
       if (!hasTools) {
-        // Pure text response — already streamed above.
+        // Pure text response — already streamed above. Code-check its claims
+        // against the DB; on contradiction the corrected reply REPLACES it.
+        const guarded = await this.enforceStateTruth({
+          athleteId, athleteTz, todayIso: todayIsoGuard, reply: streamedText, system: cachedSystem, messages,
+        });
+        if (guarded.corrected) {
+          streamedText = guarded.text;
+          onEvent({ type: 'replace', text: guarded.text });
+        }
         // User message was persisted earlier; only the assistant remains.
         await this.persistAssistantMessage(convId, athleteId, streamedText);
         this.maybeGenerateTitle(convId, message, streamedText).catch((err) =>
@@ -2649,6 +2719,15 @@ Format it clearly so I can follow it during my ride.`;
           finalText += event.delta.text;
           onEvent({ type: 'token', text: event.delta.text });
         }
+      }
+
+      const guardedFinal = await this.enforceStateTruth({
+        athleteId, athleteTz, todayIso: todayIsoGuard, reply: finalText, system: cachedSystem,
+        messages: finalMessages, turnMessages: conversationMessages,
+      });
+      if (guardedFinal.corrected) {
+        finalText = guardedFinal.text;
+        onEvent({ type: 'replace', text: finalText });
       }
 
       // User message was persisted earlier; only the assistant remains.

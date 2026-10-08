@@ -84,6 +84,23 @@ export const aiToolExecutor = {
             result = await this.updateFTP(athleteId, toolCall.input);
             break;
           case 'generate_training_plan': {
+            // CODE CHECK: never silently build over an active plan. The coach
+            // must ask the athlete and pass the decision explicitly.
+            const action = (toolCall.input as any)?.existing_plan_action;
+            if (action !== 'replace' && action !== 'keep_both') {
+              const { data: activePlans } = await supabaseAdmin
+                .from('training_plans').select('goal_event, start_date, end_date')
+                .eq('athlete_id', athleteId).eq('status', 'active');
+              if (activePlans?.length) {
+                result = {
+                  success: false,
+                  error: 'ACTIVE_PLAN_EXISTS',
+                  active_plans: activePlans,
+                  message: `The athlete already has ${activePlans.length} active plan(s): ${activePlans.map((p: any) => `"${p.goal_event}" (${p.start_date} → ${p.end_date})`).join(', ')}. Do NOT build yet. Tell the athlete about it and ask: REPLACE it (its future workouts are removed, completed history kept) or KEEP BOTH. Then call generate_training_plan again with existing_plan_action "replace" or "keep_both".`,
+                };
+                break;
+              }
+            }
             // This is the biggest of the long-running tools — it makes a fresh
             // AI call to generate the plan structure, then saves, then schedules
             // 20-60 workouts. Easily 2-5 minutes total. Enqueue and return
@@ -627,6 +644,12 @@ export const aiToolExecutor = {
 
     // Save plan to database
     await trainingPlanService.savePlan(athleteId, plan);
+
+    // Replace AFTER the new plan designed + saved — a failed build never costs
+    // the athlete their current plan.
+    if (input?.existing_plan_action === 'replace') {
+      await trainingPlanService.retireActivePlans(athleteId, plan.id);
+    }
 
     // Schedule all workouts to calendar
     const { scheduledCount, workoutIds } = await trainingPlanService.schedulePlanToCalendar(

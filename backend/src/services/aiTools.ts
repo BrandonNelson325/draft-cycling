@@ -236,6 +236,11 @@ export const AI_TOOLS: Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
+        existing_plan_action: {
+          type: 'string',
+          enum: ['replace', 'keep_both'],
+          description: 'REQUIRED when the athlete already has an active plan (see LIVE STATE): "replace" retires the current plan (future workouts removed, completed history kept) once the new plan is built; "keep_both" keeps it. Ask the athlete — never assume. Omit only when there is no active plan.',
+        },
         goal_event: {
           type: 'string',
           description: 'The goal event (e.g., "200-mile TTT", "Gran Fondo", "Century Ride", "Criterium Race")',

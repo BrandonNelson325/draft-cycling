@@ -139,6 +139,13 @@ export const useChatStore = create<ChatStore>()(persist((set, get) => ({
             set({ streamingContent: accumulatedContent, toolStatus: null });
           },
 
+          // The server's state-claim guard rewrote the reply (it contradicted
+          // the athlete's real plan/calendar) — show the corrected version.
+          onReplace: (text: string) => {
+            accumulatedContent = text;
+            set({ streamingContent: accumulatedContent, toolStatus: null });
+          },
+
           onProgress: (progressMessage: string) => {
             set({ toolStatus: progressMessage });
           },
