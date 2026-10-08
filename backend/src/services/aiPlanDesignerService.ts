@@ -7,6 +7,9 @@ import {
   nextMondayIso,
   normalizeAiPlan,
   scheduleFtpTests,
+  normalizeFixedSessions,
+  applyFixedSessions,
+  enforceLevelInvariants,
   addFuelingGuidance,
 } from './trainingPlanService';
 import { TrainingPlan } from '../types/trainingPlan';
@@ -152,6 +155,12 @@ export const aiPlanDesignerService = {
     // the chat coach had. These blocks come from the same source of truth the
     // fallback generator and the plan-quality eval harness use.
     const level = resolveLevel(athlete.experience_level);
+    const fixedForPrompt = normalizeFixedSessions(params.fixed_sessions);
+    const fixedBlock = fixedForPrompt.length
+      ? `FIXED WEEKLY COMMITMENTS (the athlete does these every week — they are placed automatically; do NOT schedule anything else on these days):\n${fixedForPrompt
+          .map((f) => `- ${f.day}: ${f.name || f.kind}${f.duration_hours ? ` (~${f.duration_hours}h)` : ''} — ${f.kind === 'easy_group_ride' ? 'easy aerobic volume' : 'HARD: counts as one of the week\'s quality sessions; plan the days around it (no hard session the day before for non-advanced athletes; the day after is easy or a deliberate block)'}`)
+          .join('\n')}\n\n`
+      : '';
     let ctl: number | null = null;
     try {
       const load = await trainingLoadService.calculateTrainingLoad(athleteId);
@@ -182,7 +191,7 @@ ${capacityBlock ? `\n${capacityBlock}\n` : ''}${profileBlock ? `\n${profileBlock
 
 PLAN WINDOW: starts ${startIso} (a Monday), event ${eventIso}, ${weeksUntil} weeks.
 
-AVAILABILITY — train ONLY these days, and NEVER prescribe more time than each day allows:
+${fixedBlock}AVAILABILITY — train ONLY these days, and NEVER prescribe more time than each day allows:
 ${availLines}
 The day with the most time is ${DAY_NAMES[biggestDay.day]} (${biggestDay.cap}h) — put the long ride there. Any day not listed is a full rest day; do not schedule it.
 
@@ -233,6 +242,13 @@ Return the full week-by-week plan via submit_training_plan now.`;
       level, // clamps prescribed interval structures to this training age
       intensityPreference: (athlete as any).preferences?.intensity_preference,
     });
+    // Fixed weekly commitments (e.g. a Tuesday race) go on their days and the
+    // level's limits are re-enforced around them — the model can't drop them.
+    const fixed = normalizeFixedSessions(params.fixed_sessions);
+    if (fixed.length) {
+      applyFixedSessions(plan.weeks, fixed);
+      enforceLevelInvariants(plan.weeks, level, (athlete as any).preferences?.intensity_preference);
+    }
     // FTP tests are placed by code (same rule as the fallback), not the model.
     if ((athlete as any).preferences?.ftp_test_preference !== 'ai_estimation') {
       scheduleFtpTests(plan.weeks, new Map(availableDays.map((d) => [d.day, d.cap])), level);

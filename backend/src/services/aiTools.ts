@@ -236,6 +236,20 @@ export const AI_TOOLS: Tool[] = [
     input_schema: {
       type: 'object',
       properties: {
+        fixed_sessions: {
+          type: 'array',
+          description: 'Recurring weekly commitments the athlete keeps doing (e.g. "Zwift Racing League every Tuesday", "Saturday group ride"). The plan is built AROUND them: a race/hard group ride counts as one of the week\'s quality sessions. ALWAYS pass these when the athlete mentions any — dropping them means the plan stacks workouts on top of their races. Saved for future plans.',
+          items: {
+            type: 'object',
+            properties: {
+              day: { type: 'string', enum: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] },
+              kind: { type: 'string', enum: ['race', 'hard_group_ride', 'easy_group_ride'] },
+              duration_hours: { type: 'number', description: 'Typical total time incl. warmup, e.g. 1.5' },
+              name: { type: 'string', description: 'e.g. "ZRL race"' },
+            },
+            required: ['day', 'kind'],
+          },
+        },
         existing_plan_action: {
           type: 'string',
           enum: ['replace', 'keep_both'],

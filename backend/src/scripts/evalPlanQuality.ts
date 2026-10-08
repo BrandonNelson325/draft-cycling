@@ -44,6 +44,8 @@ interface Archetype {
   /** Power records (W) — drives the designer's power-profile analysis. */
   prs?: { s5?: number; m1?: number; m5?: number; m20?: number };
   expectEmphasis?: 'vo2max' | 'sprint';
+  /** Recurring weekly commitments (e.g. Tuesday ZRL race). */
+  fixed?: { day: string; kind: 'race' | 'hard_group_ride' | 'easy_group_ride'; duration_hours?: number; name?: string }[];
   daily: Partial<Record<string, number>>;
 }
 
@@ -66,6 +68,7 @@ const ARCHETYPES: Archetype[] = [
   { name: 'Advanced stage racer (Brandon-like), 10h, Sun off', goal: '6-day stage race, sprint/points focus',
     level: 'advanced', ftp: 299, weightKg: 71, age: 38, ctl: 70, intensityPreference: 'prefers-volume',
     eventKind: 'stage_race', weeksOut: 10,
+    fixed: [{ day: 'tuesday', kind: 'race', duration_hours: 1.5, name: 'ZRL race' }],
     daily: { monday: 1.5, tuesday: 2, wednesday: 1.5, thursday: 2, friday: 1, saturday: 2 } },
   { name: 'Advanced, 14h, 7 days, stage race', goal: '4-day road stage race (Cat 2)', level: 'advanced',
     ftp: 340, weightKg: 70, age: 30, ctl: 95, eventKind: 'stage_race', weeksOut: 16,
@@ -122,13 +125,13 @@ async function build(a: Archetype, id: string, daily: Record<string, number>): P
   eventDate.setDate(eventDate.getDate() + a.weeksOut * 7);
   if (DESIGNER) {
     return aiPlanDesignerService.designPlan(id, {
-      goal_event: a.goal, event_date: eventDate.toISOString().split('T')[0], daily_hours: daily,
+      goal_event: a.goal, event_date: eventDate.toISOString().split('T')[0], daily_hours: daily, fixed_sessions: a.fixed,
     });
   }
   return trainingPlanService.generatePlan(id, {
     goal_event: a.goal, event_date: eventDate, current_fitness_level: a.level, weekly_hours: 0,
     strengths: [], weaknesses: [], preferences: { indoor_outdoor: 'both', zwift_availability: false },
-    daily_hours: daily,
+    daily_hours: daily, fixed_sessions: a.fixed,
   } as any);
 }
 
@@ -152,7 +155,8 @@ async function build(a: Archetype, id: string, daily: Record<string, number>): P
     }
     const { a, plan, daily } = r;
     const capByDay = Object.fromEntries(DOW.map((d, i) => [i, daily[d]]));
-    const findings = gradePlan(plan, { level: a.level, intensityPreference: a.intensityPreference, capByDay, eventKind: a.eventKind, ctl: a.ctl, ftpTesting: true, expectEmphasis: a.expectEmphasis });
+    const findings = gradePlan(plan, { level: a.level, intensityPreference: a.intensityPreference, capByDay, eventKind: a.eventKind, ctl: a.ctl, ftpTesting: true, expectEmphasis: a.expectEmphasis,
+      fixedDays: (a.fixed || []).map((f) => DOW.indexOf(f.day)) });
     const { failedCritical, failedWarn, score } = summarize(findings);
     criticalFailures += failedCritical.length;
 

@@ -6,7 +6,7 @@ import { athletePreferencesService } from './athletePreferencesService';
 import { logger } from '../utils/logger';
 import { mapWithConcurrency } from '../utils/concurrency';
 import { Level, LEVEL_PROFILES, resolveLevel, recoveryRideAllowance, fuelingNote, Limiter, analyzePowerProfile, eventRelevantLimiter } from '../utils/coachingLevels';
-import { isFtpTestWorkout } from '../utils/ftpTest';
+import { isFtpTestWorkout, isFixedSession, isHardFixedSession } from '../utils/ftpTest';
 import { powerAnalysisService } from './powerAnalysisService';
 import {
   TrainingPlanConfig,
@@ -530,7 +530,70 @@ const VALID_WORKOUT_TYPES = new Set([
  * deterministic engine.
  */
 const QUALITY_WORKOUT_TYPES = new Set(['threshold', 'sweet_spot', 'vo2max', 'anaerobic', 'tempo', 'sprint']);
-const isQualityWorkout = (w: WorkoutTemplate) => QUALITY_WORKOUT_TYPES.has(w.workout_type) || isFtpTestWorkout(w);
+const isQualityWorkout = (w: WorkoutTemplate) =>
+  QUALITY_WORKOUT_TYPES.has(w.workout_type) || isFtpTestWorkout(w) || isHardFixedSession(w);
+/** Sessions the plan is built around — never dropped, demoted or replaced. */
+const isProtected = (w: WorkoutTemplate) => isFtpTestWorkout(w) || isFixedSession(w);
+
+export type FixedSessionKind = 'race' | 'hard_group_ride' | 'easy_group_ride';
+export interface FixedSession { day: string; kind: FixedSessionKind; duration_hours?: number; name?: string }
+const DAY_INDEX: Record<string, number> = { sunday: 0, monday: 1, tuesday: 2, wednesday: 3, thursday: 4, friday: 5, saturday: 6 };
+
+/** Valid fixed sessions with a resolved weekday index. */
+export function normalizeFixedSessions(raw: any): (FixedSession & { dow: number })[] {
+  if (!Array.isArray(raw)) return [];
+  const out: (FixedSession & { dow: number })[] = [];
+  for (const f of raw) {
+    const dow = DAY_INDEX[String(f?.day || '').toLowerCase()];
+    const kind = ['race', 'hard_group_ride', 'easy_group_ride'].includes(f?.kind) ? f.kind : 'race';
+    if (dow == null || out.some((o) => o.dow === dow)) continue;
+    const h = Number(f?.duration_hours);
+    out.push({ day: f.day, kind, dow, duration_hours: Number.isFinite(h) && h > 0 ? Math.min(h, 8) : undefined, name: typeof f?.name === 'string' ? f.name.slice(0, 60) : undefined });
+  }
+  return out;
+}
+
+/** The calendar session for a fixed commitment. Hard ones are ridden "as it
+ *  comes" — exported as free ride (`open`) so ERG never fights a race. */
+export function buildFixedSessionWorkout(f: FixedSession & { dow: number }): WorkoutTemplate {
+  const minutes = Math.round((f.duration_hours ?? (f.kind === 'easy_group_ride' ? 1.5 : 1.25)) * 60);
+  const hard = f.kind !== 'easy_group_ride';
+  const warm = Math.min(15 * 60, Math.round(minutes * 60 * 0.2));
+  const cool = Math.min(10 * 60, Math.round(minutes * 60 * 0.1));
+  const main = minutes * 60 - warm - cool;
+  const name = f.name || (f.kind === 'race' ? 'Race' : f.kind === 'hard_group_ride' ? 'Hard Group Ride' : 'Group Ride');
+  return {
+    name: `${name} (fixed)`,
+    description: hard
+      ? 'Your fixed weekly commitment — race it as it comes. The plan counts it as one of this week\'s hard sessions and is built around it.'
+      : 'Your fixed weekly group ride — keep it conversational; it counts as aerobic volume.',
+    workout_type: hard ? 'custom' : 'endurance',
+    duration_minutes: minutes,
+    day_of_week: f.dow,
+    intervals: [
+      { duration: warm, power: 60, type: 'warmup' },
+      hard
+        ? { duration: main, power: 95, type: 'work', open: true, fixed: true, race: true }
+        : { duration: main, power: 70, type: 'work', fixed: true },
+      { duration: cool, power: 50, type: 'cooldown' },
+    ],
+    rationale: hard
+      ? `${name} every week — treated as a quality session, so the rest of the week's intensity is placed around it.`
+      : `${name} every week — easy aerobic volume.`,
+  };
+}
+
+/** Put the fixed commitments on their days in every week (replacing whatever
+ *  was there). Mutates. */
+export function applyFixedSessions(weeks: TrainingWeek[], fixed: (FixedSession & { dow: number })[]): void {
+  if (!fixed.length) return;
+  for (const w of weeks) {
+    const days = new Set(fixed.map((f) => f.dow));
+    w.workouts = [...w.workouts.filter((x) => !days.has(x.day_of_week)), ...fixed.map(buildFixedSessionWorkout)]
+      .sort((a, b) => a.day_of_week - b.day_of_week);
+    w.tss = weekTss(w.workouts);
+  }
+}
 
 export { isFtpTestWorkout };
 
@@ -621,7 +684,7 @@ export function scheduleFtpTests(
       isQualityWorkout(x) ||
       (!atCap && longestWeekRun([...qualityDays, x.day_of_week]) <= LEVEL_PROFILES[level].maxStackedQuality);
     const fits = (x: WorkoutTemplate) => ((capByDay.get(x.day_of_week) || 0) * 60) >= test.duration_minutes;
-    const candidates = w.workouts.filter((x) => fits(x) && x !== longRide && stackOk(x));
+    const candidates = w.workouts.filter((x) => fits(x) && x !== longRide && stackOk(x) && !isProtected(x));
     const pick =
       candidates.find((x) => isQualityWorkout(x) && !hardBefore(x.day_of_week)) ||
       candidates.find((x) => isQualityWorkout(x)) ||
@@ -665,7 +728,9 @@ export function enforceLevelInvariants(weeks: TrainingWeek[], level: Level, inte
   weeks.forEach((w) => {
     if (w.phase === 'taper') return;
     const quality = w.workouts.filter(isQualityWorkout).sort((a, b) => a.day_of_week - b.day_of_week);
-    const extra = new Set(quality.slice(profile.qualityPerWeek[1]).filter((x) => !isFtpTestWorkout(x)));
+    const excess = quality.length - profile.qualityPerWeek[1];
+    const demotable = quality.filter((x) => !isProtected(x));
+    const extra = new Set(excess > 0 ? demotable.slice(Math.max(0, demotable.length - excess)) : []);
     if (extra.size) w.workouts = w.workouts.map((x) => (extra.has(x)
       ? toEndurance(x, 'Steady Z2 endurance — one quality session fewer this week so the others land.') : x));
   });
@@ -694,29 +759,37 @@ export function enforceLevelInvariants(weeks: TrainingWeek[], level: Level, inte
     const rank = (x: WorkoutTemplate) =>
       x.workout_type === 'recovery' ? 0 : isQualityWorkout(x) ? 2 : 1;
     const droppable = w.workouts
-      .filter((x) => !(x.workout_type === 'endurance' && x.duration_minutes === longest))
+      .filter((x) => !isProtected(x) && !(x.workout_type === 'endurance' && x.duration_minutes === longest))
       .sort((a, b) => rank(a) - rank(b) || a.duration_minutes - b.duration_minutes);
     const drop = new Set(droppable.slice(0, w.workouts.length - maxDays));
     w.workouts = w.workouts.filter((x) => !drop.has(x));
   }
 
+  // Stacking across weeks. When a run gets too long, demote a NON-protected
+  // session in it (the current one, or — if the current one is a fixed race /
+  // FTP test — the latest non-protected one before it).
+  const demote = (x: WorkoutTemplate) => buildWorkout('endurance', x.duration_minutes, x.day_of_week,
+    'Steady Z2 endurance — kept aerobic so the quality sessions either side of it land.', level);
   let prevAbs = -99;
-  let run = 0;
+  let run: { wi: number; x: WorkoutTemplate }[] = [];
   weeks.forEach((w, wi) => {
-    w.workouts = w.workouts.map((x) => {
-      if (!isQualityWorkout(x)) return x;
+    for (const x of [...w.workouts].sort((a, b) => a.day_of_week - b.day_of_week)) {
+      if (!isQualityWorkout(x)) continue;
       const abs = wi * 7 + x.day_of_week;
-      run = abs === prevAbs + 1 ? run + 1 : 1;
-      if (run > profile.maxStackedQuality) {
-        run = 0;
-        return buildWorkout('endurance', x.duration_minutes, x.day_of_week,
-          'Steady Z2 endurance — kept aerobic so the quality sessions either side of it land.', level);
-      }
+      run = abs === prevAbs + 1 ? [...run, { wi, x }] : [{ wi, x }];
       prevAbs = abs;
-      return x;
-    });
-    w.tss = weekTss(w.workouts);
+      if (run.length <= profile.maxStackedQuality) continue;
+      const victim = [...run].reverse().find((r) => !isProtected(r.x));
+      if (!victim) continue; // all protected — leave as the athlete set it
+      const wk = weeks[victim.wi];
+      wk.workouts = wk.workouts.map((y) => (y === victim.x ? demote(y) : y));
+      run = run.filter((r) => r !== victim);
+      // A demotion inside the run breaks it at that point.
+      const cut = run.findIndex((r) => r.wi * 7 + r.x.day_of_week > victim.wi * 7 + victim.x.day_of_week);
+      run = cut >= 0 ? run.slice(cut) : [];
+    }
   });
+  weeks.forEach((w) => { w.tss = weekTss(w.workouts); });
 }
 
 export function normalizeAiPlan(
@@ -981,6 +1054,7 @@ export const trainingPlanService = {
       // by scaling each day's ride as (that day's hours × the week's volume
       // factor) — NOT by dropping days. This is fully dynamic to availability.
       const eventKind = detectEventKind(`${config.goal_event || ''} ${(config as any).route_notes || ''}`);
+      const fixed = normalizeFixedSessions((config as any).fixed_sessions);
       let limiter: Limiter | null = null;
       try {
         const prs = await powerAnalysisService.getPersonalRecords(athleteId);
@@ -991,8 +1065,13 @@ export const trainingPlanService = {
         resolveLevel((athlete as any).experience_level),
         (preferences as any).intensity_preference,
         eventKind,
-        limiter
+        limiter,
+        fixed.map((f) => ({ dow: f.dow, hard: f.kind !== 'easy_group_ride' }))
       );
+      // Fixed commitments go on their days, then the level's hard limits are
+      // enforced around them (they are never moved or demoted).
+      applyFixedSessions(weeks, fixed);
+      enforceLevelInvariants(weeks, resolveLevel((athlete as any).experience_level), (preferences as any).intensity_preference);
       // Real 20-min FTP tests at block starts (unless the athlete opted for
       // estimation only) — without them FTP stalls and the plan stops pushing.
       if ((preferences as any).ftp_test_preference !== 'ai_estimation') {
@@ -1101,7 +1180,8 @@ export const trainingPlanService = {
     level: Level = 'intermediate',
     intensityPreference?: string | null,
     eventKind: EventKind = 'general',
-    limiter: Limiter | null = null // event-relevant weakness from the power profile
+    limiter: Limiter | null = null, // event-relevant weakness from the power profile
+    fixedDays: { dow: number; hard: boolean }[] = [] // fixed weekly commitments (applied after)
   ): TrainingWeek[] {
     const profile = LEVEL_PROFILES[level];
     // Racers (not beginners) get race-specific formats in build/peak; types are
@@ -1129,7 +1209,14 @@ export const trainingPlanService = {
     const stackQuality = eventKind === 'stage_race' && profile.maxStackedQuality >= 2;
     // Being AVAILABLE every day doesn't mean riding every day — a beginner
     // offered 7 days rides at most 5. Trim to the level's ceiling.
-    const availableDays = trimRidingDays(allAvailableDays, profile.ridingDaysPerWeek[1]);
+    // Fixed commitments (e.g. a Tuesday race) occupy their own days and count
+    // toward the riding-day ceiling; the rest of the week is planned around them.
+    const fixedSet = new Set(fixedDays.map((f) => f.dow));
+    const fixedHard = fixedDays.filter((f) => f.hard).map((f) => f.dow);
+    const availableDays = trimRidingDays(
+      allAvailableDays.filter((d) => !fixedSet.has(d.day)),
+      Math.max(1, profile.ridingDaysPerWeek[1] - fixedDays.length)
+    );
     const recoveryAllowance = recoveryRideAllowance(level, intensityPreference);
     const STRUCTURED_MAX = 120; // minutes — cap on intensity-ride length
     const round5 = (m: number) => Math.round(m / 5) * 5;
@@ -1172,7 +1259,12 @@ export const trainingPlanService = {
     const pushWeek = (phase: TrainingPhase, factor: number, phaseTypes: string[], notes?: string, isRecoveryWeek = false, step = 0) => {
       // Quality sessions per week scale with training age — a beginner doesn't
       // get the 3 build-phase quality days an advanced rider does.
-      const intensityTypes = isRecoveryWeek ? phaseTypes : phaseTypes.slice(0, profile.qualityPerWeek[1]);
+      // A hard fixed session (race) is one of the week's quality sessions — and
+      // a race costs more than a normal interval day, so a race week carries one
+      // quality session fewer in total (advanced: race + 2, not race + 3).
+      const qualityTotal = profile.qualityPerWeek[1] - (fixedHard.length ? 1 : 0);
+      const intensityTypes = isRecoveryWeek ? phaseTypes
+        : phaseTypes.slice(0, Math.max(0, qualityTotal - fixedHard.length));
 
       // 1. Assign a role to each available day by time: the biggest day is the
       //    long ride, the next-biggest are the phase's intensity sessions, the
@@ -1193,9 +1285,10 @@ export const trainingPlanService = {
       }
       for (const d of candidates) {
         if (qualityDays.length >= intensityTypes.length) break;
+        const hardDays = [...fixedHard, ...qualityDays]; // spacing counts the race too
         const ok = profile.maxStackedQuality <= 1
-          ? !weekAdjacent(d.day, longDay) && !qualityDays.some((q) => weekAdjacent(q, d.day))
-          : longestWeekRun([...qualityDays, d.day]) <= profile.maxStackedQuality;
+          ? !weekAdjacent(d.day, longDay) && !hardDays.some((q) => weekAdjacent(q, d.day))
+          : longestWeekRun([...hardDays, d.day]) <= profile.maxStackedQuality;
         if (ok) qualityDays.push(d.day);
       }
       availableDays.forEach((d, idx) => {

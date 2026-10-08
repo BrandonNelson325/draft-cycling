@@ -27,6 +27,8 @@ export interface AthletePreferences {
   zwift_available?: boolean;
   intensity_preference?: string;
   ftp_test_preference?: 'test' | 'ai_estimation';
+  /** Recurring weekly commitments plans are built around (e.g. Tuesday ZRL race). */
+  fixed_sessions?: { day: string; kind: 'race' | 'hard_group_ride' | 'easy_group_ride'; duration_hours?: number; name?: string }[];
   learned_patterns?: {
     typical_workout_duration?: number;
     favorite_interval_type?: string;

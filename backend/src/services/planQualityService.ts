@@ -12,7 +12,7 @@
 import { TrainingPlan, WorkoutTemplate } from '../types/trainingPlan';
 import { Level, LEVEL_PROFILES, recoveryRideAllowance } from '../utils/coachingLevels';
 import { describeIntervals } from './trainingPlanService';
-import { isFtpTestWorkout } from '../utils/ftpTest';
+import { isFtpTestWorkout, isFixedSession, isHardFixedSession } from '../utils/ftpTest';
 
 export type Severity = 'critical' | 'warn';
 
@@ -34,6 +34,8 @@ export interface GradeContext {
   ctl?: number | null;
   /** Athlete wants real FTP tests (default) — enables the test-cadence check. */
   ftpTesting?: boolean;
+  /** Weekdays (0=Sun) of fixed weekly commitments that must appear every week. */
+  fixedDays?: number[];
   /** Limiter the event demands — the plan should prioritize it in build/peak. */
   expectEmphasis?: 'vo2max' | 'sprint';
 }
@@ -45,7 +47,7 @@ const Z1_MAX = 55;
 const INTENSITY_MIN = 76;
 
 const totalSec = (w: WorkoutTemplate) => (w.intervals || []).reduce((s, iv: any) => s + (iv.duration || 0), 0);
-const isQuality = (w: WorkoutTemplate) => QUALITY_TYPES.has(w.workout_type) || isFtpTestWorkout(w);
+const isQuality = (w: WorkoutTemplate) => QUALITY_TYPES.has(w.workout_type) || isFtpTestWorkout(w) || isHardFixedSession(w);
 const isLong = (w: WorkoutTemplate, weekWorkouts: WorkoutTemplate[]) =>
   w.workout_type === 'endurance' && w.duration_minutes === Math.max(...weekWorkouts.map((x) => x.duration_minutes)) && w.duration_minutes >= 120;
 const isZ1Ride = (w: WorkoutTemplate) =>
@@ -98,7 +100,7 @@ export function gradePlan(plan: TrainingPlan, ctx: GradeContext): Finding[] {
   for (const w of plan.weeks) for (const x of w.workouts) {
     if (Math.abs(totalSec(x) - x.duration_minutes * 60) > 60) sumBad.push(`wk${w.week_number} ${x.name}: ${Math.round(totalSec(x) / 60)}≠${x.duration_minutes}min`);
     const s = describeIntervals(x.intervals);
-    if (s && !isFtpTestWorkout(x) && !x.name.includes(s)) nameBad.push(`wk${w.week_number} "${x.name}" vs actual "${s}"`);
+    if (s && !isFtpTestWorkout(x) && !isFixedSession(x) && !x.name.includes(s)) nameBad.push(`wk${w.week_number} "${x.name}" vs actual "${s}"`);
   }
   add('Intervals sum to the workout duration', 'critical', sumBad);
   add('Workout name matches its actual intervals', 'critical', nameBad);
@@ -274,6 +276,16 @@ export function gradePlan(plan: TrainingPlan, ctx: GradeContext): Finding[] {
     add(`Prioritizes the event-relevant limiter (${ctx.expectEmphasis})`, 'warn',
       hits >= 2 && share >= 0.2 ? [] : [`${hits}/${q.length} build/peak quality sessions (${Math.round(share * 100)}%)`],
       `${hits}/${q.length} sessions (${Math.round(share * 100)}%)`);
+  }
+
+  // ---- Fixed weekly commitments: on their day, every week, nothing stacked on top ----
+  if (ctx.fixedDays?.length) {
+    const bad: string[] = [];
+    for (const w of plan.weeks) for (const d of ctx.fixedDays) {
+      const onDay = w.workouts.filter((x) => x.day_of_week === d);
+      if (onDay.length !== 1 || !isFixedSession(onDay[0])) bad.push(`wk${w.week_number} d${d}: ${onDay.map((x) => x.name).join(' + ') || 'missing'}`);
+    }
+    add('Fixed commitments kept every week (nothing else that day)', 'critical', bad);
   }
 
   // ---- Fueling on long sessions ----

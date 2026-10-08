@@ -604,6 +604,19 @@ export const aiToolExecutor = {
    * Generate a complete training plan
    */
   async generateTrainingPlan(athleteId: string, input: any): Promise<any> {
+    // Fixed weekly commitments: use what the coach passed, else what the athlete
+    // told us before; remember new ones so future plans keep them.
+    try {
+      const prefs: any = await athletePreferencesService.getPreferences(athleteId);
+      if (Array.isArray(input.fixed_sessions)) {
+        await athletePreferencesService.updatePreferences(athleteId, { fixed_sessions: input.fixed_sessions } as any);
+      } else if (Array.isArray(prefs?.fixed_sessions)) {
+        input = { ...input, fixed_sessions: prefs.fixed_sessions };
+      }
+    } catch (err) {
+      logger.warn('[generateTrainingPlan] fixed_sessions preference lookup failed (non-blocking):', err);
+    }
+
     // Parse event date as local date to avoid timezone issues
     const [year, month, day] = input.event_date.split('-').map(Number);
     const eventDate = new Date(year, month - 1, day);
@@ -624,6 +637,8 @@ export const aiToolExecutor = {
       },
       daily_hours: input.daily_hours,
       start_date: input.start_date,
+      route_notes: input.route_notes,
+      fixed_sessions: input.fixed_sessions,
     };
 
     // Design the plan. Opus 4.8 designs the periodized structure (every workout
