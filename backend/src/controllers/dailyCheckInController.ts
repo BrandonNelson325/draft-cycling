@@ -70,7 +70,17 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       }
     }
 
-    if ((sleepQualityRequired && !sleepQuality) || !feeling) {
+    // WHOOP owns today's recovery → no sleep/feeling questions; only the
+    // optional "anything off?" flags.
+    const { data: todayRow } = await supabaseAdmin
+      .from('daily_metrics').select('wellness_source, readiness_score')
+      .eq('athlete_id', req.user.id).eq('date', dateToUse).maybeSingle();
+    const whoopDay = todayRow?.wellness_source === 'whoop' && todayRow?.readiness_score != null;
+    const ALLOWED_FLAGS = ['sore', 'sick', 'stressed', 'injured', 'other'];
+    const offFlags: string[] = Array.isArray(req.body?.offFlags)
+      ? req.body.offFlags.filter((f: any) => ALLOWED_FLAGS.includes(f)) : [];
+
+    if (!whoopDay && ((sleepQualityRequired && !sleepQuality) || !feeling)) {
       res.status(400).json({ error: 'Sleep quality and feeling are required' });
       return;
     }
@@ -80,7 +90,7 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    if (!['exhausted', 'tired', 'normal', 'good', 'energized'].includes(feeling)) {
+    if (feeling && !['exhausted', 'tired', 'normal', 'good', 'energized'].includes(feeling)) {
       res.status(400).json({ error: 'Invalid feeling' });
       return;
     }
@@ -89,6 +99,7 @@ export const saveDailyCheckIn = async (req: AuthRequest, res: Response): Promise
       sleepQuality,
       feeling,
       notes,
+      offFlags,
     }, dateToUse);
 
     clearSuggestionCache(req.user.id);

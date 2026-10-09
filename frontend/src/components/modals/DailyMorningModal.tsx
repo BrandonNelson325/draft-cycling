@@ -22,16 +22,21 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>(null);
   const [feeling, setFeeling] = useState<Feeling | null>(null);
   const [saving, setSaving] = useState(false);
+  const [offFlags, setOffFlags] = useState<('sore' | 'sick' | 'stressed' | 'injured')[]>([]);
 
   // ── Step 1: Check-in ─────────────────────────────────────────────────────
 
   const wellness = readiness.wellness;
   // Sleep picker is shown unless objective sleep data is present in wellness.
   // sleepQuality is required iff the picker is shown.
-  const sleepPickerVisible = !wellness || wellness.sleepSeconds == null;
+  // WHOOP owns today's recovery → no sleep/feeling questions, just "anything off?".
+  const isWhoop = wellness?.source === 'whoop' && wellness.readinessScore != null;
+  const sleepPickerVisible = !isWhoop && (!wellness || wellness.sleepSeconds == null);
+  const recoveryColor = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-500' : 'text-red-600');
+  const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
   const handleCheckInNext = async () => {
-    if (!feeling) {
+    if (!isWhoop && !feeling) {
       toast.error('Please choose how you feel before continuing');
       return;
     }
@@ -41,9 +46,11 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
     }
     try {
       setSaving(true);
-      const payload = sleepPickerVisible
-        ? { sleepQuality, feeling }
-        : { sleepQuality: undefined, feeling };
+      const payload = isWhoop
+        ? { offFlags }
+        : sleepPickerVisible
+          ? { sleepQuality, feeling }
+          : { sleepQuality: undefined, feeling };
       await dailyCheckInService.saveDailyCheckIn(payload as any);
       if (analysis) {
         setStep('analysis');
@@ -94,7 +101,9 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
   const goToChat = () => {
     const parts: string[] = ["Good morning! Here's my daily check-in:"];
 
-    if (sleepQuality && feeling) {
+    if (isWhoop && wellness?.readinessScore != null) {
+      parts.push(`\nWHOOP recovery: ${wellness.readinessScore}%${offFlags.length ? `, anything off: ${offFlags.join(', ')}` : ''}`);
+    } else if (sleepQuality && feeling) {
       parts.push(`\nSleep: ${sleepQuality}, Feeling: ${feeling}`);
     }
 
@@ -168,8 +177,51 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </div>
               )}
 
-              {/* Wellness data (intervals.icu) — replaces sleep quality picker */}
-              {wellness && (
+              {/* WHOOP — recovery source: replaces every question */}
+              {isWhoop && wellness && (
+                <div className="bg-gray-900 text-white rounded-xl p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">Recovery</h3>
+                    <span className="text-[10px] tracking-widest text-gray-400 font-bold">WHOOP</span>
+                  </div>
+                  <div className={`text-5xl font-extrabold ${recoveryColor(wellness.readinessScore!)}`}>{wellness.readinessScore}%</div>
+                  {wellness.recoveryCalibrating && <p className="text-xs text-gray-400 mt-1">WHOOP is still calibrating — low confidence</p>}
+                  <div className="grid grid-cols-2 gap-3 text-sm mt-3">
+                    {wellness.hrv != null && <div><div className="text-gray-400 text-xs uppercase">HRV</div><div className="font-semibold">{wellness.hrv}ms</div></div>}
+                    {wellness.rhr != null && <div><div className="text-gray-400 text-xs uppercase">Resting HR</div><div className="font-semibold">{wellness.rhr} bpm</div></div>}
+                    {wellness.sleepSeconds != null && <div><div className="text-gray-400 text-xs uppercase">Sleep</div><div className="font-semibold">{hm(wellness.sleepSeconds)}{wellness.sleepNeedSeconds ? ` / ${hm(wellness.sleepNeedSeconds)}` : ''}</div></div>}
+                    {wellness.sleepScore != null && <div><div className="text-gray-400 text-xs uppercase">Sleep perf.</div><div className="font-semibold">{wellness.sleepScore}%</div></div>}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2">Data from WHOOP</p>
+                </div>
+              )}
+
+              {isWhoop && (
+                <div>
+                  <label className="block font-semibold text-gray-800 mb-1">Anything off today? (optional)</label>
+                  <p className="text-xs text-gray-500 mb-2">Things your WHOOP can't see.</p>
+                  <div className="grid grid-cols-4 gap-2">
+                    {([
+                      { value: 'sore', emoji: '🦵', label: 'Sore legs' },
+                      { value: 'sick', emoji: '🤒', label: 'Sick' },
+                      { value: 'stressed', emoji: '😰', label: 'Stressed' },
+                      { value: 'injured', emoji: '🩹', label: 'Niggle' },
+                    ] as const).map(({ value, emoji, label }) => (
+                      <button
+                        key={value}
+                        onClick={() => setOffFlags((cur) => (cur.includes(value) ? cur.filter((x) => x !== value) : [...cur, value]))}
+                        className={`py-2 px-1 rounded-xl border-2 transition-all ${offFlags.includes(value) ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 hover:border-gray-300'}`}
+                      >
+                        <div className="text-xl mb-1">{emoji}</div>
+                        <div className="text-xs font-medium">{label}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Wellness data (intervals.icu / Apple Health) — replaces sleep quality picker */}
+              {wellness && !isWhoop && (
                 <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
                   <h3 className="font-semibold text-purple-900 mb-2">🌙 Sleep & Recovery</h3>
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -215,7 +267,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
               {/* Sleep Quality — hidden only when objective sleep data
                   is present. Wellness with just HRV/RHR still shows the
                   picker so the athlete can log sleep manually. */}
-              {(!wellness || wellness.sleepSeconds == null) && (
+              {sleepPickerVisible && (
                 <div>
                   <label className="block font-semibold text-gray-800 mb-2">😴 How did you sleep?</label>
                   <div className="grid grid-cols-5 gap-2">
@@ -242,7 +294,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
               )}
 
               {/* Feeling */}
-              <div>
+              {!isWhoop && <div>
                 <label className="block font-semibold text-gray-800 mb-2">💪 How are you feeling?</label>
                 <div className="grid grid-cols-5 gap-2">
                   {([
@@ -264,7 +316,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
               {/* Actions */}
               <div className="flex gap-3 pt-2">
@@ -273,7 +325,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </Button>
                 <Button
                   onClick={handleCheckInNext}
-                  disabled={(sleepPickerVisible && !sleepQuality) || !feeling || saving}
+                  disabled={isWhoop ? saving : ((sleepPickerVisible && !sleepQuality) || !feeling || saving)}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
                 >
                   {saving ? 'Saving...' : analysis ? 'See My Analysis →' : '💬 Talk to Coach'}

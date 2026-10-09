@@ -6,6 +6,7 @@ import { AccountInfo } from '../components/settings/AccountInfo';
 import { StravaConnect } from '../components/strava/StravaConnect';
 import { IntervalsIcuConnect } from '../components/settings/IntervalsIcuConnect';
 import { WahooConnect } from '../components/settings/WahooConnect';
+import { WhoopConnect } from '../components/settings/WhoopConnect';
 import { WelcomeModal } from '../components/modals/WelcomeModal';
 import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
@@ -98,6 +99,22 @@ export function SettingsPage() {
           </CardHeader>
           <CardContent>
             <WahooConnect />
+          </CardContent>
+        </Card>
+
+        {/* WHOOP Section — recovery source */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-3">
+              <div className="w-6 h-6 rounded bg-black text-white text-[9px] font-extrabold flex items-center justify-center">WH</div>
+              <div>
+                <CardTitle>WHOOP</CardTitle>
+                <CardDescription>Use WHOOP recovery, HRV, sleep and strain to guide your daily training</CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <WhoopConnect />
           </CardContent>
         </Card>
 

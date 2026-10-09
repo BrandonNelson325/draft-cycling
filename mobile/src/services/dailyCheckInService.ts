@@ -1,13 +1,20 @@
 import apiClient from '../api/client';
 
 export interface WellnessData {
-  source: 'intervals_icu' | 'apple_health' | 'manual';
+  source: 'whoop' | 'intervals_icu' | 'apple_health' | 'manual';
   hrv: number | null;
   rhr: number | null;
   sleepSeconds: number | null;
   sleepScore: number | null;
   readinessScore: number | null;
   syncedAt: string | null;
+  // WHOOP extras
+  recoveryCalibrating?: boolean | null;
+  sleepNeedSeconds?: number | null;
+  sleepDebtSeconds?: number | null;
+  respiratoryRate?: number | null;
+  dayStrain?: number | null;
+  otherActivities?: { sport: string; minutes: number; strain: number | null }[] | null;
 }
 
 export interface DailyReadiness {
@@ -41,8 +48,11 @@ export interface DailyReadiness {
 
 export interface DailyCheckInData {
   sleepQuality?: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
-  feeling: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
+  /** Optional on WHOOP days — Whoop's recovery replaces the subjective questions. */
+  feeling?: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
   notes?: string;
+  /** WHOOP days: "anything off?" — things the strap can't see. */
+  offFlags?: ('sore' | 'sick' | 'stressed' | 'injured')[];
 }
 
 function getLocalDate(): string {

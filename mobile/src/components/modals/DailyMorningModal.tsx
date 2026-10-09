@@ -52,6 +52,17 @@ const FEELING_OPTIONS: { value: Feeling; emoji: string; label: string }[] = [
   { value: 'energized', emoji: '⚡', label: 'Energized' },
 ];
 
+type OffFlag = 'sore' | 'sick' | 'stressed' | 'injured';
+const OFF_OPTIONS: { value: OffFlag; emoji: string; label: string }[] = [
+  { value: 'sore', emoji: '🦵', label: 'Sore legs' },
+  { value: 'sick', emoji: '🤒', label: 'Sick' },
+  { value: 'stressed', emoji: '😰', label: 'Stressed' },
+  { value: 'injured', emoji: '🩹', label: 'Niggle/injury' },
+];
+
+const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
+const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
+
 const RECOMMENDATION_COLORS: Record<string, string> = {
   rest: '#ef4444',
   light: '#f97316',
@@ -76,6 +87,7 @@ export default function DailyMorningModal({
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>(null);
   const [feeling, setFeeling] = useState<Feeling | null>(null);
   const [notes, setNotes] = useState('');
+  const [offFlags, setOffFlags] = useState<OffFlag[]>([]);
   const [saving, setSaving] = useState(false);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -84,11 +96,28 @@ export default function DailyMorningModal({
     setSleepQuality(null);
     setFeeling(null);
     setNotes('');
+    setOffFlags([]);
   };
 
   const wellness = readiness?.wellness ?? null;
+  // WHOOP owns today's recovery → no sleep/feeling questions, just "anything off?".
+  const isWhoop = wellness?.source === 'whoop' && wellness.readinessScore != null;
+  const toggleOff = (f: OffFlag) =>
+    setOffFlags((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
 
   const handleSubmitCheckIn = async () => {
+    if (isWhoop) {
+      setSaving(true);
+      try {
+        await dailyCheckInService.saveDailyCheckIn({ offFlags, notes: notes.trim() || undefined });
+        setStep(2);
+      } catch {
+        Alert.alert('Error', 'Failed to save check-in.');
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     if (!feeling) {
       Alert.alert('Please choose how you feel.');
       return;
@@ -124,6 +153,13 @@ export default function DailyMorningModal({
   };
 
   const handleChatAboutPlan = () => {
+    if (isWhoop) {
+      const off = offFlags.length ? ` Anything off: ${offFlags.join(', ')}.` : '';
+      const msg = `I just checked in. My WHOOP recovery is ${wellness!.readinessScore}%.${off} ${analysis?.todaysWorkout ? `My workout today is ${analysis.todaysWorkout.name}. Any advice?` : 'What should I focus on today?'}`;
+      handleDismiss();
+      onChatNavigate?.(msg);
+      return;
+    }
     const msg = analysis?.todaysWorkout
       ? `I just completed my morning check-in. I'm feeling ${feeling} and slept ${sleepQuality}. My workout today is ${analysis.todaysWorkout.name}. Any advice?`
       : `I just completed my morning check-in. I'm feeling ${feeling} and slept ${sleepQuality}. What should I focus on today?`;
@@ -200,8 +236,72 @@ export default function DailyMorningModal({
             </>
           ) : step === 1 ? (
             <>
-              {/* Wellness data (intervals.icu) — shown instead of sleep picker */}
-              {wellness && (
+              {/* WHOOP — recovery source: shown instead of every question */}
+              {isWhoop && wellness && (
+                <View style={styles.wellnessCard}>
+                  <Text style={styles.wellnessTitle}>Recovery</Text>
+                  <View style={{ alignItems: 'center', marginBottom: 10 }}>
+                    <Text style={{ fontSize: 44, fontWeight: '800', color: recoveryColor(wellness.readinessScore!) }}>
+                      {wellness.readinessScore}%
+                    </Text>
+                    {wellness.recoveryCalibrating ? (
+                      <Text style={styles.wellnessLabel}>WHOOP is still calibrating — low confidence</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.wellnessGrid}>
+                    {wellness.hrv != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>HRV</Text>
+                        <Text style={styles.wellnessValue}>{wellness.hrv}ms</Text>
+                      </View>
+                    )}
+                    {wellness.rhr != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Resting HR</Text>
+                        <Text style={styles.wellnessValue}>{wellness.rhr} bpm</Text>
+                      </View>
+                    )}
+                    {wellness.sleepSeconds != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Sleep</Text>
+                        <Text style={styles.wellnessValue}>
+                          {hm(wellness.sleepSeconds)}
+                          {wellness.sleepNeedSeconds ? ` / ${hm(wellness.sleepNeedSeconds)}` : ''}
+                        </Text>
+                      </View>
+                    )}
+                    {wellness.sleepScore != null && (
+                      <View style={styles.wellnessStat}>
+                        <Text style={styles.wellnessLabel}>Sleep perf.</Text>
+                        <Text style={styles.wellnessValue}>{wellness.sleepScore}%</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Text style={styles.wellnessSource}>Data from WHOOP</Text>
+                </View>
+              )}
+
+              {isWhoop && (
+                <>
+                  <Text style={styles.question}>Anything off today? (optional)</Text>
+                  <Text style={[styles.wellnessLabel, { marginBottom: 8 }]}>Things your WHOOP can't see.</Text>
+                  <View style={styles.optionsRow}>
+                    {OFF_OPTIONS.map(opt => (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.option, offFlags.includes(opt.value) && styles.optionSelected]}
+                        onPress={() => toggleOff(opt.value)}
+                      >
+                        <Text style={styles.optionEmoji}>{opt.emoji}</Text>
+                        <Text style={styles.optionLabel}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </>
+              )}
+
+              {/* Wellness data (intervals.icu / Apple Health) — shown instead of sleep picker */}
+              {wellness && !isWhoop && (
                 <View style={styles.wellnessCard}>
                   <Text style={styles.wellnessTitle}>🌙 Sleep & Recovery</Text>
                   <View style={styles.wellnessGrid}>
@@ -249,7 +349,7 @@ export default function DailyMorningModal({
                   brought RHR/HRV (e.g. a Garmin user whose watch doesn't
                   write sleep to Apple Health), we still ask the question
                   manually. */}
-              {(!wellness || wellness.sleepSeconds == null) && (
+              {!isWhoop && (!wellness || wellness.sleepSeconds == null) && (
                 <>
                   <Text style={styles.question}>How did you sleep?</Text>
                   <View style={styles.optionsRow}>
@@ -267,8 +367,8 @@ export default function DailyMorningModal({
                 </>
               )}
 
-              <Text style={styles.question}>How are you feeling?</Text>
-              <View style={styles.optionsRow}>
+              {!isWhoop && <Text style={styles.question}>How are you feeling?</Text>}
+              {!isWhoop && <View style={styles.optionsRow}>
                 {FEELING_OPTIONS.map(opt => (
                   <TouchableOpacity
                     key={opt.value}
@@ -279,7 +379,7 @@ export default function DailyMorningModal({
                     <Text style={styles.optionLabel}>{opt.label}</Text>
                   </TouchableOpacity>
                 ))}
-              </View>
+              </View>}
 
               <Text style={styles.question}>Any notes? (optional)</Text>
               <TextInput
@@ -299,7 +399,7 @@ export default function DailyMorningModal({
 
               {(() => {
                 const sleepPickerVisible = !wellness || wellness.sleepSeconds == null;
-                const disabled = (sleepPickerVisible && !sleepQuality) || !feeling || saving;
+                const disabled = isWhoop ? saving : ((sleepPickerVisible && !sleepQuality) || !feeling || saving);
                 return (
                   <TouchableOpacity
                     style={[styles.btn, disabled && styles.btnDisabled]}

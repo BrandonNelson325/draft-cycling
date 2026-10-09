@@ -3,6 +3,10 @@ import { AuthRequest } from '../middleware/auth';
 import { intervalsIcuService } from '../services/intervalsIcuService';
 import { wahooService } from '../services/wahooService';
 import { supabaseAdmin } from '../utils/supabase';
+import { whoopService } from '../services/whoopService';
+import { verifyWhoopSignature } from '../utils/whoopMapping';
+import { logger } from '../utils/logger';
+import { canWriteWellness } from '../utils/wellnessSource';
 
 /**
  * Intervals.icu Integration Controllers
@@ -455,6 +459,15 @@ export const pushAppleHealthWellness = async (req: AuthRequest, res: Response): 
       return;
     }
 
+    // Never overwrite a higher-priority source (WHOOP also writes to Apple
+    // Health — without this the same night would replace Whoop's recovery).
+    const { data: existingDay } = await supabaseAdmin
+      .from('daily_metrics').select('wellness_source').eq('athlete_id', req.user.id).eq('date', date).maybeSingle();
+    if (!canWriteWellness(existingDay?.wellness_source, 'apple_health')) {
+      res.json({ success: true, skipped: 'higher-priority wellness source (whoop) owns this day' });
+      return;
+    }
+
     const payload: Record<string, any> = {
       athlete_id: req.user.id,
       date,
@@ -533,4 +546,97 @@ export const pushAppleHealthWellness = async (req: AuthRequest, res: Response): 
     console.error('Error pushing Apple Health wellness:', error);
     res.status(500).json({ error: 'Failed to save Apple Health wellness' });
   }
+};
+
+/**
+ * WHOOP Integration Controllers — recovery source (see services/whoopService.ts)
+ */
+
+export const getWhoopAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const authUrl = await whoopService.getAuthUrl(req.user.id, req.query.mobile === 'true');
+    res.json({ authUrl });
+  } catch (error: any) {
+    logger.error('Error generating Whoop auth URL:', error);
+    res.status(500).json({ error: 'Failed to generate authorization URL' });
+  }
+};
+
+export const handleWhoopCallback = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { code, state, error: oauthError } = req.query;
+  let mobile = false;
+  try {
+    if (oauthError || typeof code !== 'string' || typeof state !== 'string') {
+      throw new Error(`Whoop authorization not completed: ${oauthError || 'missing code/state'}`);
+    }
+    ({ mobile } = await whoopService.handleCallback(code, state));
+    if (mobile) res.redirect('cyclingcoach://whoop/callback?status=connected');
+    else res.redirect(`${process.env.FRONTEND_URL}/settings?whoop=connected`);
+  } catch (error: any) {
+    logger.error('Whoop callback error:', error.response?.data || error.message);
+    // The state lookup failed or never happened — fall back on the stored flag if we can.
+    if (typeof state === 'string') {
+      const { data } = await supabaseAdmin.from('athletes').select('whoop_oauth_mobile').eq('whoop_oauth_state', state).single();
+      mobile = !!data?.whoop_oauth_mobile;
+    }
+    if (mobile) res.redirect('cyclingcoach://whoop/callback?status=error');
+    else res.redirect(`${process.env.FRONTEND_URL}/settings?whoop=error`);
+  }
+};
+
+export const getWhoopStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const { data: a } = await supabaseAdmin
+      .from('athletes').select('whoop_access_token, whoop_last_sync_at, whoop_user_id').eq('id', req.user.id).single();
+    res.json({ connected: !!a?.whoop_access_token, last_sync_at: a?.whoop_last_sync_at ?? null, user_id: a?.whoop_user_id ?? null });
+  } catch (error: any) {
+    logger.error('Error getting Whoop status:', error);
+    res.status(500).json({ error: 'Failed to get integration status' });
+  }
+};
+
+export const syncWhoop = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const days = Math.min(Math.max(Number(req.body?.days) || 2, 1), 60);
+    const written = await whoopService.syncDays(req.user.id, days);
+    res.json({ success: true, days_written: written.length });
+  } catch (error: any) {
+    logger.error('Error syncing Whoop:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to sync Whoop' });
+  }
+};
+
+export const disconnectWhoop = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    await whoopService.disconnect(req.user.id);
+    res.json({ success: true, message: 'Whoop disconnected' });
+  } catch (error: any) {
+    logger.error('Error disconnecting Whoop:', error);
+    res.status(500).json({ error: 'Failed to disconnect Whoop' });
+  }
+};
+
+/**
+ * Whoop webhook. Verifies X-WHOOP-Signature over the RAW body, answers within
+ * Whoop's 1-second budget, then processes asynchronously (Whoop retries 5×
+ * over ~1h on non-2xx, so a slow sync must never block the response).
+ */
+export const whoopWebhook = async (req: AuthRequest, res: Response): Promise<void> => {
+  const raw: Buffer | undefined = (req as any).rawBody;
+  const ok = !!raw && verifyWhoopSignature(
+    raw,
+    req.header('X-WHOOP-Signature-Timestamp') ?? undefined,
+    req.header('X-WHOOP-Signature') ?? undefined,
+    process.env.WHOOP_CLIENT_SECRET || ''
+  );
+  if (!ok) { res.status(401).json({ error: 'Invalid signature' }); return; }
+  res.status(204).end();
+  let event: any = null;
+  try { event = JSON.parse(raw!.toString('utf8')); } catch { return; }
+  void whoopService.handleWebhookEvent(event).catch((err) =>
+    logger.error('[Whoop] webhook processing failed:', err?.message || err));
 };

@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { calendarService } from './calendarService';
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
+import { whoopService } from './whoopService';
 
 async function getAthleteTz(athleteId: string): Promise<string> {
   const { data } = await supabaseAdmin
@@ -12,13 +13,20 @@ async function getAthleteTz(athleteId: string): Promise<string> {
 }
 
 export interface WellnessData {
-  source: 'intervals_icu' | 'apple_health' | 'manual';
+  source: 'whoop' | 'intervals_icu' | 'apple_health' | 'manual';
   hrv: number | null;
   rhr: number | null;
   sleepSeconds: number | null;
   sleepScore: number | null;
   readinessScore: number | null;
   syncedAt: string | null;
+  // WHOOP extras (null for other sources)
+  recoveryCalibrating?: boolean | null;
+  sleepNeedSeconds?: number | null;
+  sleepDebtSeconds?: number | null;
+  respiratoryRate?: number | null;
+  dayStrain?: number | null;
+  otherActivities?: { sport: string; minutes: number; strain: number | null }[] | null;
 }
 
 export interface DailyReadiness {
@@ -45,6 +53,10 @@ export const dailyReadinessService = {
   async getDailyReadiness(athleteId: string, localDate?: string): Promise<DailyReadiness> {
     const tz = await getAthleteTz(athleteId);
     const today = localDate || todayInTimezone(tz);
+
+    // WHOOP backup to webhooks: if connected and stale, pull today's data now
+    // so the morning card shows this morning's recovery.
+    await whoopService.ensureFresh(athleteId).catch(() => {});
 
     // Check if already checked in today
     const { data: todayMetrics } = await supabaseAdmin
@@ -77,7 +89,24 @@ export const dailyReadinessService = {
     // stored on daily_metrics (for context/charts/AI) but the modal asks the
     // subjective sleep + feel questions normally.
     let wellness: WellnessData | null = null;
-    if (
+    if (todayMetrics?.wellness_source === 'whoop') {
+      // WHOOP is always THE recovery source when connected — no opt-in toggle.
+      wellness = {
+        source: 'whoop',
+        hrv: todayMetrics.hrv ?? null,
+        rhr: todayMetrics.rhr ?? null,
+        sleepSeconds: todayMetrics.sleep_seconds ?? null,
+        sleepScore: todayMetrics.wellness_sleep_score ?? null,
+        readinessScore: todayMetrics.readiness_score ?? null,
+        syncedAt: todayMetrics.wellness_synced_at ?? null,
+        recoveryCalibrating: todayMetrics.recovery_calibrating ?? null,
+        sleepNeedSeconds: todayMetrics.sleep_need_seconds ?? null,
+        sleepDebtSeconds: todayMetrics.sleep_debt_seconds ?? null,
+        respiratoryRate: todayMetrics.respiratory_rate != null ? Number(todayMetrics.respiratory_rate) : null,
+        dayStrain: todayMetrics.day_strain != null ? Number(todayMetrics.day_strain) : null,
+        otherActivities: todayMetrics.other_activities ?? null,
+      };
+    } else if (
       todayMetrics?.wellness_source === 'intervals_icu' ||
       todayMetrics?.wellness_source === 'apple_health'
     ) {
@@ -120,12 +149,16 @@ export const dailyReadinessService = {
     const tz = await getAthleteTz(athleteId);
     const today = todayInTimezone(tz);
 
-    const { data: calendarEntry } = await supabaseAdmin
+    // calendar_entries uses scheduled_date (querying `date` always failed, so
+    // this never found today's workout). A day can also hold a rest marker.
+    const { data: entries } = await supabaseAdmin
       .from('calendar_entries')
       .select('*, workout:workouts(*)')
       .eq('athlete_id', athleteId)
-      .eq('date', today)
-      .single();
+      .eq('scheduled_date', today)
+      .not('workout_id', 'is', null)
+      .limit(1);
+    const calendarEntry = entries?.[0];
 
     if (!calendarEntry || !calendarEntry.workout) {
       return null;
@@ -205,8 +238,20 @@ export const dailyReadinessService = {
     let readinessScore = 7; // Default: normal readiness
     let reasoning = '';
 
+    // WHOOP: its recovery % is the physiological base (it already blends HRV,
+    // RHR, sleep and strain against the athlete's own baseline). Draft's load
+    // factors below still apply — they're about the TRAINING context Whoop
+    // can't see. Subjective sleep/feeling are skipped (not asked for Whoop users).
+    const whoopRecovery = metrics?.wellness_source === 'whoop' && typeof metrics?.readiness_score === 'number'
+      ? metrics.readiness_score as number : null;
+    if (whoopRecovery != null) {
+      readinessScore = 1 + (whoopRecovery / 100) * 9;
+      const band = whoopRecovery >= 67 ? 'green' : whoopRecovery >= 34 ? 'yellow' : 'red';
+      reasoning += `Whoop recovery ${whoopRecovery}% (${band})${metrics.recovery_calibrating ? ' — still calibrating' : ''}. `;
+    }
+
     // Factor 1: Sleep quality (if available)
-    if (metrics?.sleep_score) {
+    if (whoopRecovery == null && metrics?.sleep_score) {
       readinessScore += (metrics.sleep_score - 7) * 0.5; // Adjust +/- based on sleep
       if (metrics.sleep_score <= 3) {
         reasoning += 'Poor sleep last night. ';
@@ -216,7 +261,7 @@ export const dailyReadinessService = {
     }
 
     // Factor 2: Feeling (if available)
-    if (metrics?.feeling_score) {
+    if (whoopRecovery == null && metrics?.feeling_score) {
       readinessScore += (metrics.feeling_score - 7) * 0.5;
       if (metrics.feeling_score <= 3) {
         reasoning += 'Feeling tired today. ';
@@ -288,8 +333,10 @@ export const dailyReadinessService = {
     athleteId: string,
     data: {
       sleepQuality?: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
-      feeling: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
+      feeling?: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
       notes?: string;
+      /** WHOOP users' one optional tap: what Whoop can't see. */
+      offFlags?: string[];
     },
     localDate?: string
   ): Promise<void> {
@@ -301,7 +348,7 @@ export const dailyReadinessService = {
     const feelingScoreMap = { exhausted: 1, tired: 3, normal: 5, good: 7, energized: 10 };
 
     const sleep_score = data.sleepQuality ? sleepScoreMap[data.sleepQuality] : null;
-    const feeling_score = feelingScoreMap[data.feeling];
+    const feeling_score = data.feeling ? feelingScoreMap[data.feeling] : null;
 
     // Get recent activity for training load calculation
     const recentActivity = await this.getRecentActivity(athleteId);
@@ -312,13 +359,16 @@ export const dailyReadinessService = {
     const upsertPayload: Record<string, any> = {
       athlete_id: athleteId,
       date: today,
-      feeling: data.feeling,
-      feeling_score,
-      notes: data.notes || null,
+      notes: [data.offFlags?.length ? `Anything off: ${data.offFlags.join(', ')}` : '', data.notes || '']
+        .filter(Boolean).join(' — ') || null,
       check_in_completed: true,
       check_in_at: new Date().toISOString(),
       training_load_last_7_days: Math.round(recentActivity.last7DaysTSS),
     };
+    if (data.feeling) {
+      upsertPayload.feeling = data.feeling;
+      upsertPayload.feeling_score = feeling_score;
+    }
     if (data.sleepQuality) {
       upsertPayload.sleep_quality = data.sleepQuality;
       upsertPayload.sleep_score = sleep_score;

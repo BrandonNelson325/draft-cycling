@@ -22,6 +22,7 @@ import { useAuthStore } from '../stores/useAuthStore';
 import { authService } from '../services/authService';
 import { stravaService } from '../services/stravaService';
 import { wahooService } from '../services/wahooService';
+import { whoopService } from '../services/whoopService';
 import { intervalsIcuService } from '../services/intervalsIcuService';
 import { appleHealthService } from '../services/appleHealthService';
 import { subscriptionService } from '../services/subscriptionService';
@@ -90,6 +91,11 @@ export default function SettingsScreen({ navigation }: any) {
   const [stravaLoading, setStravaLoading] = useState(false);
   const hasStrava = !!user?.strava_athlete_id;
 
+  // WHOOP (recovery source)
+  const [whoopConnected, setWhoopConnected] = useState(false);
+  const [whoopLoading, setWhoopLoading] = useState(false);
+  const [whoopLastSync, setWhoopLastSync] = useState<string | null>(null);
+
   // Wahoo
   const [wahooConnected, setWahooConnected] = useState(false);
   const [wahooLoading, setWahooLoading] = useState(false);
@@ -108,6 +114,10 @@ export default function SettingsScreen({ navigation }: any) {
   const ahAvailable = appleHealthService.isAvailable();
 
   useEffect(() => {
+    whoopService.getStatus().then((status) => {
+      setWhoopConnected(status.connected);
+      setWhoopLastSync(status.last_sync_at);
+    }).catch(() => {});
     wahooService.getStatus().then((status) => {
       setWahooConnected(status.connected);
       setWahooAutoSync(status.auto_sync);
@@ -303,6 +313,63 @@ export default function SettingsScreen({ navigation }: any) {
     } finally {
       setStravaLoading(false);
     }
+  };
+
+  const handleConnectWhoop = async () => {
+    setWhoopLoading(true);
+    try {
+      const authUrl = await whoopService.getAuthUrl();
+      const redirectUri = __DEV__
+        ? 'exp://localhost:8081/--/whoop/callback'
+        : 'cyclingcoach://whoop/callback';
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+      if (result.type === 'success') {
+        const params = new URLSearchParams(result.url.split('?')[1] || '');
+        if (params.get('status') === 'connected') {
+          setWhoopConnected(true);
+          setWhoopLastSync(new Date().toISOString());
+          Alert.alert('Connected', 'WHOOP connected! Your recovery, sleep and strain now guide your coach. Pulling your last 60 days…');
+        } else if (params.get('status') === 'error') {
+          Alert.alert('Error', 'WHOOP connection failed. Please try again.');
+        }
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to connect WHOOP.');
+    } finally {
+      setWhoopLoading(false);
+    }
+  };
+
+  const handleSyncWhoop = async () => {
+    setWhoopLoading(true);
+    try {
+      await whoopService.sync(7);
+      setWhoopLastSync(new Date().toISOString());
+      Alert.alert('Synced', 'Latest WHOOP data pulled.');
+    } catch {
+      Alert.alert('Error', 'Failed to sync WHOOP.');
+    } finally {
+      setWhoopLoading(false);
+    }
+  };
+
+  const handleDisconnectWhoop = () => {
+    Alert.alert('Disconnect WHOOP', 'Your coach will stop using WHOOP recovery. Past data is kept.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Disconnect',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await whoopService.disconnect();
+            setWhoopConnected(false);
+            setWhoopLastSync(null);
+          } catch {
+            Alert.alert('Error', 'Failed to disconnect WHOOP.');
+          }
+        },
+      },
+    ]);
   };
 
   const handleConnectWahoo = async () => {
@@ -935,6 +1002,58 @@ export default function SettingsScreen({ navigation }: any) {
             <Text style={styles.btnText}>Connect Garmin</Text>
           </TouchableOpacity>
           <Text style={{ color: '#64748b', fontSize: 11, marginTop: 6, lineHeight: 16 }}>Coming soon — connect to Intervals.icu above to sync workouts to your Garmin device now.</Text>
+        </View>
+
+        {/* WHOOP Section — recovery source */}
+        <View style={styles.stravaTitleRow}>
+          <View style={{ width: 18, height: 18, borderRadius: 4, backgroundColor: '#000', borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: '#fff', fontSize: 8, fontWeight: '800' }}>WH</Text>
+          </View>
+          <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 0 }]}>WHOOP</Text>
+        </View>
+        <View style={styles.section}>
+          {whoopConnected ? (
+            <>
+              <View style={styles.stravaConnected}>
+                <View style={styles.stravaStatus}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.stravaText}>Connected</Text>
+                </View>
+              </View>
+              <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 4 }}>
+                WHOOP is your recovery source: recovery, HRV, sleep and strain guide your coach's daily suggestions. Your coach always suggests — you decide.
+                {whoopLastSync ? `\nLast sync: ${new Date(whoopLastSync).toLocaleString()}` : ''}
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 8, flexWrap: 'wrap' }}>
+                <TouchableOpacity
+                  style={[styles.stravaBtn, whoopLoading && styles.btnDisabled]}
+                  onPress={handleSyncWhoop}
+                  disabled={whoopLoading}
+                >
+                  <Text style={styles.stravaBtnText}>{whoopLoading ? 'Syncing…' : 'Sync now'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.stravaBtn, { borderColor: '#ef4444' }]}
+                  onPress={handleDisconnectWhoop}
+                >
+                  <Text style={[styles.stravaBtnText, { color: '#ef4444' }]}>Disconnect</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 8 }}>
+                Use WHOOP's recovery, HRV, sleep and strain to guide your daily training.
+              </Text>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#111827', borderWidth: 1, borderColor: '#334155' }, whoopLoading && styles.btnDisabled]}
+                onPress={handleConnectWhoop}
+                disabled={whoopLoading}
+              >
+                <Text style={styles.btnText}>{whoopLoading ? 'Connecting…' : 'Connect WHOOP'}</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
 
         {/* Apple Health Section (iOS only) */}

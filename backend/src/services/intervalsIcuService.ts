@@ -2,6 +2,7 @@ import axios from 'axios';
 import { supabaseAdmin } from '../utils/supabase';
 import { zwoGenerator } from './fileGenerators/zwoGenerator';
 import { logger } from '../utils/logger';
+import { canWriteWellness } from '../utils/wellnessSource';
 
 const INTERVALS_ICU_BASE_URL = 'https://intervals.icu/api/v1';
 const INTERVALS_ICU_OAUTH_AUTHORIZE_URL = 'https://intervals.icu/oauth';
@@ -399,6 +400,11 @@ class IntervalsIcuService {
       if (hrv === null && rhr === null && sleepSecs === null && sleepScore === null && readiness === null) {
         return false;
       }
+
+      // Never overwrite a higher-priority source (e.g. WHOOP) for this day.
+      const { data: existing } = await supabaseAdmin
+        .from('daily_metrics').select('wellness_source').eq('athlete_id', athleteId).eq('date', dateStr).maybeSingle();
+      if (!canWriteWellness(existing?.wellness_source, 'intervals_icu')) return false;
 
       const { error } = await supabaseAdmin.from('daily_metrics').upsert(
         {

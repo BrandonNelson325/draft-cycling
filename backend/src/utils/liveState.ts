@@ -24,6 +24,8 @@ export interface LiveStateInput {
   load?: { ctl?: number; atl?: number; tsb?: number; status?: string } | null;
   ridesToday: { name: string; moving_time_seconds?: number | null; tss?: number | null }[];
   checkIn?: string | null; // short readiness summary, if any
+  /** Wearable recovery line (WHOOP) — already formatted, starts with "- ". */
+  wearable?: string | null;
   lastCoachReplyAt?: string | null;
   changes: string[]; // human-readable changes since lastCoachReplyAt
 }
@@ -65,6 +67,7 @@ export function formatLiveState(s: LiveStateInput): string {
     ? s.ridesToday.map((r) => `"${r.name}"${r.moving_time_seconds ? ` ${Math.round(r.moving_time_seconds / 60)}min` : ''}${r.tss ? ` TSS ${Math.round(r.tss)}` : ''}`).join('; ')
     : 'nothing yet'}.`);
   if (s.checkIn) lines.push(`- Today's check-in: ${s.checkIn}.`);
+  if (s.wearable) lines.push(s.wearable);
 
   // What changed while the coach wasn't looking
   if (s.changes.length) {

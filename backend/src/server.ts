@@ -102,7 +102,7 @@ const authLimiter = rateLimit({
 app.use('/api/auth/', authLimiter);
 
 // Skip rate limiting for critical one-time actions that must never fail
-const skipRateLimitPaths = ['/api/subscription/redeem', '/api/subscription/checkout', '/api/subscription/status', '/api/subscription/mobile-callback', '/api/beta/activate', '/api/subscription/webhook', '/api/auth/profile', '/api/auth/refresh'];
+const skipRateLimitPaths = ['/api/subscription/redeem', '/api/subscription/checkout', '/api/subscription/status', '/api/subscription/mobile-callback', '/api/beta/activate', '/api/subscription/webhook', '/api/auth/profile', '/api/auth/refresh', '/api/integrations/whoop/webhook'];
 app.use('/api/', (req: any, res: any, next: any) => {
   if (skipRateLimitPaths.some(p => req.path === p || req.originalUrl?.includes(p))) {
     return next();
@@ -112,6 +112,12 @@ app.use('/api/', (req: any, res: any, next: any) => {
 
 // Stripe webhook needs raw body for signature verification — must come before CORS/json parser
 app.post('/api/subscription/webhook', express.raw({ type: 'application/json' }), (req, _res, next) => {
+  (req as any).rawBody = req.body;
+  next();
+});
+
+// Whoop webhook: raw body for HMAC signature verification (same pattern as Stripe).
+app.post('/api/integrations/whoop/webhook', express.raw({ type: '*/*' }), (req, _res, next) => {
   (req as any).rawBody = req.body;
   next();
 });

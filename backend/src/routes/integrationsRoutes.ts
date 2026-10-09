@@ -22,6 +22,15 @@ router.post('/wahoo/sync', authenticateJWT, integrationsController.syncWorkoutTo
 router.post('/wahoo/settings', authenticateJWT, integrationsController.updateWahooSettings);
 router.delete('/wahoo', authenticateJWT, integrationsController.disconnectWahoo);
 
+// WHOOP — recovery source. The webhook is unauthenticated (Whoop calls it) and
+// verified by HMAC signature over the raw body (see server.ts raw parser).
+router.get('/whoop/auth-url', authenticateJWT, integrationsController.getWhoopAuthUrl);
+router.get('/whoop/callback', integrationsController.handleWhoopCallback);
+router.get('/whoop/status', authenticateJWT, integrationsController.getWhoopStatus);
+router.post('/whoop/sync', authenticateJWT, integrationsController.syncWhoop);
+router.delete('/whoop', authenticateJWT, integrationsController.disconnectWhoop);
+router.post('/whoop/webhook', integrationsController.whoopWebhook);
+
 // Apple Health (HealthKit) — mobile-only, no OAuth (HealthKit is on-device)
 router.get('/apple-health/status', authenticateJWT, integrationsController.getAppleHealthStatus);
 router.post('/apple-health/settings', authenticateJWT, integrationsController.updateAppleHealthSettings);
