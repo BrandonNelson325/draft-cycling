@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
+import { crossTrainingService } from './crossTrainingService';
 
 interface TrainingLoad {
   ctl: number; // Chronic Training Load (42-day exponential moving average)
@@ -102,24 +103,10 @@ export const trainingLoadService = {
       const startDate = new Date(date);
       startDate.setDate(startDate.getDate() - lookbackDays);
 
-      const { data: activities } = await supabaseAdmin
-        .from('strava_activities')
-        .select('start_date, tss')
-        .eq('athlete_id', athleteId)
-        .gte('start_date', startDate.toISOString())
-        .lte('start_date', date.toISOString())
-        .not('tss', 'is', null)
-        .order('start_date', { ascending: true });
-
-      if (!activities || activities.length === 0) {
+      // Rides (TSS 1:1) + cross-training (fitness_load → CTL, fatigue_load → ATL).
+      const dailyLoad = await crossTrainingService.dailyLoad(athleteId, startDate.toISOString(), date.toISOString());
+      if (dailyLoad.size === 0) {
         return null;
-      }
-
-      // Build Map<dayString, summedTSS> to aggregate multiple activities per day
-      const dailyTSS = new Map<string, number>();
-      for (const activity of activities) {
-        const dayKey = new Date(activity.start_date).toISOString().split('T')[0];
-        dailyTSS.set(dayKey, (dailyTSS.get(dayKey) || 0) + (activity.tss || 0));
       }
 
       // Iterate every calendar day from start to target, applying decay on rest days
@@ -136,11 +123,12 @@ export const trainingLoadService = {
 
       while (current <= target) {
         const dayKey = current.toISOString().split('T')[0];
-        const tss = dailyTSS.get(dayKey) || 0;
+        const day = dailyLoad.get(dayKey);
 
-        // Standard EMA: EMA_today = EMA_yesterday + (dailyTSS - EMA_yesterday) / timeConstant
-        ctl = ctl + (tss - ctl) / ctlTimeConstant;
-        atl = atl + (tss - atl) / atlTimeConstant;
+        // Standard EMA: EMA_today = EMA_yesterday + (load - EMA_yesterday) / timeConstant.
+        // Fitness and fatigue inputs differ only on cross-training days.
+        ctl = ctl + ((day?.fitness || 0) - ctl) / ctlTimeConstant;
+        atl = atl + ((day?.fatigue || 0) - atl) / atlTimeConstant;
 
         current.setDate(current.getDate() + 1);
       }

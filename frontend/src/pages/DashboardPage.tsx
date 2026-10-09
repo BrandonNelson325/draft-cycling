@@ -5,6 +5,8 @@ import { WeeklyVolumeChart } from '../components/dashboard/WeeklyVolumeChart';
 import { PowerCurveChart } from '../components/dashboard/PowerCurveChart';
 import { CoachCard } from '../components/dashboard/CoachCard';
 import { FitnessTrendChart } from '../components/dashboard/FitnessTrendChart';
+import { WhoopRecoveryCard } from '../components/dashboard/WhoopRecoveryCard';
+import { OtherTrainingCard } from '../components/dashboard/OtherTrainingCard';
 
 export function DashboardPage() {
 
@@ -15,6 +17,9 @@ export function DashboardPage() {
         <CoachCard />
         <MetricsCard />
       </div>
+
+      {/* WHOOP recovery — renders only for Whoop users */}
+      <WhoopRecoveryCard />
 
       {/* Fitness & Fatigue trend — full width */}
       <FitnessTrendChart />
@@ -30,6 +35,9 @@ export function DashboardPage() {
         <FTPEstimateCard />
         <RecentActivities />
       </div>
+
+      {/* Non-cycling training — renders only when there is some */}
+      <OtherTrainingCard />
     </div>
   );
 }

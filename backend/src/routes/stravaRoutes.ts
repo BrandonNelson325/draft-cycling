@@ -24,6 +24,7 @@ router.post('/connect', authenticateJWT, checkSubscription, stravaController.con
 router.post('/disconnect', authenticateJWT, checkSubscription, stravaController.disconnectStrava);
 router.post('/sync', authenticateJWT, checkSubscription, stravaController.syncActivities);
 router.get('/activities', authenticateJWT, checkSubscription, stravaController.getActivities);
+router.get('/cross-training', authenticateJWT, checkSubscription, stravaController.getCrossTraining);
 router.get('/status', authenticateJWT, checkSubscription, stravaController.getConnectionStatus);
 
 export default router;

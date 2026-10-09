@@ -2,6 +2,7 @@ import { supabaseAdmin } from '../utils/supabase';
 import { calendarService } from './calendarService';
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { whoopService } from './whoopService';
+import { crossTrainingService } from './crossTrainingService';
 
 async function getAthleteTz(athleteId: string): Promise<string> {
   const { data } = await supabaseAdmin
@@ -193,7 +194,10 @@ export const dailyReadinessService = {
       .order('start_date', { ascending: false });
 
     const rides = activities || [];
-    const totalTSS = rides.reduce((sum, ride) => sum + (ride.tss || 0), 0);
+    // Non-cycling sessions add FATIGUE (leg-weighted) — a 10-mile run counts.
+    const other = await crossTrainingService.list(athleteId, sevenDaysAgoUTC.start);
+    const totalTSS = rides.reduce((sum, ride) => sum + (ride.tss || 0), 0)
+      + other.reduce((sum: number, o: any) => sum + (Number(o.fatigue_load) || 0), 0);
 
     // Get yesterday's workout — check if ride's UTC timestamp falls within yesterday's local day
     const yesterday = new Date(todayStr + 'T12:00:00');

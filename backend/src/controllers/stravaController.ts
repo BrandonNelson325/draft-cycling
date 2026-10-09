@@ -9,6 +9,7 @@ import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { utcToLocalDate } from '../utils/timezone';
+import { crossTrainingService } from '../services/crossTrainingService';
 
 export const getAuthUrl = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
@@ -311,5 +312,43 @@ export const getConnectionStatus = async (req: AuthRequest, res: Response): Prom
   } catch (error) {
     logger.error('Get connection status error:', error);
     res.status(500).json({ error: 'Failed to get connection status' });
+  }
+};
+
+/**
+ * Non-cycling activities (runs, gym, soccer…) with their rated effect on
+ * cycling — powers the "Other training" dashboard card.
+ */
+export const getCrossTraining = async (req: AuthRequest, res: Response): Promise<void> => {
+  try {
+    if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
+    const days = Math.min(Math.max(Number(req.query.days) || 14, 1), 90);
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const rows = await crossTrainingService.list(req.user.id, since);
+    const weekAgo = Date.now() - 7 * 86400000;
+    const last7FatigueLoad = Math.round(rows
+      .filter((r: any) => new Date(r.start_date).getTime() >= weekAgo)
+      .reduce((s: number, r: any) => s + (Number(r.fatigue_load) || 0), 0));
+    res.json({
+      activities: rows.map((r: any) => ({
+        id: r.strava_activity_id,
+        name: r.name,
+        sport_type: r.sport_type,
+        category: r.category,
+        label: crossTrainingService.describe(r.category).label,
+        effect: crossTrainingService.describe(r.category).note,
+        start_date: r.start_date,
+        duration_min: r.moving_time_seconds ? Math.round(r.moving_time_seconds / 60) : null,
+        distance_meters: r.distance_meters,
+        avg_hr: r.average_heartrate != null ? Math.round(Number(r.average_heartrate)) : null,
+        est_load: r.est_tss != null ? Math.round(Number(r.est_tss)) : null,
+        fatigue_load: r.fatigue_load != null ? Math.round(Number(r.fatigue_load)) : null,
+        load_method: r.load_method,
+      })),
+      last7_fatigue_load: last7FatigueLoad,
+    });
+  } catch (error: any) {
+    logger.error('Error getting cross-training:', error);
+    res.status(500).json({ error: 'Failed to get other training' });
   }
 };

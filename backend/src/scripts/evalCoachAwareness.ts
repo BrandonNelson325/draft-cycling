@@ -16,6 +16,7 @@
 import { aiCoachService } from '../services/aiCoachService';
 import { formatLiveState } from '../utils/liveState';
 import { summarizeWhoop, WellnessDay } from '../utils/whoopCoaching';
+import { describeCrossTraining, CrossTrainingRow } from '../utils/crossTrainingCoaching';
 import { findStateContradictions, describeFacts, StateFacts } from '../utils/stateGuard';
 import { anthropic, SONNET } from '../utils/anthropic';
 import { AI_TOOLS } from '../services/aiTools';
@@ -51,6 +52,8 @@ interface Scenario {
   mustNot?: RegExp[];
   /** WHOOP connected: recent daily wellness, newest first (today included if scored). */
   whoop?: WellnessDay[];
+  /** Non-cycling Strava activities (last 14 days). */
+  cross?: CrossTrainingRow[];
 }
 
 const W = (date: string, rec: number, extra: Partial<WellnessDay> = {}): WellnessDay =>
@@ -140,7 +143,7 @@ const SCENARIOS: Scenario[] = [
     ridesToday: [],
     load: { ctl: 64, atl: 78, tsb: -14, status: 'productive' },
     whoop: [W(TODAY, 24, { sleep_seconds: 6 * 3600, sleep_need_seconds: 8.2 * 3600 }), W('2026-10-07', 29), W('2026-10-06', 71), W('2026-10-05', 74), W('2026-10-04', 78)],
-    expect: 'Strongly RECOMMEND backing off (Z2/rest or a much-reduced session) citing WHOOP red 24% and two reds in a row (and short sleep); present it as a suggestion the athlete decides on — it must NOT claim to have already changed the calendar.',
+    expect: 'Strongly RECOMMEND backing off (Z2/rest or a much-reduced session) citing WHOOP red 24% and two reds in a row (and short sleep). It is a suggestion the athlete decides on: proposing a concrete alternative and asking for their OK is GOOD; it must NOT claim to have already changed the calendar, and should leave room for the athlete to override.',
     mustNot: [NO_AUTO_CHANGE],
   },
   {
@@ -192,6 +195,32 @@ const SCENARIOS: Scenario[] = [
     mustNot: [/\b(?:today'?s )?recovery (?:is |of |at )?\d{1,3}\s?%/i],
   },
   {
+    name: 'CROSS-TRAINING: 10-mile run last night, VO2 today',
+    history: [],
+    ask: 'Ready for my VO2 workout today?',
+    plans: [PLAN],
+    upcoming: [wk(TODAY, 'VO2max Intervals · 5 × 4 min @ 110%', 'vo2max', 75)],
+    ridesToday: [],
+    load: { ctl: 60, atl: 66, tsb: -6, status: 'productive' },
+    cross: [{ name: 'Evening 10 miler', sport_type: 'Run', category: 'run', start_date: '2026-10-08T00:30:00Z',
+      moving_time_seconds: 80 * 60, distance_meters: 16093, average_heartrate: 156, est_tss: 104, fatigue_load: 130, load_method: 'hr' }],
+    expect: "Account for last night's 10-mile run (80 min, fatigue load ~130, leg-heavy) — legs will be heavier than HR suggests; suggest adjusting today (cap/shorten the VO2, or swap with an easier day) as a recommendation, not an order.",
+    mustNot: [NO_AUTO_CHANGE],
+  },
+  {
+    name: 'CROSS-TRAINING: easy swim yesterday, threshold today',
+    history: [],
+    ask: 'Should I do my threshold workout today?',
+    plans: [PLAN],
+    upcoming: [wk(TODAY, 'Threshold Intervals · 3 × 12 min @ 93%', 'threshold', 90)],
+    ridesToday: [],
+    load: { ctl: 60, atl: 52, tsb: 8, status: 'fresh' },
+    cross: [{ name: 'Easy swim', sport_type: 'Swim', category: 'swim', start_date: '2026-10-07T13:00:00Z',
+      moving_time_seconds: 40 * 60, distance_meters: 1800, average_heartrate: 118, est_tss: 22, fatigue_load: 11, load_method: 'hr' }],
+    expect: "Say yes — do the threshold session. The easy swim is light on cycling legs and form is fresh; do NOT over-react to the swim or suggest cutting the session because of it.",
+    mustNot: [NO_AUTO_CHANGE],
+  },
+  {
     name: 'Has a plan, asks to build another',
     history: [],
     ask: 'Can you build me a plan for a gran fondo in March?',
@@ -210,7 +239,7 @@ function buildContext(s: Scenario): any {
     trainingStatus: { load: { ctl: s.load.ctl, atl: s.load.atl, tsb: s.load.tsb }, status: { status: s.load.status, description: '', recommendation: '' } },
     upcomingWorkouts: s.upcoming, preferences: {}, healthData: null, dailyCheckIn: s.checkIn ?? null, rpeHistory: [],
     fatigueProfile: null, planDeviations: [], activePlans: s.plans,
-    wellnessHistory: s.whoop || [], whoopConnected: !!s.whoop,
+    wellnessHistory: s.whoop || [], whoopConnected: !!s.whoop, crossTraining: s.cross || [],
     ...(s.whoop?.find((d) => d.date === TODAY) ? { dailyCheckIn: s.whoop.find((d) => d.date === TODAY) } : {}),
   };
 }
@@ -238,7 +267,8 @@ async function runScenario(s: Scenario) {
     load: s.load, ridesToday: s.ridesToday,
     checkIn: s.checkIn ? `sleep ${s.checkIn.sleep_quality}, feeling ${s.checkIn.feeling}${s.checkIn.notes ? `, notes: "${s.checkIn.notes}"` : ''}` : null,
     lastCoachReplyAt: s.history.length ? 'Oct 7, 5:24 PM' : null, changes: s.changes || [],
-    wearable: s.whoop ? summarizeWhoop(TODAY, s.whoop).line : null,
+    wearable: s.whoop ? summarizeWhoop(TODAY, s.whoop, (s.cross || []).map((c) => c.start_date)).line : null,
+    otherTraining: (s.cross || []).map((c) => describeCrossTraining(c, (iso) => new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date(iso)), 'imperial')),
   });
   const messages: any[] = [...s.history, { role: 'user', content: `${live}\n\n${s.ask}` }];
   const toolsUsed: string[] = [];
@@ -279,7 +309,7 @@ async function runScenario(s: Scenario) {
     model: SONNET, max_tokens: 300,
     messages: [{ role: 'user', content:
 `You grade an AI cycling coach's reply for STATE AWARENESS. Be strict but fair.
-TRUE CURRENT STATE: ${describeFacts(facts)}. Plans: ${s.plans.map((p) => p.goal_event).join(', ') || 'none'}. Calendar: ${s.upcoming.map((e) => `${e.scheduled_date} ${e.workouts?.name}`).join('; ') || 'empty'}. Rides today: ${s.ridesToday.map((r) => `${r.name} (${r.moving_time_seconds / 60}min, TSS ${r.tss})`).join('; ') || 'none'}. Load: CTL ${s.load.ctl}, ATL ${s.load.atl}, TSB ${s.load.tsb}.${s.whoop ? ` WHOOP: ${summarizeWhoop(TODAY, s.whoop).line.replace(/^- /, '')}` : ''} Check-in: ${s.checkIn ? JSON.stringify(s.checkIn) : 'none'}. Changes the athlete made since the coach's last reply: ${(s.changes || []).join('; ') || 'none'}.
+TRUE CURRENT STATE: ${describeFacts(facts)}. Plans: ${s.plans.map((p) => p.goal_event).join(', ') || 'none'}. Calendar: ${s.upcoming.map((e) => `${e.scheduled_date} ${e.workouts?.name}`).join('; ') || 'empty'}. Rides today: ${s.ridesToday.map((r) => `${r.name} (${r.moving_time_seconds / 60}min, TSS ${r.tss})`).join('; ') || 'none'}. Load: CTL ${s.load.ctl}, ATL ${s.load.atl}, TSB ${s.load.tsb}.${s.whoop ? ` WHOOP: ${summarizeWhoop(TODAY, s.whoop).line.replace(/^- /, '')}` : ''} Check-in: ${s.checkIn ? JSON.stringify(s.checkIn) : 'none'}. Non-cycling training: ${(s.cross || []).map((c) => `${c.sport_type} ${Math.round((c.moving_time_seconds || 0) / 60)}min fatigue ${c.fatigue_load}`).join('; ') || 'none'}. Changes the athlete made since the coach's last reply: ${(s.changes || []).join('; ') || 'none'}.
 ATHLETE ASKED: ${s.ask}
 A COACH WHO TRULY KNEW THE STATE WOULD: ${s.expect}
 COACH REPLIED: """${final}"""

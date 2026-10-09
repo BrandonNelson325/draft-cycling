@@ -11,6 +11,8 @@ import { clearSuggestionCache } from '../services/dailyAnalysisService';
 import { activityMatchingService } from '../services/activityMatchingService';
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
+import { crossTrainingService } from '../services/crossTrainingService';
+import { isRideType } from '../utils/activityLoad';
 
 // Webhook verification token (should be in env)
 const WEBHOOK_VERIFY_TOKEN = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN || 'cycling_coach_webhook_2026';
@@ -116,23 +118,23 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
     const accessToken = await stravaService.ensureValidToken(athleteId);
     const activity: any = await stravaClient.getActivity(accessToken, stravaActivityId);
 
-    // Only process rides
-    if (activity.sport_type !== 'Ride' && activity.type !== 'Ride' && activity.type !== 'VirtualRide') {
-      logger.debug(`Skipping non-ride activity: ${activity.type}`);
+    // Non-cycling (run, gym, swim, soccer…) → rated for its effect on cycling
+    // and stored as cross-training; the coach and fitness/fatigue use it.
+    if (!isRideType(activity.sport_type, activity.type)) {
+      await crossTrainingService.store(athleteId, activity);
+      clearSuggestionCache(athleteId);
+      logger.debug(`Stored cross-training activity: ${activity.sport_type || activity.type}`);
       return;
     }
 
-    // Calculate TSS with Normalized Power if available
-    let tss = null;
+    // Power TSS when available, else HR/duration estimate (no-power rides count too).
     const { data: athleteData } = await supabaseAdmin
       .from('athletes')
       .select('ftp')
       .eq('id', athleteId)
       .single();
     const ftp = athleteData?.ftp;
-    if (activity.average_watts && activity.moving_time && ftp) {
-      tss = calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts);
-    }
+    const { tss, source: tssSource } = await stravaService.rideTss(athleteId, activity, ftp);
 
     // Store activity
     await supabaseAdmin
@@ -151,6 +153,7 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
       });
 
     logger.debug(`Stored activity: ${stravaActivityId}`);
+    if (tssSource) await stravaService.markTssSource(stravaActivityId, tssSource);
 
     // Analyze power curve if has power data
     if (activity.device_watts || activity.average_watts) {
@@ -209,17 +212,19 @@ async function handleActivityUpdated(athleteId: string, stravaActivityId: number
     const accessToken = await stravaService.ensureValidToken(athleteId);
     const activity: any = await stravaClient.getActivity(accessToken, stravaActivityId);
 
-    // Recompute TSS with Normalized Power if available
-    let tss = null;
+    if (!isRideType(activity.sport_type, activity.type)) {
+      await crossTrainingService.store(athleteId, activity);
+      return;
+    }
+
+    // Recompute TSS (power, else HR/duration estimate)
     const { data: athleteData } = await supabaseAdmin
       .from('athletes')
       .select('ftp')
       .eq('id', athleteId)
       .single();
     const ftp = athleteData?.ftp;
-    if (activity.average_watts && activity.moving_time && ftp) {
-      tss = calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts);
-    }
+    const { tss, source: tssSource } = await stravaService.rideTss(athleteId, activity, ftp);
 
     // Update in database
     await supabaseAdmin
@@ -235,6 +240,8 @@ async function handleActivityUpdated(athleteId: string, stravaActivityId: number
       })
       .eq('strava_activity_id', stravaActivityId)
       .eq('athlete_id', athleteId);
+
+    if (tssSource) await stravaService.markTssSource(stravaActivityId, tssSource);
 
     // Re-analyze if has power data
     if (activity.device_watts || activity.average_watts) {
@@ -253,6 +260,8 @@ async function handleActivityUpdated(athleteId: string, stravaActivityId: number
 async function handleActivityDeleted(athleteId: string, stravaActivityId: number) {
   try {
     logger.debug(`Deleting activity: ${stravaActivityId}`);
+
+    await crossTrainingService.remove(stravaActivityId).catch(() => {});
 
     // Delete from database (cascades to power_curves via foreign key)
     await supabaseAdmin

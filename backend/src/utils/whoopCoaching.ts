@@ -14,7 +14,7 @@ export interface WellnessDay {
   sleep_debt_seconds?: number | null;
   day_strain?: number | string | null;
   recovery_calibrating?: boolean | null;
-  other_activities?: { sport: string; minutes: number; strain: number | null }[] | null;
+  other_activities?: { sport: string; minutes: number; strain: number | null; start?: string }[] | null;
 }
 
 export type RecoveryBand = 'green' | 'yellow' | 'red';
@@ -30,7 +30,9 @@ export interface WhoopSummary {
   line: string;
 }
 
-export function summarizeWhoop(todayIso: string, history: WellnessDay[]): WhoopSummary {
+export function summarizeWhoop(todayIso: string, history: WellnessDay[], stravaOtherStarts: string[] = []): WhoopSummary {
+  const seenOnStrava = (start?: string) => !!start && stravaOtherStarts.some((s) =>
+    Math.abs(new Date(s).getTime() - new Date(start).getTime()) <= 45 * 60_000);
   const byDate = new Map(history.map((d) => [d.date, d]));
   const today = byDate.get(todayIso);
   const whoopDays = history.filter((d) => d.wellness_source === 'whoop' && d.readiness_score != null)
@@ -38,7 +40,8 @@ export function summarizeWhoop(todayIso: string, history: WellnessDay[]): WhoopS
 
   const yIso = new Date(new Date(todayIso + 'T12:00:00Z').getTime() - 86_400_000).toISOString().slice(0, 10);
   const yesterday = byDate.get(yIso);
-  const yOther = (yesterday?.other_activities || []).filter(Boolean);
+  // Strava's copy (with HR, distance and a load rating) wins over Whoop's.
+  const yOther = (yesterday?.other_activities || []).filter((a: any) => a && !seenOnStrava(a.start));
   const otherTxt = yOther.length
     ? ` Yesterday off the bike: ${yOther.map((a) => `${a.sport} ${a.minutes}min${a.strain != null ? ` (strain ${a.strain})` : ''}`).join(', ')}.`
     : '';
@@ -86,7 +89,7 @@ export function summarizeWhoop(todayIso: string, history: WellnessDay[]): WhoopS
 /** System-prompt rules — only included when the athlete has Whoop connected. */
 export const WHOOP_COACHING_RULES = `**WHOOP (the athlete's recovery source):**
 Whoop MEASURES the body (recovery, HRV, sleep, non-ride strain). YOU make the training decisions — combine Whoop with training load (CTL/ATL/TSB), the plan, and how important today's session is. Use Whoop's numbers as-is; never re-derive your own recovery score.
-- NEVER change the plan automatically because of Whoop. ALWAYS SUGGEST, with the reason, and respect the athlete's call — straps get loose or misplaced, and a rider who feels good can still do the work. Offer a fallback: "start it, and if the first rep feels off, cut to Z2."
+- NEVER change the plan automatically because of Whoop. ALWAYS SUGGEST, with the reason, and respect the athlete's call — straps get loose or misplaced, and a rider who feels good can still do the work. Phrase Whoop-based calls as strong recommendations ("I'd skip the VO2 today — here's why"), not orders, and say they can override. A concrete alternative is great; propose it and wait for their OK. Offer a fallback: "start it, and if the first rep feels off, cut to Z2."
 - GREEN (67–100): go as planned; on a key day it's fine to push the top end.
 - YELLOW (34–66): do it, but suggest shortening or capping a hard session (e.g. drop a rep, hold the low end of the range). Mid-block on purpose (stage-race block)? Usually train through.
 - RED (0–33): on a non-key day, recommend Z2 or rest instead. On a race or critical session, keep it but warm up longer and set honest expectations. Two or more REDs in a row → strongly recommend backing off.

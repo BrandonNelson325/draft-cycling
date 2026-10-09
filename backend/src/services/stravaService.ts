@@ -4,6 +4,8 @@ import { powerAnalysisService } from './powerAnalysisService';
 import { calculateTSS } from './trainingCalculations';
 import { trimLaps, analyzeIntervals } from './intervalAnalysisService';
 import { logger } from '../utils/logger';
+import { crossTrainingService } from './crossTrainingService';
+import { isRideType, estimateActivityLoad } from '../utils/activityLoad';
 
 export const stravaService = {
   async ensureValidToken(athleteId: string) {
@@ -67,14 +69,16 @@ export const stravaService = {
 
     logger.debug(`Received ${activities.length} activities from Strava`);
 
-    // Filter for all cycling types (Strava uses both type and sport_type fields)
-    const cyclingTypes = new Set([
-      'Ride', 'VirtualRide', 'EBikeRide', 'GravelRide', 'MountainBikRide',
-      'Velomobile', 'Handcycle',
-    ]);
-    const rides = activities.filter(
-      (a) => cyclingTypes.has(a.sport_type) || cyclingTypes.has(a.type)
-    );
+    // Rides vs everything else. (The old inline list had a 'MountainBikRide'
+    // typo, so mountain-bike rides were silently dropped.) Non-cycling
+    // activities are rated for their effect on cycling and stored separately.
+    const rides = activities.filter((a) => isRideType(a.sport_type, a.type));
+    const others = activities.filter((a) => !isRideType(a.sport_type, a.type));
+    if (others.length) {
+      const phys = await crossTrainingService.physiology(athleteId);
+      for (const o of others) await crossTrainingService.store(athleteId, o, phys);
+      logger.debug(`Stored ${others.length} cross-training activities`);
+    }
 
     logger.debug(`Filtered to ${rides.length} rides`);
 
@@ -107,12 +111,9 @@ export const stravaService = {
       logger.debug(`\n--- Processing activity: ${activity.name} (${activity.id}) ---`);
       logger.debug(`Raw data: distance=${activity.distance}m, moving_time=${activity.moving_time}s, watts=${activity.average_watts}`);
 
-      // Calculate TSS if power data is available (use NP when available)
-      let tss = null;
-      if (activity.average_watts && activity.moving_time && ftp) {
-        tss = calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts);
-        logger.debug(`Calculated TSS: ${tss} (NP: ${activity.weighted_average_watts || 'N/A'})`);
-      }
+      // Power TSS when there's power; otherwise an HR/duration estimate so a
+      // ride without a power meter still counts toward fitness and fatigue.
+      const { tss, source: tssSource } = await this.rideTss(athleteId, activity, ftp);
 
       const activityData = {
         athlete_id: athleteId,
@@ -146,6 +147,7 @@ export const stravaService = {
         logger.error(`Failed to store activity ${activity.id}:`, error);
       } else if (data) {
         stored.push(data);
+        if (tssSource) await this.markTssSource(activity.id, tssSource);
         if (!existingSet.has(activity.id)) {
           newIds.push(activity.id);
         }
@@ -181,7 +183,61 @@ export const stravaService = {
       }
     }
 
-    return { synced: stored.length, total: rides.length, analyzed: analyzed.length, newIds };
+    // One-time per athlete: pull ~120 days of non-cycling history and give old
+    // no-power rides a load estimate.
+    void this.backfillCrossTraining(athleteId).catch((e) => logger.warn('[CrossTraining] backfill failed:', e?.message));
+
+    return { synced: stored.length, total: rides.length, analyzed: analyzed.length, newIds, crossTraining: others.length };
+  },
+
+  /** Ride TSS: power (NP) when available, else HR estimate, else duration estimate. */
+  async rideTss(athleteId: string, activity: any, ftp?: number | null): Promise<{ tss: number | null; source: 'power' | 'hr' | 'duration' | null }> {
+    if (activity.average_watts && activity.moving_time && ftp) {
+      return { tss: calculateTSS(activity.moving_time, activity.average_watts, ftp, activity.weighted_average_watts), source: 'power' };
+    }
+    if (!activity.moving_time) return { tss: null, source: null };
+    const p = await crossTrainingService.physiology(athleteId);
+    const est = estimateActivityLoad({
+      sportType: activity.sport_type || 'Ride', type: activity.type, movingTimeSeconds: activity.moving_time,
+      averageHeartrate: activity.average_heartrate, maxHr: p.maxHr, restingHr: p.restingHr, age: p.age,
+    });
+    return { tss: Math.round(est.estTss), source: est.method };
+  },
+
+  /** Best-effort: tss_source column arrives with migration 041. */
+  async markTssSource(stravaActivityId: number, source: 'power' | 'hr' | 'duration') {
+    await supabaseAdmin.from('strava_activities').update({ tss_source: source }).eq('strava_activity_id', stravaActivityId);
+  },
+
+  async backfillCrossTraining(athleteId: string, days = 120): Promise<void> {
+    const { data: a, error } = await supabaseAdmin
+      .from('athletes').select('cross_training_backfilled_at, ftp').eq('id', athleteId).single();
+    if (error || a?.cross_training_backfilled_at) return; // done, or migration 041 not run yet
+
+    const accessToken = await this.ensureValidToken(athleteId);
+    const after = Math.floor((Date.now() - days * 86400000) / 1000);
+    const phys = await crossTrainingService.physiology(athleteId);
+    let stored = 0;
+    // getActivities already walks every page.
+    const all: any[] = await stravaClient.getActivities(accessToken, { after, per_page: 200 });
+    for (const o of all.filter((x) => !isRideType(x.sport_type, x.type))) {
+      if (await crossTrainingService.store(athleteId, o, phys)) stored++;
+    }
+
+    // Old rides with no power had NO load — estimate from stored raw data (no API calls).
+    const { data: noTss } = await supabaseAdmin
+      .from('strava_activities').select('strava_activity_id, raw_data')
+      .eq('athlete_id', athleteId).is('tss', null).gte('start_date', new Date(after * 1000).toISOString());
+    let estimated = 0;
+    for (const r of noTss || []) {
+      const { tss, source } = await this.rideTss(athleteId, r.raw_data || {}, a?.ftp);
+      if (tss == null) continue;
+      await supabaseAdmin.from('strava_activities').update({ tss, tss_source: source }).eq('strava_activity_id', r.strava_activity_id);
+      estimated++;
+    }
+
+    await supabaseAdmin.from('athletes').update({ cross_training_backfilled_at: new Date().toISOString() }).eq('id', athleteId);
+    logger.info(`[CrossTraining] backfill for ${athleteId}: ${stored} activities, ${estimated} no-power rides estimated`);
   },
 
   /**

@@ -16,6 +16,7 @@ import { trainingPlanJobService, registerPlanJobExecutor } from './trainingPlanJ
 import { mapWithConcurrency } from '../utils/concurrency';
 import { aiPlanDesignerService } from './aiPlanDesignerService';
 import { stravaService } from './stravaService';
+import { crossTrainingService } from './crossTrainingService';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -1292,6 +1293,20 @@ export const aiToolExecutor = {
           notes: a.post_activity_notes,
         };
       }),
+      // Non-cycling sessions (runs, gym, soccer…) rated for their effect on cycling.
+      other_training: (await crossTrainingService.list(athleteId, cutoff.toISOString())).slice(0, limit).map((o: any) => ({
+        name: o.name,
+        sport: o.sport_type,
+        category: o.category,
+        date: o.start_date?.split('T')[0],
+        duration_min: o.moving_time_seconds ? Math.round(o.moving_time_seconds / 60) : null,
+        distance_km: o.distance_meters ? +(o.distance_meters / 1000).toFixed(1) : null,
+        avg_hr: o.average_heartrate,
+        est_load: o.est_tss,
+        fatigue_load: o.fatigue_load,
+        load_method: o.load_method,
+        effect_on_cycling: crossTrainingService.describe(o.category).note,
+      })),
     };
   },
 

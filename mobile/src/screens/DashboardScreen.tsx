@@ -14,6 +14,7 @@ import FitnessTrendChart from '../components/dashboard/FitnessTrendChart';
 import PowerCurveChart from '../components/dashboard/PowerCurveChart';
 import FTPEstimateCard from '../components/dashboard/FTPEstimateCard';
 import WhoopRecoveryCard from '../components/dashboard/WhoopRecoveryCard';
+import OtherTrainingCard from '../components/dashboard/OtherTrainingCard';
 import RecentActivities from '../components/dashboard/RecentActivities';
 import ActivityDetailSheet from '../components/activity/ActivityDetailSheet';
 import WorkoutDetailSheet from '../components/workout/WorkoutDetailSheet';
@@ -100,6 +101,7 @@ export default function DashboardScreen() {
         <PowerCurveChart key={`power-${refreshKey}`} />
         <FTPEstimateCard key={`ftp-${refreshKey}`} />
         <RecentActivities key={`activities-${refreshKey}`} onActivityPress={handleActivityPress} />
+        <OtherTrainingCard key={`other-${refreshKey}`} />
         <View style={styles.bottomPad} />
       </ScrollView>
 

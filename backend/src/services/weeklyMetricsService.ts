@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
 import { utcToLocalDate, mondayOfWeek } from '../utils/timezone';
+import { crossTrainingService } from './crossTrainingService';
 
 interface WeeklyData {
   week_start: string;
@@ -87,24 +88,9 @@ export const weeklyMetricsService = {
       const fetchStart = new Date(windowStart);
       fetchStart.setDate(fetchStart.getDate() - WARMUP_DAYS);
 
-      const { data: activities, error } = await supabaseAdmin
-        .from('strava_activities')
-        .select('start_date, tss')
-        .eq('athlete_id', athleteId)
-        .gte('start_date', fetchStart.toISOString())
-        .lte('start_date', new Date().toISOString())
-        .not('tss', 'is', null)
-        .order('start_date', { ascending: true });
-
-      if (error) throw new Error(error.message);
-      if (!activities || activities.length === 0) return [];
-
-      // Sum TSS per calendar day (multiple rides collapse into one day).
-      const dailyTSS = new Map<string, number>();
-      for (const a of activities) {
-        const dayKey = new Date(a.start_date).toISOString().split('T')[0];
-        dailyTSS.set(dayKey, (dailyTSS.get(dayKey) || 0) + (a.tss || 0));
-      }
+      // Rides (TSS 1:1) + cross-training (fitness_load → CTL, fatigue_load → ATL).
+      const dailyLoad = await crossTrainingService.dailyLoad(athleteId, fetchStart.toISOString(), new Date().toISOString());
+      if (dailyLoad.size === 0) return [];
 
       let ctl = 0;
       let atl = 0;
@@ -114,9 +100,9 @@ export const weeklyMetricsService = {
 
       while (current <= target) {
         const dayKey = current.toISOString().split('T')[0];
-        const tss = dailyTSS.get(dayKey) || 0;
-        ctl = ctl + (tss - ctl) / CTL_TAU;
-        atl = atl + (tss - atl) / ATL_TAU;
+        const day = dailyLoad.get(dayKey);
+        ctl = ctl + ((day?.fitness || 0) - ctl) / CTL_TAU;
+        atl = atl + ((day?.fatigue || 0) - atl) / ATL_TAU;
         if (current >= windowStart) {
           series.push({
             date: dayKey,
