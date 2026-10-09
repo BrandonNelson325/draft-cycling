@@ -64,7 +64,9 @@ check('Signature: missing headers rejected', !verifyWhoopSignature(Buffer.from(b
 
 // ---- Source priority ----
 check('Priority: Apple Health cannot overwrite Whoop', !canWriteWellness('whoop', 'apple_health'));
-check('Priority: intervals.icu cannot overwrite Apple Health', !canWriteWellness('apple_health', 'intervals_icu'));
+check('Priority: intervals.icu cannot overwrite Whoop either', !canWriteWellness('whoop', 'intervals_icu'));
+check('Non-Whoop athletes unchanged: intervals.icu and Apple Health still overwrite each other (their opt-in decides which is used)',
+  canWriteWellness('apple_health', 'intervals_icu') && canWriteWellness('intervals_icu', 'apple_health'));
 check('Priority: Whoop overwrites Apple Health; anything fills an empty day', canWriteWellness('apple_health', 'whoop') && canWriteWellness(null, 'intervals_icu'));
 
 // ---- Coach summary ----
