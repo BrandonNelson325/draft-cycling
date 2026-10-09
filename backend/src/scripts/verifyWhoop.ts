@@ -84,6 +84,24 @@ check("Summary: yesterday's soccer surfaced", /Yesterday off the bike: soccer 75
 const none = summarizeWhoop('2026-10-10', hist as any);
 check('Summary: no recovery today → says so, no invented number', !none.hasToday && /no recovery scored yet today/.test(none.line) && !/recovery \d+%/.test(none.line));
 
+// ---- "Red that doesn't add up" (likely loose strap) → ask, don't assume ----
+const base = [
+  { date: '2026-10-08', wellness_source: 'whoop', readiness_score: 78, hrv: 62, rhr: 50 },
+  { date: '2026-10-07', wellness_source: 'whoop', readiness_score: 74, hrv: 60, rhr: 51 },
+  { date: '2026-10-06', wellness_source: 'whoop', readiness_score: 70, hrv: 61, rhr: 50 },
+];
+const looseStrap = [{ date: '2026-10-09', wellness_source: 'whoop', readiness_score: 22, hrv: 38, rhr: 51, sleep_seconds: 7.8 * 3600, sleep_need_seconds: 8 * 3600 }, ...base];
+const ls = summarizeWhoop('2026-10-09', looseStrap as any);
+check('Suspicious red flagged (green yesterday, slept enough, RHR normal)', ls.suspect && /CHECK with the athlete before recommending any change/.test(ls.line), ls.line);
+const shortSleep = [{ ...looseStrap[0], sleep_seconds: 5 * 3600 }, ...base];
+check('Real red not flagged: short sleep', !summarizeWhoop('2026-10-09', shortSleep as any).suspect);
+const highRhr = [{ ...looseStrap[0], rhr: 58 }, ...base];
+check('Real red not flagged: resting HR elevated', !summarizeWhoop('2026-10-09', highRhr as any).suspect);
+const afterRed = [looseStrap[0], { ...base[0], readiness_score: 30 }, ...base.slice(1)];
+check('Real red not flagged: red yesterday too', !summarizeWhoop('2026-10-09', afterRed as any).suspect);
+const afterSoccer = [looseStrap[0], { ...base[0], other_activities: [{ sport: 'soccer', minutes: 90, strain: 15 }] }, ...base.slice(1)];
+check('Real red not flagged: hard soccer yesterday', !summarizeWhoop('2026-10-09', afterSoccer as any).suspect);
+
 // ---- Readiness uses Whoop recovery, skips subjective inputs ----
 const light = { last7DaysTSS: 300, last7DaysRides: 4, yesterdayWorkout: null, lastRideDate: new Date().toISOString() };
 const r = dailyReadinessService.calculateReadiness(light, { wellness_source: 'whoop', readiness_score: 25, feeling_score: 10, sleep_score: 10 });
