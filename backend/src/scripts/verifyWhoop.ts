@@ -7,7 +7,7 @@
 import crypto from 'crypto';
 import { buildDailyWhoop, localDateTime, isCyclingSport, verifyWhoopSignature } from '../utils/whoopMapping';
 import { canWriteWellness } from '../utils/wellnessSource';
-import { summarizeWhoop, bandFor } from '../utils/whoopCoaching';
+import { summarizeWhoop, bandFor, buildRecoveryPush } from '../utils/whoopCoaching';
 import { dailyReadinessService } from '../services/dailyReadinessService';
 
 let failures = 0;
@@ -103,6 +103,17 @@ const afterRed = [looseStrap[0], { ...base[0], readiness_score: 30 }, ...base.sl
 check('Real red not flagged: red yesterday too', !summarizeWhoop('2026-10-09', afterRed as any).suspect);
 const afterSoccer = [looseStrap[0], { ...base[0], other_activities: [{ sport: 'soccer', minutes: 90, strain: 15 }] }, ...base.slice(1)];
 check('Real red not flagged: hard soccer yesterday', !summarizeWhoop('2026-10-09', afterSoccer as any).suspect);
+
+// ---- Recovery push (replaces the check-in nag for Whoop users) ----
+const pGreen = buildRecoveryPush({ recovery: 82, summary: { hasToday: true, band: 'green', consecutiveReds: 0, suspect: false, line: '' },
+  sleepSeconds: 7.5 * 3600, sleepNeedSeconds: 8 * 3600, workoutName: 'Draft - Threshold Intervals · 3 × 12 min @ 93%' });
+check('Push (green): title + sleep + go as planned', pGreen.title === '🟢 Recovery 82% · Green' && /^Slept 7h30 of 8h00 needed\. Green light — Threshold Intervals/.test(pGreen.body), `${pGreen.title} | ${pGreen.body}`);
+const pRed = buildRecoveryPush({ recovery: 24, summary: { hasToday: true, band: 'red', consecutiveReds: 2, suspect: false, line: '' }, workoutName: 'Draft - VO2max Intervals' });
+check('Push (2 reds): strong suggestion, nothing changes without the athlete', /2 red days in a row/.test(pRed.body) && /nothing changes until you say so/.test(pRed.body), pRed.body);
+const pSus = buildRecoveryPush({ recovery: 22, summary: { hasToday: true, band: 'red', consecutiveReds: 1, suspect: true, line: '' }, workoutName: 'Draft - Tempo' });
+check('Push (red that does not add up): asks how legs feel', /loose strap/.test(pSus.body) && /how your legs feel/.test(pSus.body), pSus.body);
+const pRest = buildRecoveryPush({ recovery: 50, summary: { hasToday: true, band: 'yellow', consecutiveReds: 0, suspect: false, line: '' } });
+check('Push (no workout scheduled): still useful', /Moderate day/.test(pRest.body));
 
 // ---- Readiness uses Whoop recovery, skips subjective inputs ----
 const light = { last7DaysTSS: 300, last7DaysRides: 4, yesterdayWorkout: null, lastRideDate: new Date().toISOString() };

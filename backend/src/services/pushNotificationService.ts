@@ -152,3 +152,24 @@ export async function sendActivityFeedbackReminder(athleteId: string): Promise<v
 
   logger.info(`[Push] Activity feedback reminder sent to athlete ${athleteId}`);
 }
+
+/**
+ * WHOOP recovery just landed → today's recovery + the coach's call, on the lock
+ * screen. Sent regardless of quiet hours: it's triggered by the athlete waking
+ * up, and early riders want it before they ride.
+ */
+export async function sendWhoopRecoveryNotification(athleteId: string, title: string, body: string): Promise<void> {
+  const athlete = await getAthleteForPush(athleteId);
+  if (!athlete) return;
+  await sendPushNotification(athlete.push_token, title, body, { screen: 'Home', type: 'whoop_recovery' });
+  logger.info(`[Push] Whoop recovery notification sent to athlete ${athleteId}`);
+}
+
+/** Whoop user whose recovery never scored today (strap off?) — gentle check-in nudge. */
+export async function sendWhoopMissingReminder(athleteId: string): Promise<void> {
+  const athlete = await getAthleteForPush(athleteId);
+  if (!athlete) return;
+  await sendPushNotification(athlete.push_token, 'No WHOOP recovery today',
+    "WHOOP hasn't scored today — strap off or not synced? Open WHOOP to sync, or do a quick check-in.", { screen: 'Home' });
+  logger.info(`[Push] Whoop-missing reminder sent to athlete ${athleteId}`);
+}

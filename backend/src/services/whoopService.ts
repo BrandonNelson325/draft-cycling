@@ -16,6 +16,8 @@ import crypto from 'crypto';
 import { supabaseAdmin } from '../utils/supabase';
 import { logger } from '../utils/logger';
 import { buildDailyWhoop } from '../utils/whoopMapping';
+import { summarizeWhoop, buildRecoveryPush, WellnessDay } from '../utils/whoopCoaching';
+import { sendWhoopRecoveryNotification } from './pushNotificationService';
 import { todayInTimezone } from '../utils/timezone';
 
 const API = 'https://api.prod.whoop.com/developer';
@@ -25,6 +27,7 @@ const SCOPES = 'offline read:recovery read:sleep read:cycles read:workout read:p
 export const WHOOP_BACKFILL_DAYS = 60;
 
 const refreshInFlight = new Map<string, Promise<string>>();
+const notifiedToday = new Set<string>();
 
 function config() {
   // .trim(): a pasted env var with a trailing newline/space fails client auth.
@@ -184,6 +187,13 @@ export const whoopService = {
     ]);
     const daily = buildDailyWhoop({ recoveries, sleeps, cycles, workouts });
     const now = new Date().toISOString();
+
+    // Was today's recovery already stored? (to notify only when it first lands)
+    const { data: ath } = await supabaseAdmin.from('athletes').select('timezone').eq('id', athleteId).single();
+    const today = todayInTimezone(ath?.timezone || 'America/Los_Angeles');
+    const { data: before } = await supabaseAdmin
+      .from('daily_metrics').select('wellness_source, readiness_score').eq('athlete_id', athleteId).eq('date', today).maybeSingle();
+    const hadToday = before?.wellness_source === 'whoop' && before?.readiness_score != null;
     const written: string[] = [];
     for (const d of daily) {
       const row: Record<string, any> = { athlete_id: athleteId, date: d.date, ...d.fields };
@@ -194,7 +204,38 @@ export const whoopService = {
     }
     await supabaseAdmin.from('athletes').update({ whoop_last_sync_at: now }).eq('id', athleteId);
     logger.info(`[Whoop] synced ${written.length} day(s) for ${athleteId}`);
+
+    const todayRow = daily.find((d) => d.date === today);
+    if (!hadToday && todayRow?.fields.readiness_score != null && written.includes(today)) {
+      void this.notifyRecovery(athleteId, today).catch((e) => logger.warn('[Whoop] recovery push failed:', e?.message));
+    }
     return written;
+  },
+
+  /** Push today's recovery + the coach's call. Once per athlete per day (in-process guard). */
+  async notifyRecovery(athleteId: string, today: string): Promise<void> {
+    const key = `${athleteId}:${today}`;
+    if (notifiedToday.has(key)) return;
+    notifiedToday.add(key);
+    const since = new Date(new Date(today + 'T12:00:00Z').getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
+    const [{ data: history }, { data: entries }] = await Promise.all([
+      supabaseAdmin.from('daily_metrics')
+        .select('date, wellness_source, readiness_score, hrv, rhr, sleep_seconds, sleep_need_seconds, sleep_debt_seconds, day_strain, recovery_calibrating, other_activities')
+        .eq('athlete_id', athleteId).gte('date', since).order('date', { ascending: false }),
+      supabaseAdmin.from('calendar_entries').select('workouts(name)')
+        .eq('athlete_id', athleteId).eq('scheduled_date', today).not('workout_id', 'is', null).limit(1),
+    ]);
+    const todayRow = (history || []).find((d: any) => d.date === today);
+    if (!todayRow || todayRow.readiness_score == null) return;
+    const summary = summarizeWhoop(today, (history || []) as WellnessDay[]);
+    const { title, body } = buildRecoveryPush({
+      recovery: todayRow.readiness_score,
+      summary,
+      sleepSeconds: todayRow.sleep_seconds,
+      sleepNeedSeconds: todayRow.sleep_need_seconds,
+      workoutName: (entries?.[0] as any)?.workouts?.name ?? null,
+    });
+    await sendWhoopRecoveryNotification(athleteId, title, body);
   },
 
   /**
@@ -219,6 +260,8 @@ export const whoopService = {
   /** Webhook event → re-pull the last couple of days for that Whoop user. */
   async handleWebhookEvent(event: { user_id?: number | string; type?: string; trace_id?: string }): Promise<void> {
     if (!event?.user_id || !event.type) return;
+    // Logged so we can confirm Whoop notifies us instantly (vs. the 5-min backup pull).
+    logger.info(`[Whoop] webhook ${event.type} for whoop user ${event.user_id} (trace ${event.trace_id || '-'})`);
     if (event.type.endsWith('.deleted')) {
       logger.info(`[Whoop] ${event.type} for user ${event.user_id} — resyncing recent days`);
     }

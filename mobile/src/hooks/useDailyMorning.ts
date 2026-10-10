@@ -181,7 +181,9 @@ export function useDailyMorning() {
       } else {
         const nextCount = retryCount + 1;
         setRetryCount(nextCount);
-        if (nextCount <= MAX_AUTO_RETRIES) {
+        // The local "open Garmin Connect and sync" reminder is Apple-Health
+        // specific; for WHOOP the backend pushes the moment recovery lands.
+        if (nextCount <= MAX_AUTO_RETRIES && waitingFor !== 'whoop') {
           await scheduleRetryNotification();
         }
       }

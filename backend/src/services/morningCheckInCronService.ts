@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { supabaseAdmin } from '../utils/supabase';
-import { sendMorningCheckInNotification, sendMorningCheckInReminder } from './pushNotificationService';
+import { sendMorningCheckInNotification, sendMorningCheckInReminder, sendWhoopMissingReminder } from './pushNotificationService';
 import { logger } from '../utils/logger';
 import { todayInTimezone } from '../utils/timezone';
 
@@ -50,6 +50,13 @@ async function hasCheckedInToday(athleteId: string, todayDate: string): Promise<
   return !!data?.check_in_completed;
 }
 
+async function hasWhoopRecoveryToday(athleteId: string, todayDate: string): Promise<boolean> {
+  const { data } = await supabaseAdmin
+    .from('daily_metrics').select('wellness_source, readiness_score')
+    .eq('athlete_id', athleteId).eq('date', todayDate).maybeSingle();
+  return data?.wellness_source === 'whoop' && data?.readiness_score != null;
+}
+
 export function startMorningCheckInCron() {
   // Runs every minute
   cron.schedule('* * * * *', async () => {
@@ -57,7 +64,7 @@ export function startMorningCheckInCron() {
       // Find athletes with push enabled and a morning check-in time set
       const { data: athletes, error } = await supabaseAdmin
         .from('athletes')
-        .select('id, morning_checkin_time, timezone, morning_notif_sent_date, morning_reminder_sent_date')
+        .select('id, morning_checkin_time, timezone, morning_notif_sent_date, morning_reminder_sent_date, whoop_access_token')
         .eq('push_notifications_enabled', true)
         .not('push_token', 'is', null)
         .not('morning_checkin_time', 'is', null);
@@ -80,9 +87,11 @@ export function startMorningCheckInCron() {
         // --- Initial notification: send once when time matches ---
         if (!alreadySentToday && checkinHHMM === localNow) {
           try {
-            // Skip if they already completed the check-in (e.g., opened the app early)
+            // WHOOP users don't get the check-in nag — they get a recovery
+            // notification the moment Whoop scores them (whoopService).
+            // Skip also if they already completed the check-in.
             const alreadyDone = await hasCheckedInToday(athlete.id, todayDate);
-            if (!alreadyDone) {
+            if (!alreadyDone && !athlete.whoop_access_token) {
               await sendMorningCheckInNotification(athlete.id);
             }
             // Mark as sent for today regardless, so we don't re-send
@@ -105,7 +114,13 @@ export function startMorningCheckInCron() {
               const completed = await hasCheckedInToday(athlete.id, todayDate);
               if (completed) continue;
 
-              await sendMorningCheckInReminder(athlete.id);
+              if (athlete.whoop_access_token) {
+                // Whoop user: only nudge if Whoop never scored today (strap off?).
+                if (await hasWhoopRecoveryToday(athlete.id, todayDate)) continue;
+                await sendWhoopMissingReminder(athlete.id);
+              } else {
+                await sendMorningCheckInReminder(athlete.id);
+              }
               await supabaseAdmin
                 .from('athletes')
                 .update({ morning_reminder_sent_date: todayDate })

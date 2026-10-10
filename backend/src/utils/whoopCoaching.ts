@@ -116,3 +116,39 @@ Whoop MEASURES the body (recovery, HRV, sleep, non-ride strain). YOU make the tr
 - Non-ride activities (soccer, gym, runs) are real load the power data can't see — account for them when judging the next day.
 - Still calibrating (first days on Whoop) → low confidence; lean on how they feel.
 - No Whoop recovery today → say so plainly and coach from load + how they feel. Never invent a number.`;
+
+/**
+ * The push sent the moment today's recovery is scored — replaces the "fill in
+ * your morning check-in" reminder for Whoop users. Deterministic (no AI call)
+ * so it arrives instantly, and it follows the same rules as the coach:
+ * suggestions only, ask before changing, check the athlete when a red doesn't
+ * add up.
+ */
+export function buildRecoveryPush(input: {
+  recovery: number;
+  summary: WhoopSummary;
+  sleepSeconds?: number | null;
+  sleepNeedSeconds?: number | null;
+  workoutName?: string | null; // today's scheduled workout, if any
+}): { title: string; body: string } {
+  const band = bandFor(input.recovery);
+  const dot = band === 'green' ? '🟢' : band === 'yellow' ? '🟡' : '🔴';
+  const title = `${dot} Recovery ${input.recovery}% · ${band[0].toUpperCase() + band.slice(1)}`;
+  const sleep = input.sleepSeconds
+    ? `Slept ${hm(input.sleepSeconds)}${input.sleepNeedSeconds ? ` of ${hm(input.sleepNeedSeconds)} needed` : ''}. `
+    : '';
+  const w = input.workoutName ? input.workoutName.replace(/^Draft - /, '') : null;
+
+  let call: string;
+  if (input.summary.suspect) {
+    call = "Red, but your sleep and resting HR look normal — maybe a loose strap. Tap and tell me how your legs feel before we change anything.";
+  } else if (band === 'green') {
+    call = w ? `Green light — ${w} as planned.` : 'Good day to train if you want to.';
+  } else if (band === 'yellow') {
+    call = w ? `${w} is still on — consider trimming it (a rep less, low end of the range). Tap for my call.` : 'Moderate day — keep any riding steady.';
+  } else {
+    const streak = input.summary.consecutiveReds >= 2 ? `${input.summary.consecutiveReds} red days in a row. ` : '';
+    call = w ? `${streak}I'd swap ${w} for easy Z2 or rest — tap to talk it through; nothing changes until you say so.` : `${streak}Easy day — rest or a gentle spin.`;
+  }
+  return { title, body: `${sleep}${call}` };
+}
