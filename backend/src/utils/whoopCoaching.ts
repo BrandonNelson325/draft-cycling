@@ -51,9 +51,13 @@ export function summarizeWhoop(todayIso: string, history: WellnessDay[], stravaO
 
   const hasToday = !!today && today.wellness_source === 'whoop' && today.readiness_score != null;
   if (!hasToday) {
+    const latest = whoopDays.find((d) => d.date < todayIso);
+    const latestTxt = latest
+      ? `; most recent: ${latest.date === yIso ? 'yesterday' : latest.date} ${latest.readiness_score}% (${bandFor(latest.readiness_score as number)})`
+      : '';
     return {
       hasToday: false, band: null, consecutiveReds: 0, suspect: false,
-      line: `- Whoop: no recovery scored yet today (not synced, strap off, or still processing) — coach from training load and how the athlete says they feel; don't invent a recovery number.${otherTxt}`,
+      line: `- Whoop: today's recovery isn't scored yet (WHOOP scores shortly after waking — or strap off / not synced)${latestTxt}. Give a PROVISIONAL call from training load and the recent trend, say it's provisional and updates when WHOOP scores; never invent today's number.${otherTxt}`,
     };
   }
 
@@ -151,4 +155,37 @@ export function buildRecoveryPush(input: {
     call = w ? `${streak}I'd swap ${w} for easy Z2 or rest — tap to talk it through; nothing changes until you say so.` : `${streak}Easy day — rest or a gentle spin.`;
   }
   return { title, body: `${sleep}${call}` };
+}
+
+/**
+ * A PROVISIONAL call for before WHOOP has scored today (it scores shortly after
+ * waking — early riders often open the app first). Built from the most recent
+ * recovery, form (TSB) and today's workout; always labeled provisional. The
+ * recovery push confirms or adjusts it once WHOOP scores.
+ */
+export function buildProvisionalCall(input: {
+  todayIso: string;
+  latest: { date: string; readinessScore: number } | null;
+  tsb: number | null;
+  workoutName?: string | null;
+}): string {
+  const w = input.workoutName ? input.workoutName.replace(/^Draft - /, '') : null;
+  const yIso = new Date(new Date(input.todayIso + 'T12:00:00Z').getTime() - 86_400_000).toISOString().slice(0, 10);
+  const band = input.latest ? bandFor(input.latest.readinessScore) : null;
+  const when = input.latest ? (input.latest.date === yIso ? 'yesterday' : input.latest.date) : null;
+  const facts = [
+    input.latest ? `${when} ${input.latest.readinessScore}% (${band})` : null,
+    input.tsb != null ? `form (TSB) ${input.tsb > 0 ? '+' : ''}${Math.round(input.tsb)}` : null,
+  ].filter(Boolean).join(', ');
+
+  const deep = input.tsb != null && input.tsb <= -15;
+  let call: string;
+  if (band === 'red' || (band === 'yellow' && deep)) {
+    call = w ? `plan conservatively — ${w}, but be ready to cut it to easy Z2.` : 'plan an easy day.';
+  } else if (band === 'green' && !deep) {
+    call = w ? `likely a green-light day — ${w} as planned.` : 'good day to train if you want to.';
+  } else {
+    call = w ? `plan on ${w}, kept controlled.` : 'keep any riding steady.';
+  }
+  return `Provisional${facts ? ` (${facts})` : ''}: ${call} This updates when WHOOP scores — you'll get a notification.`;
 }

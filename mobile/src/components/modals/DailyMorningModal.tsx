@@ -211,6 +211,11 @@ export default function DailyMorningModal({
                     ? "WHOOP hasn't scored today's recovery yet — it does that a little after you wake up. Open the WHOOP app to nudge it, then tap Check again."
                     : "Your sleep data hasn't synced from Apple Health yet. Open Garmin Connect (or your device's app) and tap Sync, then come back here and tap Try Again."}
                 </Text>
+                {waitingFor === 'whoop' && readiness?.whoop?.provisional ? (
+                  <View style={styles.provisionalBox}>
+                    <Text style={styles.provisionalText}>{readiness.whoop.provisional}</Text>
+                  </View>
+                ) : null}
                 {!!retryCount && (
                   <Text style={styles.waitMeta}>
                     {retryCount >= (maxRetries ?? 2)
@@ -481,6 +486,8 @@ function TsbStat({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
+  provisionalBox: { marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: '#0b1220', borderWidth: 1, borderColor: '#334155' },
+  provisionalText: { color: '#e2e8f0', fontSize: 14, lineHeight: 20 },
   container: { flex: 1, backgroundColor: '#0f172a' },
   header: {
     flexDirection: 'row',

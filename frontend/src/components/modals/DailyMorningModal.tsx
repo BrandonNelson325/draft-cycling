@@ -202,6 +202,9 @@ export function DailyMorningModal({ analysis, readiness: readinessProp, onClose 
                     WHOOP hasn't scored today's recovery yet — it does that a little after you wake up.
                     Open the WHOOP app to nudge it, then check again.
                   </p>
+                  {readiness.whoop?.provisional && (
+                    <p className="text-sm text-white bg-gray-800 rounded-lg p-3 mt-3">{readiness.whoop.provisional}</p>
+                  )}
                   <div className="flex gap-2 mt-3">
                     <Button onClick={checkWhoopAgain} disabled={checkingWhoop} className="bg-white text-gray-900 hover:bg-gray-100">
                       {checkingWhoop ? 'Checking…' : 'Check again'}

@@ -22,6 +22,8 @@ export interface WhoopReadinessStatus {
   /** Connected, but today's recovery isn't scored yet (Whoop scores after you wake). */
   awaitingToday: boolean;
   latest: { date: string; readinessScore: number; hrv: number | null; rhr: number | null; sleepSeconds: number | null; sleepNeedSeconds: number | null; dayStrain: number | null } | null;
+  /** While awaiting today's score: a labeled provisional call. */
+  provisional?: string | null;
 }
 
 export interface DailyReadiness {

@@ -107,7 +107,7 @@ export const whoopService = {
 
     logger.info(`[Whoop] connected athlete ${athlete.id} (whoop user ${whoopUserId})`);
     // History for trends (HRV baseline etc.) — don't block the redirect.
-    void this.syncDays(athlete.id, WHOOP_BACKFILL_DAYS).catch((e) => logger.warn('[Whoop] backfill failed:', e?.message));
+    void this.syncDays(athlete.id, WHOOP_BACKFILL_DAYS, 'backfill').catch((e) => logger.warn('[Whoop] backfill failed:', e?.message));
     return { athleteId: athlete.id, mobile: !!athlete.whoop_oauth_mobile };
   },
 
@@ -175,7 +175,7 @@ export const whoopService = {
    * written without claiming wellness_source when there's no recovery/sleep.
    * Returns the dates written.
    */
-  async syncDays(athleteId: string, days = 2): Promise<string[]> {
+  async syncDays(athleteId: string, days = 2, origin: 'webhook' | 'pull' | 'manual' | 'backfill' = 'pull'): Promise<string[]> {
     const end = new Date();
     const start = new Date(end.getTime() - (days + 1) * 86_400_000);
     const [s, e] = [start.toISOString(), end.toISOString()];
@@ -203,10 +203,13 @@ export const whoopService = {
       else written.push(d.date);
     }
     await supabaseAdmin.from('athletes').update({ whoop_last_sync_at: now }).eq('id', athleteId);
-    logger.info(`[Whoop] synced ${written.length} day(s) for ${athleteId}`);
+    // Observability (migration 042) — best-effort, never blocks the sync.
+    await supabaseAdmin.from('athletes').update({ whoop_last_sync_origin: origin }).eq('id', athleteId);
+    logger.info(`[Whoop] synced ${written.length} day(s) for ${athleteId} via ${origin}`);
 
     const todayRow = daily.find((d) => d.date === today);
     if (!hadToday && todayRow?.fields.readiness_score != null && written.includes(today)) {
+      await supabaseAdmin.from('athletes').update({ whoop_recovery_landed_at: now, whoop_recovery_landed_via: origin }).eq('id', athleteId);
       void this.notifyRecovery(athleteId, today).catch((e) => logger.warn('[Whoop] recovery push failed:', e?.message));
     }
     return written;
@@ -268,7 +271,9 @@ export const whoopService = {
     const { data: a } = await supabaseAdmin
       .from('athletes').select('id').eq('whoop_user_id', String(event.user_id)).single();
     if (!a) { logger.warn(`[Whoop] webhook for unknown user ${event.user_id}`); return; }
-    await this.syncDays(a.id, 2);
+    await supabaseAdmin.from('athletes')
+      .update({ whoop_last_webhook_at: new Date().toISOString(), whoop_last_webhook_type: event.type }).eq('id', a.id);
+    await this.syncDays(a.id, 2, 'webhook');
   },
 
   async isConnected(athleteId: string): Promise<boolean> {

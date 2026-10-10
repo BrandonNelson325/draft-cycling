@@ -7,7 +7,7 @@
 import crypto from 'crypto';
 import { buildDailyWhoop, localDateTime, isCyclingSport, verifyWhoopSignature } from '../utils/whoopMapping';
 import { canWriteWellness } from '../utils/wellnessSource';
-import { summarizeWhoop, bandFor, buildRecoveryPush } from '../utils/whoopCoaching';
+import { summarizeWhoop, bandFor, buildRecoveryPush, buildProvisionalCall } from '../utils/whoopCoaching';
 import { dailyReadinessService } from '../services/dailyReadinessService';
 
 let failures = 0;
@@ -84,7 +84,8 @@ check('Summary: HRV vs prior 7-day avg', /HRV 45ms \(-26% vs 7-day avg 61\)/.tes
 check('Summary: sleep vs need + debt', /sleep 5h30 of 8h00 needed, sleep debt 1h00/.test(sum.line));
 check("Summary: yesterday's soccer surfaced", /Yesterday off the bike: soccer 75min \(strain 13.2\)/.test(sum.line));
 const none = summarizeWhoop('2026-10-10', hist as any);
-check('Summary: no recovery today → says so, no invented number', !none.hasToday && /no recovery scored yet today/.test(none.line) && !/recovery \d+%/.test(none.line));
+check('Summary: no recovery today → says so, gives latest, asks for a provisional call, no invented number',
+  !none.hasToday && /today's recovery isn't scored yet/.test(none.line) && /most recent: yesterday 28% \(red\)/.test(none.line) && /PROVISIONAL/.test(none.line) && !/recovery \d+%/.test(none.line), none.line);
 
 // ---- "Red that doesn't add up" (likely loose strap) → ask, don't assume ----
 const base = [
@@ -114,6 +115,14 @@ const pSus = buildRecoveryPush({ recovery: 22, summary: { hasToday: true, band: 
 check('Push (red that does not add up): asks how legs feel', /loose strap/.test(pSus.body) && /how your legs feel/.test(pSus.body), pSus.body);
 const pRest = buildRecoveryPush({ recovery: 50, summary: { hasToday: true, band: 'yellow', consecutiveReds: 0, suspect: false, line: '' } });
 check('Push (no workout scheduled): still useful', /Moderate day/.test(pRest.body));
+
+// ---- Provisional call before Whoop scores ----
+const prGreen = buildProvisionalCall({ todayIso: '2026-10-10', latest: { date: '2026-10-09', readinessScore: 80 }, tsb: 4, workoutName: 'Draft - Tempo Ride' });
+check('Provisional (green yesterday, fresh): labeled + green light', /^Provisional \(yesterday 80% \(green\), form \(TSB\) \+4\): likely a green-light day — Tempo Ride as planned\. This updates when WHOOP scores/.test(prGreen), prGreen);
+const prDeep = buildProvisionalCall({ todayIso: '2026-10-10', latest: { date: '2026-10-09', readinessScore: 50 }, tsb: -20, workoutName: 'Draft - VO2max' });
+check('Provisional (yellow + deep fatigue): conservative', /plan conservatively — VO2max, but be ready to cut it to easy Z2/.test(prDeep), prDeep);
+const prNone = buildProvisionalCall({ todayIso: '2026-10-10', latest: null, tsb: null, workoutName: null });
+check('Provisional (no history): still sensible', /^Provisional: keep any riding steady/.test(prNone), prNone);
 
 // ---- Readiness uses Whoop recovery, skips subjective inputs ----
 const light = { last7DaysTSS: 300, last7DaysRides: 4, yesterdayWorkout: null, lastRideDate: new Date().toISOString() };

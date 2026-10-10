@@ -602,7 +602,7 @@ export const syncWhoop = async (req: AuthRequest, res: Response): Promise<void> 
   try {
     if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
     const days = Math.min(Math.max(Number(req.body?.days) || 2, 1), 60);
-    const written = await whoopService.syncDays(req.user.id, days);
+    const written = await whoopService.syncDays(req.user.id, days, 'manual');
     res.json({ success: true, days_written: written.length });
   } catch (error: any) {
     logger.error('Error syncing Whoop:', error.response?.data || error.message);
