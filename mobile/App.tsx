@@ -97,6 +97,7 @@ function AppModalsInner() {
         readiness={dailyMorning.readiness}
         onDismiss={dailyMorning.dismiss}
         awaitingSleepData={dailyMorning.awaitingSleepData}
+        waitingFor={dailyMorning.waitingFor}
         retryCount={dailyMorning.retryCount}
         maxRetries={dailyMorning.maxRetries}
         loading={dailyMorning.loading}

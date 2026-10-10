@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Card from '../ui/Card';
-import { dailyCheckInService, type WellnessData } from '../../services/dailyCheckInService';
+import { dailyCheckInService, type WellnessData, type WhoopReadinessStatus } from '../../services/dailyCheckInService';
 
 const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
@@ -11,11 +11,20 @@ const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600
  * athlete's recovery source today — other athletes never see it.
  */
 export default function WhoopRecoveryCard() {
-  const [w, setW] = useState<WellnessData | null>(null);
+  const [w, setW] = useState<Partial<WellnessData> | null>(null);
+  const [stale, setStale] = useState<string | null>(null); // date of the latest scored day when today isn't in yet
 
   useEffect(() => {
     dailyCheckInService.getDailyReadiness()
-      .then((r) => setW(r?.wellness?.source === 'whoop' ? r.wellness : null))
+      .then((r) => {
+        if (r?.wellness?.source === 'whoop') { setW(r.wellness); setStale(null); return; }
+        // Whoop connected but today not scored yet → show the latest day, labeled.
+        const latest = (r?.whoop as WhoopReadinessStatus | undefined)?.latest;
+        if (r?.whoop?.connected && latest) {
+          setW({ readinessScore: latest.readinessScore, hrv: latest.hrv, rhr: latest.rhr, sleepSeconds: latest.sleepSeconds, sleepNeedSeconds: latest.sleepNeedSeconds, dayStrain: latest.dayStrain });
+          setStale(latest.date);
+        } else setW(null);
+      })
       .catch(() => setW(null));
   }, []);
 
@@ -41,6 +50,7 @@ export default function WhoopRecoveryCard() {
           {w.dayStrain != null && <Text style={styles.stat}>Strain <Text style={styles.val}>{w.dayStrain.toFixed(1)}</Text></Text>}
         </View>
       </View>
+      {stale ? <Text style={styles.note}>Showing {new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} — today's recovery isn't scored yet.</Text> : null}
       {w.recoveryCalibrating ? <Text style={styles.note}>WHOOP is still calibrating — low confidence for now.</Text> : null}
       {other.length > 0 && (
         <Text style={styles.note}>Off the bike: {other.map((a) => `${a.sport} ${a.minutes}min`).join(', ')}</Text>

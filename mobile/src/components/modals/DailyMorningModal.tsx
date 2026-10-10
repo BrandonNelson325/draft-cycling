@@ -26,6 +26,8 @@ interface DailyMorningModalProps {
   // is true, the modal renders the "Waiting for sync" screen instead of the
   // normal questionnaire.
   awaitingSleepData?: boolean;
+  /** Which source the wait screen is waiting on. */
+  waitingFor?: 'apple_health' | 'whoop';
   retryCount?: number;
   maxRetries?: number;
   loading?: boolean;
@@ -77,6 +79,7 @@ export default function DailyMorningModal({
   onDismiss,
   onChatNavigate,
   awaitingSleepData,
+  waitingFor = 'apple_health',
   retryCount,
   maxRetries,
   loading: parentLoading,
@@ -200,10 +203,13 @@ export default function DailyMorningModal({
               {/* Waiting-for-sync screen — the user has opted into Apple Health
                   as the wellness source but sleep data hasn't arrived yet. */}
               <View style={styles.waitCard}>
-                <Text style={styles.waitTitle}>🌙 Waiting for sleep data</Text>
+                <Text style={styles.waitTitle}>
+                  {waitingFor === 'whoop' ? '⏳ Waiting for WHOOP' : '🌙 Waiting for sleep data'}
+                </Text>
                 <Text style={styles.waitBody}>
-                  Your sleep data hasn't synced from Apple Health yet. Open Garmin Connect
-                  (or your device's app) and tap Sync, then come back here and tap Try Again.
+                  {waitingFor === 'whoop'
+                    ? "WHOOP hasn't scored today's recovery yet — it does that a little after you wake up. Open the WHOOP app to nudge it, then tap Check again."
+                    : "Your sleep data hasn't synced from Apple Health yet. Open Garmin Connect (or your device's app) and tap Sync, then come back here and tap Try Again."}
                 </Text>
                 {!!retryCount && (
                   <Text style={styles.waitMeta}>
@@ -222,7 +228,7 @@ export default function DailyMorningModal({
                 {parentLoading ? (
                   <ActivityIndicator color="#fff" />
                 ) : (
-                  <Text style={styles.btnText}>Try Again</Text>
+                  <Text style={styles.btnText}>{waitingFor === 'whoop' ? 'Check again' : 'Try Again'}</Text>
                 )}
               </TouchableOpacity>
 

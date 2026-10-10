@@ -197,12 +197,22 @@ export const whoopService = {
     return written;
   },
 
-  /** Pull today's data if Whoop is connected and hasn't synced recently (morning card / chat backup). */
+  /**
+   * Pull today's data if Whoop is connected and hasn't synced recently (morning
+   * card / chat backup to webhooks). Whoop only scores recovery after it detects
+   * you've woken, so while TODAY is still missing we re-check every 5 minutes
+   * instead of 30 — otherwise an early riser waits half an hour for their score.
+   */
   async ensureFresh(athleteId: string, maxAgeMinutes = 30): Promise<void> {
     const { data: a } = await supabaseAdmin
-      .from('athletes').select('whoop_access_token, whoop_last_sync_at').eq('id', athleteId).single();
+      .from('athletes').select('whoop_access_token, whoop_last_sync_at, timezone').eq('id', athleteId).single();
     if (!a?.whoop_access_token) return;
-    if (a.whoop_last_sync_at && Date.now() - new Date(a.whoop_last_sync_at).getTime() < maxAgeMinutes * 60_000) return;
+    const today = todayInTimezone(a.timezone || 'America/Los_Angeles');
+    const { data: row } = await supabaseAdmin
+      .from('daily_metrics').select('wellness_source, readiness_score').eq('athlete_id', athleteId).eq('date', today).maybeSingle();
+    const haveToday = row?.wellness_source === 'whoop' && row?.readiness_score != null;
+    const maxAge = haveToday ? maxAgeMinutes : Math.min(maxAgeMinutes, 5);
+    if (a.whoop_last_sync_at && Date.now() - new Date(a.whoop_last_sync_at).getTime() < maxAge * 60_000) return;
     await this.syncDays(athleteId, 2).catch((e) => logger.warn('[Whoop] ensureFresh failed:', e?.message));
   },
 

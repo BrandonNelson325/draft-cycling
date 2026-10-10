@@ -4,6 +4,7 @@ import * as Notifications from 'expo-notifications';
 import { dailyAnalysisService, type DailyAnalysis } from '../services/dailyAnalysisService';
 import { dailyCheckInService, type DailyReadiness } from '../services/dailyCheckInService';
 import { appleHealthService } from '../services/appleHealthService';
+import { whoopService } from '../services/whoopService';
 import { useAuthStore } from '../stores/useAuthStore';
 import { appStorage } from '../utils/storage';
 
@@ -20,6 +21,8 @@ export function useDailyMorning() {
   // sleep data hasn't arrived yet, and they haven't manually chosen to skip.
   // Modal renders the "Waiting for sync" screen in this state.
   const [awaitingSleepData, setAwaitingSleepData] = useState(false);
+  // Which source we're waiting on — drives the wait screen's wording.
+  const [waitingFor, setWaitingFor] = useState<'apple_health' | 'whoop'>('apple_health');
   const [retryCount, setRetryCount] = useState(0);
   // Sticky override: once the user taps "Skip — answer manually", we stop
   // showing the waiting screen for the rest of this app session.
@@ -130,7 +133,11 @@ export function useDailyMorning() {
       //   show the modal in WAITING state.
       // - otherwise: show the modal normally.
       const hasObjectiveSleep = readinessData.wellness?.sleepSeconds != null;
-      const shouldWait = useAppleHealthForWellness && !hasObjectiveSleep && !manualOverride;
+      // WHOOP connected but today's recovery not scored yet (it scores after
+      // you wake) → wait for it instead of silently asking the sleep question.
+      const whoopAwaiting = !!readinessData.whoop?.awaitingToday;
+      const shouldWait = !manualOverride && (whoopAwaiting || (useAppleHealthForWellness && !hasObjectiveSleep));
+      setWaitingFor(whoopAwaiting ? 'whoop' : 'apple_health');
 
       if (shouldWait) {
         setAwaitingSleepData(true);
@@ -155,14 +162,19 @@ export function useDailyMorning() {
   const retrySync = async () => {
     setLoading(true);
     try {
-      if (appleHealthService.isAvailable()) {
+      if (waitingFor === 'whoop') {
+        // Ask the backend to pull from Whoop right now (bypasses the freshness throttle).
+        await whoopService.sync(2).catch(() => {});
+      } else if (appleHealthService.isAvailable()) {
         await appleHealthService.syncToday();
       }
       const readinessData = await dailyCheckInService.getDailyReadiness();
       setReadiness(readinessData);
 
-      const hasObjectiveSleep = readinessData.wellness?.sleepSeconds != null;
-      if (hasObjectiveSleep) {
+      const ready = waitingFor === 'whoop'
+        ? !readinessData.whoop?.awaitingToday
+        : readinessData.wellness?.sleepSeconds != null;
+      if (ready) {
         setAwaitingSleepData(false);
         setRetryCount(0);
         await cancelRetryNotification();
@@ -205,6 +217,7 @@ export function useDailyMorning() {
     readiness,
     loading,
     awaitingSleepData,
+    waitingFor,
     retryCount,
     maxRetries: MAX_AUTO_RETRIES,
     dismiss,

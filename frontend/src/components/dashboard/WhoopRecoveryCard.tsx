@@ -10,11 +10,20 @@ const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600
  * the athlete's recovery source today.
  */
 export function WhoopRecoveryCard() {
-  const [w, setW] = useState<WellnessData | null>(null);
+  const [w, setW] = useState<Partial<WellnessData> | null>(null);
+  const [stale, setStale] = useState<string | null>(null); // latest scored day when today isn't in yet
 
   useEffect(() => {
     dailyCheckInService.getDailyReadiness()
-      .then((r) => setW(r?.wellness?.source === 'whoop' ? r.wellness : null))
+      .then((r) => {
+        if (r?.wellness?.source === 'whoop') { setW(r.wellness); setStale(null); return; }
+        // Whoop connected but today not scored yet → show the latest day, labeled.
+        const latest = r?.whoop?.latest;
+        if (r?.whoop?.connected && latest) {
+          setW({ readinessScore: latest.readinessScore, hrv: latest.hrv, rhr: latest.rhr, sleepSeconds: latest.sleepSeconds, sleepNeedSeconds: latest.sleepNeedSeconds, dayStrain: latest.dayStrain });
+          setStale(latest.date);
+        } else setW(null);
+      })
       .catch(() => setW(null));
   }, []);
 
@@ -41,6 +50,7 @@ export function WhoopRecoveryCard() {
             {w.dayStrain != null && <div>Strain <span className="font-semibold text-gray-900">{w.dayStrain.toFixed(1)}</span></div>}
           </div>
         </div>
+        {stale && <p className="text-xs text-gray-500 mt-2">Showing {new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} — today's recovery isn't scored yet.</p>}
         {w.recoveryCalibrating && <p className="text-xs text-gray-500 mt-2">WHOOP is still calibrating — low confidence for now.</p>}
         {other.length > 0 && (
           <p className="text-xs text-gray-500 mt-2">Off the bike: {other.map((a) => `${a.sport} ${a.minutes}min`).join(', ')}</p>

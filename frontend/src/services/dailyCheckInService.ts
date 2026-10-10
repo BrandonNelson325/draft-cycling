@@ -17,7 +17,15 @@ export interface WellnessData {
   otherActivities?: { sport: string; minutes: number; strain: number | null }[] | null;
 }
 
+export interface WhoopReadinessStatus {
+  connected: boolean;
+  /** Connected, but today's recovery isn't scored yet (Whoop scores after you wake). */
+  awaitingToday: boolean;
+  latest: { date: string; readinessScore: number; hrv: number | null; rhr: number | null; sleepSeconds: number | null; sleepNeedSeconds: number | null; dayStrain: number | null } | null;
+}
+
 export interface DailyReadiness {
+  whoop?: WhoopReadinessStatus;
   date: string;
   hasCheckedInToday: boolean;
   todaysWorkout: {

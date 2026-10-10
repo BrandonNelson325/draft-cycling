@@ -30,6 +30,15 @@ export interface WellnessData {
   otherActivities?: { sport: string; minutes: number; strain: number | null }[] | null;
 }
 
+/** WHOOP connection state for the morning card / dashboard. */
+export interface WhoopReadinessStatus {
+  connected: boolean;
+  /** Connected, but today's recovery isn't scored yet (Whoop scores after you wake). */
+  awaitingToday: boolean;
+  /** Most recent scored day (today or earlier) — the dashboard never goes blank. */
+  latest: { date: string; readinessScore: number; hrv: number | null; rhr: number | null; sleepSeconds: number | null; sleepNeedSeconds: number | null; dayStrain: number | null } | null;
+}
+
 export interface DailyReadiness {
   date: string;
   hasCheckedInToday: boolean;
@@ -45,6 +54,7 @@ export interface DailyReadiness {
   recommendation: 'rest' | 'light' | 'proceed' | 'push';
   reasoning: string;
   wellness: WellnessData | null;
+  whoop?: WhoopReadinessStatus;
 }
 
 export const dailyReadinessService = {
@@ -140,6 +150,28 @@ export const dailyReadinessService = {
       recentActivity,
       ...readinessAnalysis,
       wellness,
+      whoop: await this.getWhoopStatus(athleteId, today, todayMetrics),
+    };
+  },
+
+  async getWhoopStatus(athleteId: string, today: string, todayMetrics: any): Promise<WhoopReadinessStatus | undefined> {
+    const { data: a } = await supabaseAdmin.from('athletes').select('whoop_access_token').eq('id', athleteId).single();
+    if (!a?.whoop_access_token) return undefined;
+    const scoredToday = todayMetrics?.wellness_source === 'whoop' && todayMetrics?.readiness_score != null;
+    const { data: last } = await supabaseAdmin
+      .from('daily_metrics')
+      .select('date, readiness_score, hrv, rhr, sleep_seconds, sleep_need_seconds, day_strain')
+      .eq('athlete_id', athleteId).eq('wellness_source', 'whoop').not('readiness_score', 'is', null)
+      .lte('date', today).order('date', { ascending: false }).limit(1);
+    const l = last?.[0];
+    return {
+      connected: true,
+      awaitingToday: !scoredToday,
+      latest: l ? {
+        date: l.date, readinessScore: l.readiness_score, hrv: l.hrv ?? null, rhr: l.rhr ?? null,
+        sleepSeconds: l.sleep_seconds ?? null, sleepNeedSeconds: l.sleep_need_seconds ?? null,
+        dayStrain: l.day_strain != null ? Number(l.day_strain) : null,
+      } : null,
     };
   },
 

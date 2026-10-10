@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, Minus, MessageCircle, Calendar, X } from 'luc
 import toast from 'react-hot-toast';
 import type { DailyAnalysis } from '../../services/dailyAnalysisService';
 import { dailyCheckInService, type DailyReadiness } from '../../services/dailyCheckInService';
+import { whoopService } from '../../services/whoopService';
 import { Button } from '../ui/button';
 
 interface DailyMorningModalProps {
@@ -16,7 +17,11 @@ interface DailyMorningModalProps {
 type SleepQuality = 'terrible' | 'poor' | 'okay' | 'good' | 'great';
 type Feeling = 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
 
-export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorningModalProps) {
+export function DailyMorningModal({ analysis, readiness: readinessProp, onClose }: DailyMorningModalProps) {
+  // Local copy so "Check again" can refresh it while WHOOP is still scoring.
+  const [readiness, setReadiness] = useState<DailyReadiness>(readinessProp);
+  const [checkingWhoop, setCheckingWhoop] = useState(false);
+  const [manualOverride, setManualOverride] = useState(false);
   const navigate = useNavigate();
   const [step, setStep] = useState<'checkin' | 'analysis'>('checkin');
   const [sleepQuality, setSleepQuality] = useState<SleepQuality | null>(null);
@@ -26,12 +31,25 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
 
   // ── Step 1: Check-in ─────────────────────────────────────────────────────
 
+  // WHOOP connected but today's recovery not scored yet (it scores after you
+  // wake) → wait for it instead of silently asking the sleep question.
+  const whoopAwaiting = !!readiness.whoop?.awaitingToday && !manualOverride;
+  const checkWhoopAgain = async () => {
+    setCheckingWhoop(true);
+    try {
+      await whoopService.sync(2).catch(() => {});
+      setReadiness(await dailyCheckInService.getDailyReadiness());
+    } finally {
+      setCheckingWhoop(false);
+    }
+  };
+
   const wellness = readiness.wellness;
   // Sleep picker is shown unless objective sleep data is present in wellness.
   // sleepQuality is required iff the picker is shown.
   // WHOOP owns today's recovery → no sleep/feeling questions, just "anything off?".
   const isWhoop = wellness?.source === 'whoop' && wellness.readinessScore != null;
-  const sleepPickerVisible = !isWhoop && (!wellness || wellness.sleepSeconds == null);
+  const sleepPickerVisible = !isWhoop && !whoopAwaiting && (!wellness || wellness.sleepSeconds == null);
   const recoveryColor = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-500' : 'text-red-600');
   const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
@@ -177,6 +195,24 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </div>
               )}
 
+              {whoopAwaiting && (
+                <div className="bg-gray-900 text-white rounded-xl p-4">
+                  <h3 className="font-semibold">⏳ Waiting for WHOOP</h3>
+                  <p className="text-sm text-gray-300 mt-1">
+                    WHOOP hasn't scored today's recovery yet — it does that a little after you wake up.
+                    Open the WHOOP app to nudge it, then check again.
+                  </p>
+                  <div className="flex gap-2 mt-3">
+                    <Button onClick={checkWhoopAgain} disabled={checkingWhoop} className="bg-white text-gray-900 hover:bg-gray-100">
+                      {checkingWhoop ? 'Checking…' : 'Check again'}
+                    </Button>
+                    <Button variant="outline" onClick={() => setManualOverride(true)} className="text-gray-900">
+                      Answer manually
+                    </Button>
+                  </div>
+                </div>
+              )}
+
               {/* WHOOP — recovery source: replaces every question */}
               {isWhoop && wellness && (
                 <div className="bg-gray-900 text-white rounded-xl p-4">
@@ -294,7 +330,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
               )}
 
               {/* Feeling */}
-              {!isWhoop && <div>
+              {!isWhoop && !whoopAwaiting && <div>
                 <label className="block font-semibold text-gray-800 mb-2">💪 How are you feeling?</label>
                 <div className="grid grid-cols-5 gap-2">
                   {([
@@ -325,7 +361,7 @@ export function DailyMorningModal({ analysis, readiness, onClose }: DailyMorning
                 </Button>
                 <Button
                   onClick={handleCheckInNext}
-                  disabled={isWhoop ? saving : ((sleepPickerVisible && !sleepQuality) || !feeling || saving)}
+                  disabled={whoopAwaiting || (isWhoop ? saving : ((sleepPickerVisible && !sleepQuality) || !feeling || saving))}
                   className="flex-1 bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700"
                 >
                   {saving ? 'Saving...' : analysis ? 'See My Analysis →' : '💬 Talk to Coach'}
