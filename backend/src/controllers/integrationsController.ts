@@ -574,7 +574,8 @@ export const handleWhoopCallback = async (req: AuthRequest, res: Response): Prom
     if (mobile) res.redirect('cyclingcoach://whoop/callback?status=connected');
     else res.redirect(`${process.env.FRONTEND_URL}/settings?whoop=connected`);
   } catch (error: any) {
-    logger.error('Whoop callback error:', error.response?.data || error.message);
+    logger.error('Whoop callback error:', error.response?.data || error.message,
+      `(client id set: ${!!process.env.WHOOP_CLIENT_ID?.trim()}, secret set: ${!!process.env.WHOOP_CLIENT_SECRET?.trim()}, secret length: ${process.env.WHOOP_CLIENT_SECRET?.trim().length ?? 0})`);
     // The state lookup failed or never happened — fall back on the stored flag if we can.
     if (typeof state === 'string') {
       const { data } = await supabaseAdmin.from('athletes').select('whoop_oauth_mobile').eq('whoop_oauth_state', state).single();

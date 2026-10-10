@@ -27,11 +27,35 @@ export const WHOOP_BACKFILL_DAYS = 60;
 const refreshInFlight = new Map<string, Promise<string>>();
 
 function config() {
+  // .trim(): a pasted env var with a trailing newline/space fails client auth.
   return {
-    clientId: process.env.WHOOP_CLIENT_ID || '',
-    clientSecret: process.env.WHOOP_CLIENT_SECRET || '',
-    redirectUri: process.env.WHOOP_REDIRECT_URI || 'https://api.draftcycling.com/api/integrations/whoop/callback',
+    clientId: (process.env.WHOOP_CLIENT_ID || '').trim(),
+    clientSecret: (process.env.WHOOP_CLIENT_SECRET || '').trim(),
+    redirectUri: (process.env.WHOOP_REDIRECT_URI || 'https://api.draftcycling.com/api/integrations/whoop/callback').trim(),
   };
+}
+
+/**
+ * POST to Whoop's token endpoint. Whoop's OAuth server (Ory Hydra) may be set
+ * to client_secret_post (credentials in the form body — what the docs show) or
+ * client_secret_basic (HTTP Basic header). Try post first; on invalid_client
+ * retry with Basic so either app configuration works.
+ */
+async function tokenRequest(params: Record<string, string>): Promise<any> {
+  const c = config();
+  const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+  try {
+    const resp = await axios.post(TOKEN_URL, new URLSearchParams({ ...params, client_id: c.clientId, client_secret: c.clientSecret }).toString(), { headers });
+    return resp.data;
+  } catch (err: any) {
+    if (err.response?.data?.error !== 'invalid_client') throw err;
+    logger.warn('[Whoop] token endpoint rejected client_secret_post — retrying with HTTP Basic auth');
+    const basic = Buffer.from(`${encodeURIComponent(c.clientId)}:${encodeURIComponent(c.clientSecret)}`).toString('base64');
+    const resp = await axios.post(TOKEN_URL, new URLSearchParams(params).toString(), {
+      headers: { ...headers, Authorization: `Basic ${basic}` },
+    });
+    return resp.data;
+  }
 }
 
 export const whoopService = {
@@ -56,11 +80,10 @@ export const whoopService = {
       .from('athletes').select('id, whoop_oauth_mobile').eq('whoop_oauth_state', state).single();
     if (!athlete) throw new Error('Unknown or expired Whoop connect request');
 
-    const c = config();
-    const resp = await axios.post(TOKEN_URL, new URLSearchParams({
-      grant_type: 'authorization_code', code, client_id: c.clientId, client_secret: c.clientSecret, redirect_uri: c.redirectUri,
-    }).toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-    const { access_token, refresh_token, expires_in } = resp.data;
+    if (!config().clientId || !config().clientSecret) throw new Error('WHOOP_CLIENT_ID / WHOOP_CLIENT_SECRET not set');
+    const { access_token, refresh_token, expires_in } = await tokenRequest({
+      grant_type: 'authorization_code', code, redirect_uri: config().redirectUri,
+    });
 
     let whoopUserId: string | null = null;
     try {
@@ -91,13 +114,10 @@ export const whoopService = {
     const p = (async () => {
       const { data: a } = await supabaseAdmin.from('athletes').select('whoop_refresh_token').eq('id', athleteId).single();
       if (!a?.whoop_refresh_token) throw new Error('Whoop not connected');
-      const c = config();
       try {
-        const resp = await axios.post(TOKEN_URL, new URLSearchParams({
-          grant_type: 'refresh_token', refresh_token: a.whoop_refresh_token,
-          client_id: c.clientId, client_secret: c.clientSecret, scope: 'offline',
-        }).toString(), { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
-        const { access_token, refresh_token, expires_in } = resp.data;
+        const { access_token, refresh_token, expires_in } = await tokenRequest({
+          grant_type: 'refresh_token', refresh_token: a.whoop_refresh_token, scope: 'offline',
+        });
         await supabaseAdmin.from('athletes').update({
           whoop_access_token: access_token,
           whoop_refresh_token: refresh_token || a.whoop_refresh_token,
