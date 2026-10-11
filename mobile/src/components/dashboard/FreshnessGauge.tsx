@@ -1,5 +1,5 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 interface FreshnessGaugeProps {
@@ -95,37 +95,52 @@ const GRADIENT_COLORS = HSL_STOPS.map(s => hslToRgb(s.h, s.s, s.l));
 
 export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = true, subtitleOverride }: FreshnessGaugeProps) {
   const status = getStatus(tsb, ctl, atl);
+  // The explanation line is one tap away — the label + colour say enough at a glance.
+  const [showWhy, setShowWhy] = useState(false);
   // Use ACWR-based gauge position (scales to individual fitness)
   const pct = acwrToGaugePct(ctl, atl, tsb);
   const bg = interpolateColor(pct);
   const textColor = textColorForBg(pct);
+  // Chip slides proportionally along the bar (left at Fresh, right at Overreaching)
+  // so it always stays inside; the caret points exactly at the marker.
+  const [barW, setBarW] = useState(0);
+  const [chipW, setChipW] = useState(0);
+  const chipLeft = Math.max(0, (pct / 100) * (barW - chipW));
+  const caretLeft = (pct / 100) * barW - 5;
 
   return (
     <View style={styles.container}>
-      <View style={styles.gaugeWrapper}>
-        <LinearGradient
-          colors={GRADIENT_COLORS as any}
-          locations={HSL_STOPS.map(s => s.pos) as [number, number, ...number[]]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={styles.gauge}
-        />
-        {/* Indicator needle */}
-        <View style={[styles.needle, { left: `${pct}%` as any }]} />
-      </View>
+      <TouchableOpacity activeOpacity={0.8} onPress={() => setShowWhy((x) => !x)} style={styles.tapArea}>
+        <View style={styles.chipRow} onLayout={(e) => setBarW(e.nativeEvent.layout.width)}>
+          <View
+            onLayout={(e) => setChipW(e.nativeEvent.layout.width)}
+            style={[styles.chip, { backgroundColor: bg, left: chipLeft, opacity: barW ? 1 : 0 }]}
+          >
+            <Text style={[styles.statusText, { color: textColor }]}>{status.label}</Text>
+          </View>
+          <View style={[styles.caret, { left: caretLeft, borderTopColor: bg, opacity: barW ? 1 : 0 }]} />
+        </View>
 
-      <View style={styles.labels}>
-        <Text style={styles.labelText}>Fresh</Text>
-        <Text style={styles.labelText}>Productive</Text>
-        <Text style={styles.labelText}>Overreaching</Text>
-      </View>
+        <View style={styles.gaugeWrapper}>
+          <LinearGradient
+            colors={GRADIENT_COLORS as any}
+            locations={HSL_STOPS.map(s => s.pos) as [number, number, ...number[]]}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.gauge}
+          />
+          {/* Indicator needle */}
+          <View style={[styles.needle, { left: `${pct}%` as any }]} />
+        </View>
 
-      <View style={[styles.statusBadge, { backgroundColor: bg }]}>
-        <Text style={[styles.statusText, { color: textColor }]}>
-          {status.label}
-        </Text>
-        <Text style={[styles.statusSubtitle, { color: textColor, opacity: 0.8 }]}>{subtitleOverride || status.subtitle}</Text>
-      </View>
+        <View style={styles.labels}>
+          <Text style={styles.labelText}>Fresh</Text>
+          <Text style={styles.labelText}>Productive</Text>
+          <Text style={styles.labelText}>Overreaching</Text>
+        </View>
+
+        {showWhy && <Text style={styles.statusSubtitle}>{subtitleOverride || status.subtitle}</Text>}
+      </TouchableOpacity>
 
       {showDetails && (
         <View style={styles.metrics}>
@@ -185,19 +200,37 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#64748b',
   },
-  statusBadge: {
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    alignItems: 'center',
-    gap: 2,
+  tapArea: {
+    gap: 8,
+  },
+  chipRow: {
+    height: 34,
+    position: 'relative',
+  },
+  chip: {
+    position: 'absolute',
+    bottom: 6,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  caret: {
+    position: 'absolute',
+    bottom: 0,
+    width: 0,
+    height: 0,
+    borderLeftWidth: 5,
+    borderRightWidth: 5,
+    borderTopWidth: 6,
+    borderLeftColor: 'transparent',
+    borderRightColor: 'transparent',
   },
   statusText: {
     fontWeight: '700',
     fontSize: 15,
   },
   statusSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#94a3b8',
   },
   metrics: {

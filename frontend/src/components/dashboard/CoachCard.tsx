@@ -257,7 +257,7 @@ function WorkoutRow({ tone, label, name, meta, onClick }: { tone: keyof typeof R
       onClick={onClick}
       className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${t.box} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}
     >
-      <span className={`w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
+      <span className={`w-[72px] shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
       <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-gray-800">{name}</span>
       {meta && <span className="shrink-0 text-[11px] text-gray-500">{meta}</span>}
     </div>

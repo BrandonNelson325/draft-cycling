@@ -320,7 +320,7 @@ function WorkoutRow({ tone, label, name, meta, onPress, dimmed }: {
   return (
     <TouchableOpacity activeOpacity={onPress ? 0.7 : 1} onPress={onPress} disabled={!onPress}>
       <View style={[styles.row, { backgroundColor: t.bg, borderLeftColor: t.color }, dimmed && styles.dimmedBox]}>
-        <Text style={[styles.rowLabel, { color: t.color }]}>{label}</Text>
+        <Text style={[styles.rowLabel, { color: t.color }]} numberOfLines={1}>{label}</Text>
         <Text style={styles.rowName} numberOfLines={1}>{name}</Text>
         {meta ? <Text style={styles.rowMeta}>{meta}</Text> : null}
       </View>
@@ -339,7 +339,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   rowLabel: {
-    width: 64,
+    width: 78,
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',

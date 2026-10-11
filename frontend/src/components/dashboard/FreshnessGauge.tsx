@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 interface FreshnessGaugeProps {
   tsb: number;
   ctl?: number;
@@ -83,6 +85,8 @@ const GRADIENT_CSS = `linear-gradient(to right, ${HSL_STOPS.map(
 
 export function FreshnessGauge({ tsb, ctl = 0, atl = 0, subtitleOverride }: FreshnessGaugeProps) {
   const status = getStatus(tsb, ctl, atl);
+  // The explanation line is one click away — the label + colour say enough at a glance.
+  const [showWhy, setShowWhy] = useState(false);
 
   // Use ACWR-based gauge position (scales to individual fitness)
   const pct = acwrToGaugePct(ctl, atl, tsb);
@@ -90,40 +94,40 @@ export function FreshnessGauge({ tsb, ctl = 0, atl = 0, subtitleOverride }: Fres
   const textColor = textColorForBg(pct);
 
   return (
-    <div className="space-y-3">
+    <button type="button" onClick={() => setShowWhy((x) => !x)} className="block w-full text-left">
+      {/* Status chip rides above the marker (slides proportionally so it never overflows) */}
+      <div className="relative h-8">
+        <div
+          className="absolute bottom-1.5 px-2.5 py-0.5 rounded-full text-sm font-bold whitespace-nowrap shadow-sm transition-all"
+          style={{ left: `${pct}%`, transform: `translateX(-${pct}%)`, backgroundColor: bg, color: textColor }}
+        >
+          {status.label}
+        </div>
+        <div
+          className="absolute bottom-0 w-0 h-0 border-x-[5px] border-x-transparent border-t-[6px] transition-all"
+          style={{ left: `${pct}%`, transform: 'translateX(-50%)', borderTopColor: bg }}
+        />
+      </div>
+
       {/* Gradient Gauge */}
       <div className="relative">
-        <div
-          className="h-3 rounded-full"
-          style={{ background: GRADIENT_CSS }}
-        />
+        <div className="h-3 rounded-full" style={{ background: GRADIENT_CSS }} />
         <div
           className="absolute top-[-3px] w-1.5 h-[18px] bg-white rounded-sm shadow-md transition-all"
-          style={{
-            left: `${pct}%`,
-            borderColor: bg,
-            borderWidth: 2,
-            transform: 'translateX(-50%)',
-          }}
+          style={{ left: `${pct}%`, borderColor: bg, borderWidth: 2, transform: 'translateX(-50%)' }}
         />
       </div>
 
       {/* Labels */}
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-[10px] text-muted-foreground mt-1.5">
         <span>Fresh</span>
         <span>Productive</span>
         <span>Overreaching</span>
       </div>
 
-      {/* Status Badge — background matches gradient position */}
-      <div className="text-center p-3 rounded-xl" style={{ backgroundColor: bg }}>
-        <div className="text-xl font-bold" style={{ color: textColor }}>
-          {status.label}
-        </div>
-        <div className="text-xs font-medium" style={{ color: textColor, opacity: 0.8 }}>
-          {subtitleOverride || status.subtitle}
-        </div>
-      </div>
-    </div>
+      {showWhy && (
+        <div className="mt-1.5 text-xs font-medium text-gray-600">{subtitleOverride || status.subtitle}</div>
+      )}
+    </button>
   );
 }

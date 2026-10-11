@@ -33,6 +33,8 @@ export default function MainTabNavigator() {
         name="Dashboard"
         component={DashboardScreen}
         options={{
+          // The tab bar already says where you are — no title bar here.
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home-outline" size={size} color={color} />
           ),
