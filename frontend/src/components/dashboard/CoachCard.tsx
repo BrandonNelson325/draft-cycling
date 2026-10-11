@@ -24,11 +24,11 @@ interface TrainingStatus {
 
 export function CoachCard() {
   const [showDetail, setShowDetail] = useState(false);
-  const [showBody, setShowBody] = useState(false);
   const [suggestion, setSuggestion] = useState<TodaySuggestion | null>(null);
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
   const [readiness, setReadiness] = useState<DailyReadiness | null>(null);
+  const [showBody, setShowBody] = useState(false);
   const [loading, setLoading] = useState(true);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [loadingWorkoutId, setLoadingWorkoutId] = useState<string | null>(null);
@@ -93,133 +93,138 @@ export function CoachCard() {
   const s = suggestion?.suggestion;
   const hasRidden = suggestion?.hasRiddenToday ?? false;
 
-  // ── KISS layout: How am I? → What do I do? → Why (one line). Details on click. ──
-  const form = getStatus(tsb, training?.ctl ?? 0, training?.atl ?? 0);
+  // ── Recovery: ONE line under the banner (WHOOP recovery, else watch HRV trend) ──
   const w = readiness?.wellness?.source === 'whoop' ? readiness.wellness : null;
   const latest = !w && readiness?.whoop?.connected ? readiness.whoop.latest : null;
   const recovery = w?.readinessScore ?? latest?.readinessScore ?? null;
   const hrvTrend = readiness?.hrvTrend && !readiness.hrvTrend.suspect ? readiness.hrvTrend : null;
-  const hrv = w?.hrv ?? latest?.hrv ?? null;
-  const sleep = w?.sleepSeconds ?? latest?.sleepSeconds ?? null;
-  const need = w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds ?? null;
-  const rhr = w?.rhr ?? latest?.rhr ?? null;
-  const strain = w?.dayStrain ?? latest?.dayStrain ?? null;
-
-  type Call = { label: string; title: string; meta?: string; workoutId?: string; tone: string };
-  let call: Call | null = null;
-  if (s) {
-    if (!hasRidden && s.todaysWorkout) call = { label: 'Today', title: clean(s.todaysWorkout.name), meta: `${s.todaysWorkout.duration} min · ${s.todaysWorkout.type}`, workoutId: s.todaysWorkout.workoutId, tone: 'text-blue-600' };
-    else if (!hasRidden && s.isRestDay) call = { label: 'Today', title: 'Rest day', tone: 'text-green-600' };
-    else if (!hasRidden && s.suggestedWorkout) call = { label: 'Today', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'text-green-600' : 'text-blue-600' };
-    else if (hasRidden && s.tomorrowsWorkout) call = { label: 'Tomorrow', title: clean(s.tomorrowsWorkout.name), meta: `${s.tomorrowsWorkout.duration} min · ${s.tomorrowsWorkout.type}`, workoutId: s.tomorrowsWorkout.workoutId, tone: 'text-purple-600' };
-    else if (hasRidden && s.suggestedWorkout) call = { label: 'Tomorrow', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'text-green-600' : 'text-purple-600' };
-  }
-  // Banner stays honest: fresh/balanced LEGS but a struggling BODY → say so.
-  const bodyLow = (recovery != null && recovery < 34) || hrvTrend?.status === 'low';
-  const bodyMid = !bodyLow && ((recovery != null && recovery < 67) || hrvTrend?.status === 'slightly_low');
-  const positiveForm = ['Fresh', 'Balanced', 'Detrained'].includes(form.label);
-  // The banner sticks to LOAD; the recovery block carries the body's verdict.
-  const bannerSubtitle = positiveForm && (bodyLow || bodyMid) ? 'Training load is low — legs are rested' : null;
-  const hardToday = /vo2|threshold|interval|anaerobic|sprint|race|test|tempo|sweet/i.test(`${s?.todaysWorkout?.type ?? ''} ${s?.todaysWorkout?.name ?? ''}`);
-  const bodyMeaning = recovery != null
-    ? recovery < 34
-      ? "In the red: your body hasn't bounced back. Keep today easy, with no hard efforts."
-      : recovery < 67
-        ? (hardToday ? "Yellow: you can do the work today. Hit the targets but don't chase extra." : 'Yellow: fine to train. Keep the effort controlled.')
-        : (hardToday ? "Green: you're recovered. A good day to go hard." : "Green: you're recovered. Today's plan is a go.")
-    : hrvTrend?.status ? HRV_MEANING[hrvTrend.status] : null;
   const watch = readiness?.wellness && readiness.wellness.source !== 'whoop' ? readiness.wellness : null;
-  const watchStats = watch ? [watch.hrv != null ? `HRV ${watch.hrv}` : null, watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ') : '';
-
-  // The coach's "why" carries the recovery meaning; our line is only a fallback.
-  const why = s?.keyPoints?.[0] ?? (firstSentence(s?.recommendation) || bodyMeaning || '');
-  const pillTone = recovery != null ? recoveryText(recovery) : hrvTrend?.status ? HRV_TEXT[hrvTrend.status] : '';
-  const pillDot = recovery != null ? (recovery >= 67 ? 'bg-green-500' : recovery >= 34 ? 'bg-yellow-500' : 'bg-red-500')
-    : hrvTrend?.status ? ({ low: 'bg-red-500', slightly_low: 'bg-yellow-500', normal: 'bg-green-500', high: 'bg-green-500' } as Record<string, string>)[hrvTrend.status] : '';
+  const hrv = w?.hrv ?? latest?.hrv ?? null, rhr = w?.rhr ?? latest?.rhr ?? null, sleep = w?.sleepSeconds ?? latest?.sleepSeconds ?? null;
+  const need = w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds ?? null, strain = w?.dayStrain ?? latest?.dayStrain ?? null;
+  const band = recovery != null ? (recovery >= 67 ? 'green' : recovery >= 34 ? 'yellow' : 'red')
+    : hrvTrend?.status ? ({ low: 'red', slightly_low: 'yellow', normal: 'green', high: 'green' } as Record<string, string>)[hrvTrend.status] : null;
+  const pillDot = band === 'green' ? 'bg-green-500' : band === 'yellow' ? 'bg-yellow-500' : 'bg-red-500';
+  const pillText = band === 'green' ? 'text-green-600' : band === 'yellow' ? 'text-yellow-600' : 'text-red-600';
   const pillLead = recovery != null ? `${recovery}%` : hrvTrend?.hrvPct != null ? `HRV ${hrvTrend.hrvPct > 0 ? '+' : ''}${hrvTrend.hrvPct}%` : null;
   const pillStats = recovery != null
     ? [hrv != null ? `HRV ${hrv}` : null, rhr != null ? `RHR ${rhr}` : null, sleep != null ? `Sleep ${hmShort(sleep)}${need ? `/${hmShort(need)}` : ''}` : null].filter(Boolean).join(' · ')
     : watch ? [watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hmShort(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ') : '';
-  const ride = hasRidden ? s?.todaysRides?.[0] : null;
+  // Banner never says "ideal for racing" when the body says otherwise.
+  const form = getStatus(tsb, training?.ctl ?? 0, training?.atl ?? 0);
+  const bannerSubtitle = band && band !== 'green' && ['Fresh', 'Balanced', 'Detrained'].includes(form.label) ? 'Training load is low — legs are rested' : null;
+  const bodyMeaning = band === 'green' ? "Green: you're recovered — a good day for intensity."
+    : band === 'yellow' ? 'Yellow: fine to train — keep the effort controlled.'
+    : band === 'red' ? "Red: your body hasn't bounced back — keep it easy." : null;
 
   return (
     <Card>
-      <CardContent className="p-5">
-        {/* 1. How am I? — the load banner (subtitle honest about the body), then recovery */}
+      <CardContent className="p-5 space-y-4">
+        <h3 className="text-lg font-semibold">Training Status</h3>
+
+        {/* Freshness Gauge — the visual hook */}
         <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} subtitleOverride={bannerSubtitle} />
+
+        {/* Recovery — one line; click for the full numbers */}
         {pillLead && (
-          <button onClick={() => setShowBody((v) => !v)} className="mt-3 w-full flex items-center gap-2 rounded-full bg-gray-50 border px-3 py-1.5 text-left hover:bg-gray-100">
+          <button onClick={() => setShowBody((x) => !x)} className="w-full flex items-center gap-2 rounded-full bg-gray-50 border px-3 py-1.5 text-left hover:bg-gray-100">
             <span className={`w-2 h-2 rounded-full ${pillDot}`} />
-            <span className={`text-sm font-extrabold ${pillTone}`}>{pillLead}</span>
+            <span className={`text-sm font-extrabold ${pillText}`}>{pillLead}</span>
             {pillStats && <span className="text-sm text-gray-500 truncate flex-1">· {pillStats}</span>}
             <span className="text-gray-400 text-sm">{showBody ? '⌄' : '›'}</span>
           </button>
         )}
-        {showBody && (recovery != null ? (
-          <div className="mt-2 rounded-xl border bg-gray-50 p-3 space-y-2">
-            <div className="text-[9px] font-bold tracking-widest text-gray-400">{latest ? 'WHOOP · YESTERDAY (TODAY NOT SCORED YET)' : 'WHOOP RECOVERY'}</div>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-              {hrv != null && <div><span className="text-gray-500 text-xs">HRV</span><div className="font-semibold">{hrv} ms</div></div>}
-              {rhr != null && <div><span className="text-gray-500 text-xs">Resting HR</span><div className="font-semibold">{rhr} bpm</div></div>}
-              {sleep != null && <div><span className="text-gray-500 text-xs">Sleep</span><div className="font-semibold">{hm(sleep)}{need ? ` / ${hm(need)}` : ''}</div></div>}
-              {strain != null && <div><span className="text-gray-500 text-xs">Strain</span><div className="font-semibold">{strain.toFixed(1)}</div></div>}
+        {showBody && pillLead && (
+          <div className="rounded-xl border bg-gray-50 p-3 space-y-2">
+            <div className="text-[9px] font-bold tracking-widest text-gray-400">
+              {recovery != null ? (latest ? 'WHOOP · YESTERDAY (TODAY NOT SCORED YET)' : 'WHOOP RECOVERY') : 'HRV VS YOUR BASELINE'}
             </div>
-            {bodyMeaning && <p className={`text-sm font-medium ${recoveryText(recovery)}`}>{bodyMeaning}</p>}
-            {w?.recoveryCalibrating && <p className="text-xs text-gray-500">WHOOP is still calibrating — low confidence for now.</p>}
-          </div>
-        ) : hrvTrend?.status ? (
-          <div className="mt-2 rounded-xl border bg-gray-50 p-3 space-y-1">
-            <div className="text-[9px] font-bold tracking-widest text-gray-400">HRV VS YOUR BASELINE</div>
-            <p className="text-sm font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}{hrvTrend.hrvPct != null ? ` · ${hrvTrend.hrvPct > 0 ? '+' : ''}${hrvTrend.hrvPct}%` : ''}</p>
-            {watchStats && <p className="text-xs text-gray-500">{watchStats}</p>}
-            {bodyMeaning && <p className={`text-sm font-medium ${HRV_TEXT[hrvTrend.status]}`}>{bodyMeaning}</p>}
-          </div>
-        ) : null)}
-
-        {/* 2. What do I do? + 3. Why */}
-        {call && (
-          <div
-            className={`mt-4 pt-3 border-t ${call.workoutId ? 'cursor-pointer' : ''}`}
-            onClick={() => handleWorkoutClick(call?.workoutId)}
-          >
-            <div className={`text-[11px] font-bold uppercase tracking-wider ${call.tone}`}>{call.label}</div>
-            <div className="text-lg font-bold text-gray-900">{call.title}</div>
-            {call.meta && <div className="text-xs text-gray-500">{call.meta}</div>}
-            {why && <p className="text-sm text-gray-600 mt-1.5">{why}</p>}
-          </div>
-        )}
-
-        {ride && (
-          <p className="text-xs text-gray-400 mt-2 truncate">
-            ✓ {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
-          </p>
-        )}
-
-        <div className="flex items-center justify-between mt-4">
-          <button onClick={() => setShowDetail((v) => !v)} className="text-sm font-semibold text-blue-600">
-            {showDetail ? 'Hide details ▴' : 'Details ▾'}
-          </button>
-          <Link to="/chat" className="rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
-            Coach
-          </Link>
-        </div>
-
-        {showDetail && (
-          <div className="mt-4 pt-4 border-t space-y-3">
-            {(w || latest) && (
+            {recovery != null ? (
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                 {hrv != null && <div><span className="text-gray-500 text-xs">HRV</span><div className="font-semibold">{hrv} ms</div></div>}
                 {rhr != null && <div><span className="text-gray-500 text-xs">Resting HR</span><div className="font-semibold">{rhr} bpm</div></div>}
                 {sleep != null && <div><span className="text-gray-500 text-xs">Sleep</span><div className="font-semibold">{hm(sleep)}{need ? ` / ${hm(need)}` : ''}</div></div>}
                 {strain != null && <div><span className="text-gray-500 text-xs">Strain</span><div className="font-semibold">{strain.toFixed(1)}</div></div>}
-                {w?.recoveryCalibrating && <p className="col-span-2 text-xs text-gray-500">WHOOP is still calibrating — low confidence for now.</p>}
               </div>
-            )}
-            {healthData && <WellnessPills data={healthData} />}
-            {(s?.keyPoints ?? []).slice(1).map((p, i) => <p key={i} className="text-sm text-gray-700">• {p}</p>)}
-            {s && <p className="text-sm text-gray-600 leading-relaxed">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>}
+            ) : watch ? (
+              <p className="text-sm font-semibold">{[watch.hrv != null ? `HRV ${watch.hrv} ms` : null, watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ')}</p>
+            ) : null}
+            {bodyMeaning && <p className={`text-sm font-medium ${pillText}`}>{bodyMeaning}</p>}
+            {w?.recoveryCalibrating && <p className="text-xs text-gray-500">WHOOP is still calibrating — low confidence for now.</p>}
           </div>
         )}
+
+        {/* AI summary */}
+        {s && (
+          <div className="space-y-3">
+            {/* Key points first (glanceable); the full reasoning sits behind "See more". */}
+            {(s.keyPoints?.length ?? 0) > 0 ? (
+              <div>
+                <ul className="space-y-1">
+                  {s.keyPoints!.map((p, i) => (
+                    <li key={i} className="flex gap-2 text-[13px] font-medium text-gray-700">
+                      <span className="text-blue-500">•</span><span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button onClick={() => setShowDetail((v) => !v)} className="text-xs font-semibold text-blue-600 mt-1">
+                  {showDetail ? 'Hide detail ▴' : 'See more detail ▾'}
+                </button>
+                {showDetail && (
+                  <p className="text-sm text-gray-600 leading-relaxed mt-1">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
+            )}
+
+            {/* Day boxes — one compact row each */}
+            <div className="space-y-1.5">
+            {hasRidden && s.todaysRides.map((ride, i) => (
+              <WorkoutRow key={i} tone="done" label={i === 0 ? 'Done today' : ''} name={ride.name} meta={`${ride.duration}min · ${ride.tss} TSS`} />
+            ))}
+            {!hasRidden && s.todaysWorkout && (
+              <WorkoutRow tone="plan" label="Today" name={s.todaysWorkout.name}
+                meta={`${s.todaysWorkout.duration}min · ${s.todaysWorkout.tss} TSS`}
+                onClick={s.todaysWorkout.workoutId ? () => handleWorkoutClick(s.todaysWorkout?.workoutId) : undefined} />
+            )}
+            {!hasRidden && s.isRestDay && <WorkoutRow tone="rest" label="Today" name="Rest day" meta="Recovery is part of the plan" />}
+            {!hasRidden && !s.isRestDay && s.suggestedWorkout && !s.todaysWorkout && (
+              <WorkoutRow tone={s.suggestedWorkout.type === 'rest' ? 'rest' : 'suggest'} label={s.suggestedWorkout.type === 'rest' ? 'Today' : 'Suggested'}
+                name={s.suggestedWorkout.name}
+                meta={s.suggestedWorkout.type !== 'rest' ? `${s.suggestedWorkout.duration}min · ${s.suggestedWorkout.type}` : undefined}
+                onClick={s.suggestedWorkout.workoutId ? () => handleWorkoutClick(s.suggestedWorkout?.workoutId) : undefined} />
+            )}
+            {(hasRidden || s.isRestDay) && s.tomorrowsWorkout && (
+              <WorkoutRow tone="plan" label="Tomorrow" name={s.tomorrowsWorkout.name}
+                meta={`${s.tomorrowsWorkout.duration}min · ${s.tomorrowsWorkout.tss} TSS`}
+                onClick={s.tomorrowsWorkout.workoutId ? () => handleWorkoutClick(s.tomorrowsWorkout?.workoutId) : undefined} />
+            )}
+            {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
+              <WorkoutRow tone={s.suggestedWorkout.type === 'rest' ? 'rest' : 'suggest'} label="Tomorrow"
+                name={s.suggestedWorkout.type === 'rest' ? 'Rest day' : s.suggestedWorkout.name}
+                meta={s.suggestedWorkout.type !== 'rest' ? `${s.suggestedWorkout.duration}min · suggested` : undefined}
+                onClick={s.suggestedWorkout.workoutId ? () => handleWorkoutClick(s.suggestedWorkout?.workoutId) : undefined} />
+            )}
+            </div>
+
+            {/* Recommendation (only when there are no key points — otherwise it's in "See more") */}
+            {!(s.keyPoints?.length) && <p className="text-sm text-gray-500">{s.recommendation}</p>}
+          </div>
+        )}
+
+        {/* Wellness pills */}
+        {healthData && <WellnessPills data={healthData} />}
+
+        {/* Fitness & fatigue now live in the always-visible FitnessTrendChart
+            on the dashboard (not hidden behind a toggle here). */}
+
+        {/* Chat link */}
+        <Link
+          to="/chat"
+          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+        >
+          Chat with Coach
+        </Link>
       </CardContent>
 
       {selectedWorkout && (
@@ -235,6 +240,27 @@ export function CoachCard() {
         />
       )}
     </Card>
+  );
+}
+
+const ROW_TONES = {
+  done: { box: 'border-emerald-200 bg-emerald-50', label: 'text-emerald-700' },
+  plan: { box: 'border-blue-200 bg-blue-50', label: 'text-blue-700' },
+  suggest: { box: 'border-purple-200 bg-purple-50', label: 'text-purple-700' },
+  rest: { box: 'border-green-200 bg-green-50', label: 'text-green-700' },
+} as const;
+
+function WorkoutRow({ tone, label, name, meta, onClick }: { tone: keyof typeof ROW_TONES; label: string; name: string; meta?: string; onClick?: () => void }) {
+  const t = ROW_TONES[tone];
+  return (
+    <div
+      onClick={onClick}
+      className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${t.box} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}
+    >
+      <span className={`w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
+      <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-gray-800">{name}</span>
+      {meta && <span className="shrink-0 text-[11px] text-gray-500">{meta}</span>}
+    </div>
   );
 }
 
@@ -305,21 +331,9 @@ function WellnessPills({ data }: { data: HealthData }) {
   );
 }
 
-const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
-const HRV_MEANING: Record<string, string> = {
-  low: 'Your body is under stress. Go easier than planned today.',
-  slightly_low: 'A little run down. Fine to train, keep the intensity controlled.',
-  normal: 'Right on your baseline. Train as planned.',
-  high: 'Well recovered. A good day for the hard work.',
-};
-const HRV_TEXT: Record<string, string> = { low: 'text-red-600', slightly_low: 'text-yellow-600', normal: 'text-green-600', high: 'text-green-600' };
-const recoveryText = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-600' : 'text-red-600');
-const recoveryClass = (r: number) => (r >= 67 ? 'border-green-600 text-green-600' : r >= 34 ? 'border-yellow-500 text-yellow-500' : 'border-red-600 text-red-600');
-const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
+const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 /** 6h, 8½h — compact for the pill. */
 const hmShort = (sec: number) => {
   const h = sec / 3600; const whole = Math.floor(h); const frac = h - whole;
   return frac >= 0.375 && frac < 0.625 ? `${whole}½h` : `${Math.round(h)}h`;
 };
-const clean = (name: string) => name.replace(/^Draft - /, '');
-const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');
