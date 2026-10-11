@@ -30,6 +30,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const [error, setError] = useState(false);
   const [adjustmentBusy, setAdjustmentBusy] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [showBody, setShowBody] = useState(false);
   const [readiness, setReadiness] = useState<DailyReadiness | null>(null);
 
   useEffect(() => {
@@ -190,7 +191,21 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
       ? HRV_MEANING[hrvTrend.status]
       : null;
 
-  const why = adjusting ? s!.adjustment!.reason : (s?.keyPoints?.[0] ?? firstSentence(s?.recommendation));
+  // The coach's "why" carries the recovery meaning (it reasons from Whoop/HRV);
+  // fall back to our recovery line only if the coach gave no reason.
+  const why = adjusting ? s!.adjustment!.reason : (s?.keyPoints?.[0] ?? (firstSentence(s?.recommendation) || bodyMeaning || ''));
+  // One thin recovery line (tap to expand): "🟡 47% · HRV 38 · RHR 62 · Sleep 6h/8½h ›"
+  const pillColor = recovery != null ? recoveryColor(recovery) : hrvTrend?.status ? HRV_COLOR[hrvTrend.status] : null;
+  const pillLead = recovery != null ? `${recovery}%` : hrvTrend?.hrvPct != null ? `HRV ${hrvTrend.hrvPct > 0 ? '+' : ''}${hrvTrend.hrvPct}%` : null;
+  const pillStats = recovery != null
+    ? [
+        (w?.hrv ?? latest?.hrv) != null ? `HRV ${w?.hrv ?? latest?.hrv}` : null,
+        (w?.rhr ?? latest?.rhr) != null ? `RHR ${w?.rhr ?? latest?.rhr}` : null,
+        (w?.sleepSeconds ?? latest?.sleepSeconds) != null
+          ? `Sleep ${hmShort((w?.sleepSeconds ?? latest?.sleepSeconds)!)}${(w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds) ? `/${hmShort((w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds)!)}` : ''}`
+          : null,
+      ].filter(Boolean).join(' · ')
+    : watch ? [watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hmShort(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ') : '';
   const otherPoints = adjusting ? (s?.keyPoints ?? []) : (s?.keyPoints ?? []).slice(1);
   const ride = hasRidden ? s?.todaysRides?.[0] : null;
 
@@ -198,36 +213,36 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
     <Card>
       {/* 1. How am I? — the load banner (subtitle honest about the body), then recovery */}
       <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} subtitleOverride={bannerSubtitle} />
-      {recovery != null ? (
+      {pillColor && pillLead ? (
+        <TouchableOpacity onPress={() => setShowBody((v) => !v)} activeOpacity={0.7} style={styles.pill}>
+          <View style={[styles.pillDot, { backgroundColor: pillColor }]} />
+          <Text style={[styles.pillLead, { color: pillColor }]}>{pillLead}</Text>
+          {pillStats ? <Text style={styles.pillStats} numberOfLines={1}>· {pillStats}</Text> : null}
+          <Text style={styles.pillChevron}>{showBody ? '⌄' : '›'}</Text>
+        </TouchableOpacity>
+      ) : null}
+      {showBody && (recovery != null ? (
         <View style={styles.bodyPanel}>
-          <View style={styles.bodyRow}>
-            <View style={[styles.ring, { borderColor: recoveryColor(recovery) }]}>
-              <Text style={[styles.ringText, { color: recoveryColor(recovery) }]}>{recovery}%</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.bodyTitle}>Recovery{recoveryStale ? ' (yesterday)' : ''} <Text style={styles.whoopTag}>WHOOP</Text></Text>
-              <View style={styles.bodyGrid}>
-                {bodyCells.map(([k, v]) => (
-                  <View key={k} style={styles.bodyCell}>
-                    <Text style={styles.bodyCellLabel}>{k}</Text>
-                    <Text style={styles.bodyCellValue}>{v}</Text>
-                  </View>
-                ))}
+          <Text style={styles.whoopTag}>{recoveryStale ? 'WHOOP · YESTERDAY (TODAY NOT SCORED YET)' : 'WHOOP RECOVERY'}</Text>
+          <View style={styles.bodyGrid}>
+            {bodyCells.map(([k, v]) => (
+              <View key={k} style={styles.bodyCell}>
+                <Text style={styles.bodyCellLabel}>{k}</Text>
+                <Text style={styles.bodyCellValue}>{v}</Text>
               </View>
-            </View>
+            ))}
           </View>
           {bodyMeaning ? <Text style={[styles.bodyMeaning, { color: recoveryColor(recovery) }]}>{bodyMeaning}</Text> : null}
+          {w?.recoveryCalibrating ? <Text style={styles.detailNote}>WHOOP is still calibrating — low confidence for now.</Text> : null}
         </View>
       ) : hrvTrend?.status ? (
         <View style={styles.bodyPanel}>
-          <View style={[styles.bodyRow, { marginTop: 0 }]}>
-            <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}</Text>
-            {hrvTrend.hrvPct != null ? <Text style={styles.bodyStats}> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</Text> : null}
-          </View>
-          {watchStats ? <Text style={[styles.bodyStats, { marginTop: 2 }]}>{watchStats}</Text> : null}
+          <Text style={styles.whoopTag}>HRV VS YOUR BASELINE</Text>
+          <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}{hrvTrend.hrvPct != null ? ` · ${hrvTrend.hrvPct > 0 ? '+' : ''}${hrvTrend.hrvPct}%` : ''}</Text>
+          {watchStats ? <Text style={styles.bodyStats}>{watchStats}</Text> : null}
           {bodyMeaning ? <Text style={[styles.bodyMeaning, { color: HRV_COLOR[hrvTrend.status] }]}>{bodyMeaning}</Text> : null}
         </View>
-      ) : null}
+      ) : null)}
 
       {/* 2. What do I do? — ONE call, big */}
       {call && (
@@ -272,7 +287,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
       {/* Done today — one line */}
       {ride && (
         <Text style={styles.doneLine} numberOfLines={1}>
-          ✓ Today: {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
+          ✓ {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
         </Text>
       )}
 
@@ -328,12 +343,24 @@ const HRV_MEANING: Record<string, string> = {
 const HRV_COLOR: Record<string, string> = { low: '#ef4444', slightly_low: '#eab308', normal: '#22c55e', high: '#22c55e' };
 const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
 const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
+/** 6h, 8½h — compact for the pill. */
+const hmShort = (sec: number) => {
+  const h = sec / 3600;
+  const whole = Math.floor(h);
+  const frac = h - whole;
+  return frac >= 0.375 && frac < 0.625 ? `${whole}½h` : `${Math.round(h)}h`;
+};
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
 const clean = (name: string) => name.replace(/^Draft - /, '');
 const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');
 
 const styles = StyleSheet.create({
-  bodyPanel: { marginTop: 12, padding: 10, borderRadius: 12, backgroundColor: '#0f172a' },
+  bodyPanel: { marginTop: 8, padding: 10, borderRadius: 12, backgroundColor: '#0f172a', gap: 4 },
+  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#0f172a' },
+  pillDot: { width: 8, height: 8, borderRadius: 4 },
+  pillLead: { fontSize: 14, fontWeight: '800' },
+  pillStats: { color: '#94a3b8', fontSize: 13, flex: 1 },
+  pillChevron: { color: '#64748b', fontSize: 16, fontWeight: '700' },
   bodyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bodyGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4, rowGap: 4 },
   bodyCell: { width: '50%' },
@@ -353,7 +380,7 @@ const styles = StyleSheet.create({
   callTitle: { color: '#f8fafc', fontSize: 19, fontWeight: '700', marginTop: 3 },
   callMeta: { color: '#94a3b8', fontSize: 13, marginTop: 2 },
   why: { color: '#cbd5e1', fontSize: 13, lineHeight: 18, marginTop: 6 },
-  doneLine: { color: '#34d399', fontSize: 13, marginTop: 10 },
+  doneLine: { color: '#64748b', fontSize: 12, marginTop: 8 },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
   detailsLink: { color: '#60a5fa', fontSize: 13, fontWeight: '600' },
   coachButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },

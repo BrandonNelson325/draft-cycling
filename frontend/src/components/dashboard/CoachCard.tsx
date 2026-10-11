@@ -24,6 +24,7 @@ interface TrainingStatus {
 
 export function CoachCard() {
   const [showDetail, setShowDetail] = useState(false);
+  const [showBody, setShowBody] = useState(false);
   const [suggestion, setSuggestion] = useState<TodaySuggestion | null>(null);
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
@@ -130,7 +131,15 @@ export function CoachCard() {
   const watch = readiness?.wellness && readiness.wellness.source !== 'whoop' ? readiness.wellness : null;
   const watchStats = watch ? [watch.hrv != null ? `HRV ${watch.hrv}` : null, watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ') : '';
 
-  const why = s?.keyPoints?.[0] ?? firstSentence(s?.recommendation);
+  // The coach's "why" carries the recovery meaning; our line is only a fallback.
+  const why = s?.keyPoints?.[0] ?? (firstSentence(s?.recommendation) || bodyMeaning || '');
+  const pillTone = recovery != null ? recoveryText(recovery) : hrvTrend?.status ? HRV_TEXT[hrvTrend.status] : '';
+  const pillDot = recovery != null ? (recovery >= 67 ? 'bg-green-500' : recovery >= 34 ? 'bg-yellow-500' : 'bg-red-500')
+    : hrvTrend?.status ? ({ low: 'bg-red-500', slightly_low: 'bg-yellow-500', normal: 'bg-green-500', high: 'bg-green-500' } as Record<string, string>)[hrvTrend.status] : '';
+  const pillLead = recovery != null ? `${recovery}%` : hrvTrend?.hrvPct != null ? `HRV ${hrvTrend.hrvPct > 0 ? '+' : ''}${hrvTrend.hrvPct}%` : null;
+  const pillStats = recovery != null
+    ? [hrv != null ? `HRV ${hrv}` : null, rhr != null ? `RHR ${rhr}` : null, sleep != null ? `Sleep ${hmShort(sleep)}${need ? `/${hmShort(need)}` : ''}` : null].filter(Boolean).join(' · ')
+    : watch ? [watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hmShort(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ') : '';
   const ride = hasRidden ? s?.todaysRides?.[0] : null;
 
   return (
@@ -138,22 +147,34 @@ export function CoachCard() {
       <CardContent className="p-5">
         {/* 1. How am I? — the load banner (subtitle honest about the body), then recovery */}
         <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} subtitleOverride={bannerSubtitle} />
-        {recovery != null ? (
-          <div className="flex items-center gap-3 mt-3">
-            <div className={`w-12 h-12 shrink-0 rounded-full border-[3px] flex items-center justify-center text-sm font-extrabold ${recoveryClass(recovery)}`}>{recovery}%</div>
-            <div className="min-w-0">
-              <div className="text-sm font-semibold text-gray-900">Recovery{latest ? ' (yesterday)' : ''} <span className="text-[10px] font-bold tracking-widest text-gray-400 ml-1">WHOOP</span></div>
-              <div className="text-xs text-gray-500 truncate">{[hrv != null ? `HRV ${hrv}` : null, rhr != null ? `RHR ${rhr}` : null, sleep != null ? `Sleep ${hm(sleep)}${need ? `/${hm(need)}` : ''}` : null].filter(Boolean).join(' · ')}</div>
-              {bodyMeaning && <div className={`text-sm font-medium mt-0.5 ${recoveryText(recovery)}`}>{bodyMeaning}</div>}
+        {pillLead && (
+          <button onClick={() => setShowBody((v) => !v)} className="mt-3 w-full flex items-center gap-2 rounded-full bg-gray-50 border px-3 py-1.5 text-left hover:bg-gray-100">
+            <span className={`w-2 h-2 rounded-full ${pillDot}`} />
+            <span className={`text-sm font-extrabold ${pillTone}`}>{pillLead}</span>
+            {pillStats && <span className="text-sm text-gray-500 truncate flex-1">· {pillStats}</span>}
+            <span className="text-gray-400 text-sm">{showBody ? '⌄' : '›'}</span>
+          </button>
+        )}
+        {showBody && (recovery != null ? (
+          <div className="mt-2 rounded-xl border bg-gray-50 p-3 space-y-2">
+            <div className="text-[9px] font-bold tracking-widest text-gray-400">{latest ? 'WHOOP · YESTERDAY (TODAY NOT SCORED YET)' : 'WHOOP RECOVERY'}</div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              {hrv != null && <div><span className="text-gray-500 text-xs">HRV</span><div className="font-semibold">{hrv} ms</div></div>}
+              {rhr != null && <div><span className="text-gray-500 text-xs">Resting HR</span><div className="font-semibold">{rhr} bpm</div></div>}
+              {sleep != null && <div><span className="text-gray-500 text-xs">Sleep</span><div className="font-semibold">{hm(sleep)}{need ? ` / ${hm(need)}` : ''}</div></div>}
+              {strain != null && <div><span className="text-gray-500 text-xs">Strain</span><div className="font-semibold">{strain.toFixed(1)}</div></div>}
             </div>
+            {bodyMeaning && <p className={`text-sm font-medium ${recoveryText(recovery)}`}>{bodyMeaning}</p>}
+            {w?.recoveryCalibrating && <p className="text-xs text-gray-500">WHOOP is still calibrating — low confidence for now.</p>}
           </div>
         ) : hrvTrend?.status ? (
-          <div className="mt-3">
-            <p className="text-sm"><span className="font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}</span>{hrvTrend.hrvPct != null && <span className="text-gray-500"> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</span>}</p>
+          <div className="mt-2 rounded-xl border bg-gray-50 p-3 space-y-1">
+            <div className="text-[9px] font-bold tracking-widest text-gray-400">HRV VS YOUR BASELINE</div>
+            <p className="text-sm font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}{hrvTrend.hrvPct != null ? ` · ${hrvTrend.hrvPct > 0 ? '+' : ''}${hrvTrend.hrvPct}%` : ''}</p>
             {watchStats && <p className="text-xs text-gray-500">{watchStats}</p>}
             {bodyMeaning && <p className={`text-sm font-medium ${HRV_TEXT[hrvTrend.status]}`}>{bodyMeaning}</p>}
           </div>
-        ) : null}
+        ) : null)}
 
         {/* 2. What do I do? + 3. Why */}
         {call && (
@@ -169,8 +190,8 @@ export function CoachCard() {
         )}
 
         {ride && (
-          <p className="text-sm text-emerald-700 mt-3 truncate">
-            ✓ Today: {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
+          <p className="text-xs text-gray-400 mt-2 truncate">
+            ✓ {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
           </p>
         )}
 
@@ -295,5 +316,10 @@ const HRV_TEXT: Record<string, string> = { low: 'text-red-600', slightly_low: 't
 const recoveryText = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-600' : 'text-red-600');
 const recoveryClass = (r: number) => (r >= 67 ? 'border-green-600 text-green-600' : r >= 34 ? 'border-yellow-500 text-yellow-500' : 'border-red-600 text-red-600');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
+/** 6h, 8½h — compact for the pill. */
+const hmShort = (sec: number) => {
+  const h = sec / 3600; const whole = Math.floor(h); const frac = h - whole;
+  return frac >= 0.375 && frac < 0.625 ? `${whole}½h` : `${Math.round(h)}h`;
+};
 const clean = (name: string) => name.replace(/^Draft - /, '');
 const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');
