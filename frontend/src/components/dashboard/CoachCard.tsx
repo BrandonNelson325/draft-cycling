@@ -213,7 +213,7 @@ export function CoachCard() {
         )}
 
         {/* Wellness pills */}
-        {healthData && <WellnessPills data={healthData} />}
+        {healthData && <WellnessPills data={healthData} skipBasics={!!pillLead} />}
 
         {/* Fitness & fatigue now live in the always-visible FitnessTrendChart
             on the dashboard (not hidden behind a toggle here). */}
@@ -264,10 +264,12 @@ function WorkoutRow({ tone, label, name, meta, onClick }: { tone: keyof typeof R
   );
 }
 
-function WellnessPills({ data }: { data: HealthData }) {
+// skipBasics: the recovery line above already shows sleep / HRV / RHR / recovery,
+// so only the extras (Body Battery, Stress) stay here.
+function WellnessPills({ data, skipBasics }: { data: HealthData; skipBasics?: boolean }) {
   const pills: { icon: React.ReactNode; value: string; label: string; bg: string }[] = [];
 
-  if (data.sleep_hours) {
+  if (!skipBasics && data.sleep_hours) {
     pills.push({
       icon: <Moon className="w-3.5 h-3.5 text-blue-600" />,
       value: `${data.sleep_hours}h`,
@@ -275,7 +277,7 @@ function WellnessPills({ data }: { data: HealthData }) {
       bg: 'bg-blue-50',
     });
   }
-  if (data.hrv) {
+  if (!skipBasics && data.hrv) {
     pills.push({
       icon: <Activity className="w-3.5 h-3.5 text-green-600" />,
       value: `${data.hrv}ms`,
@@ -283,7 +285,7 @@ function WellnessPills({ data }: { data: HealthData }) {
       bg: 'bg-green-50',
     });
   }
-  if (data.resting_heart_rate) {
+  if (!skipBasics && data.resting_heart_rate) {
     pills.push({
       icon: <Heart className="w-3.5 h-3.5 text-red-600" />,
       value: `${data.resting_heart_rate}`,
@@ -299,7 +301,7 @@ function WellnessPills({ data }: { data: HealthData }) {
       bg: 'bg-amber-50',
     });
   }
-  if (data.readiness_score != null) {
+  if (!skipBasics && data.readiness_score != null) {
     pills.push({
       icon: <TrendingUp className="w-3.5 h-3.5 text-purple-600" />,
       value: `${data.readiness_score}%`,
