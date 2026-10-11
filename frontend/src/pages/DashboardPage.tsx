@@ -12,13 +12,13 @@ export function DashboardPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
-      {/* Coach Card: gauge + AI summary + workout + wellness + chat; WHOOP recovery right under it */}
+      {/* Coach Card (left) | Training Metrics + WHOOP recovery (right — fills the column) */}
       <div className="grid gap-4 md:grid-cols-2">
+        <CoachCard />
         <div className="space-y-4">
-          <CoachCard />
+          <MetricsCard />
           <WhoopRecoveryCard />
         </div>
-        <MetricsCard />
       </div>
 
       {/* Fitness & Fatigue trend — full width */}
