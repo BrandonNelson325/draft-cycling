@@ -7,6 +7,8 @@ interface FreshnessGaugeProps {
   ctl?: number;
   atl?: number;
   showDetails?: boolean;
+  /** Replaces the banner subtitle — used when the body (recovery/HRV) disagrees with fresh legs. */
+  subtitleOverride?: string | null;
 }
 
 // Gradient: Blue (fresh/left) → Green (center) → Red (overtraining/right)
@@ -91,7 +93,7 @@ function acwrToGaugePct(ctl: number, atl: number, tsb: number): number {
 // Pre-computed colors at each stop for the LinearGradient component
 const GRADIENT_COLORS = HSL_STOPS.map(s => hslToRgb(s.h, s.s, s.l));
 
-export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = true }: FreshnessGaugeProps) {
+export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = true, subtitleOverride }: FreshnessGaugeProps) {
   const status = getStatus(tsb, ctl, atl);
   // Use ACWR-based gauge position (scales to individual fitness)
   const pct = acwrToGaugePct(ctl, atl, tsb);
@@ -122,7 +124,7 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
         <Text style={[styles.statusText, { color: textColor }]}>
           {status.label}
         </Text>
-        <Text style={[styles.statusSubtitle, { color: textColor, opacity: 0.8 }]}>{status.subtitle}</Text>
+        <Text style={[styles.statusSubtitle, { color: textColor, opacity: 0.8 }]}>{subtitleOverride || status.subtitle}</Text>
       </View>
 
       {showDetails && (

@@ -113,33 +113,33 @@ export function CoachCard() {
     else if (hasRidden && s.tomorrowsWorkout) call = { label: 'Tomorrow', title: clean(s.tomorrowsWorkout.name), meta: `${s.tomorrowsWorkout.duration} min · ${s.tomorrowsWorkout.type}`, workoutId: s.tomorrowsWorkout.workoutId, tone: 'text-purple-600' };
     else if (hasRidden && s.suggestedWorkout) call = { label: 'Tomorrow', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'text-green-600' : 'text-purple-600' };
   }
+  // Banner stays honest: fresh/balanced LEGS but a struggling BODY → say so.
+  const bodyLow = (recovery != null && recovery < 34) || hrvTrend?.status === 'low';
+  const bodyMid = !bodyLow && ((recovery != null && recovery < 67) || hrvTrend?.status === 'slightly_low');
+  const positiveForm = ['Fresh', 'Balanced', 'Detrained'].includes(form.label);
+  const bannerSubtitle = positiveForm && bodyLow
+    ? 'Rested legs, but your body needs recovery today'
+    : positiveForm && bodyMid ? 'Rested legs — recovery is moderate, keep it controlled' : null;
+
   const why = s?.keyPoints?.[0] ?? firstSentence(s?.recommendation);
   const ride = hasRidden ? s?.todaysRides?.[0] : null;
 
   return (
     <Card>
       <CardContent className="p-5">
-        {/* 1. How am I? — body + load */}
-        <div className="flex items-center justify-between gap-3">
-          {recovery != null ? (
-            <div className="flex items-center gap-3 min-w-0">
-              <div className={`w-12 h-12 shrink-0 rounded-full border-[3px] flex items-center justify-center text-sm font-extrabold ${recoveryClass(recovery)}`}>{recovery}%</div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-gray-900">Recovery{latest ? ' (yesterday)' : ''} <span className="text-[10px] font-bold tracking-widest text-gray-400 ml-1">WHOOP</span></div>
-                <div className="text-xs text-gray-500 truncate">{[hrv != null ? `HRV ${hrv}` : null, sleep != null ? `Sleep ${hm(sleep)}${need ? `/${hm(need)}` : ''}` : null].filter(Boolean).join(' · ')}</div>
-              </div>
-            </div>
-          ) : hrvTrend?.status ? (
+        {/* 1. How am I? — the load banner (subtitle honest about the body), then recovery */}
+        <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} subtitleOverride={bannerSubtitle} />
+        {recovery != null ? (
+          <div className="flex items-center gap-3 mt-3">
+            <div className={`w-12 h-12 shrink-0 rounded-full border-[3px] flex items-center justify-center text-sm font-extrabold ${recoveryClass(recovery)}`}>{recovery}%</div>
             <div className="min-w-0">
-              <div className="text-sm font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}</div>
-              {hrvTrend.hrvPct != null && <div className="text-xs text-gray-500">{hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs your baseline</div>}
+              <div className="text-sm font-semibold text-gray-900">Recovery{latest ? ' (yesterday)' : ''} <span className="text-[10px] font-bold tracking-widest text-gray-400 ml-1">WHOOP</span></div>
+              <div className="text-xs text-gray-500 truncate">{[hrv != null ? `HRV ${hrv}` : null, sleep != null ? `Sleep ${hm(sleep)}${need ? `/${hm(need)}` : ''}` : null].filter(Boolean).join(' · ')}</div>
             </div>
-          ) : <div />}
-          <div className={`rounded-lg border-2 px-3 py-1 text-center shrink-0 ${FORM_CLASS[form.label] || 'border-gray-300 text-gray-600'}`}>
-            <div className="text-[10px] font-bold tracking-wide text-gray-400">FORM</div>
-            <div className="text-sm font-extrabold">{form.label}</div>
           </div>
-        </div>
+        ) : hrvTrend?.status ? (
+          <p className="text-sm mt-3"><span className="font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}</span>{hrvTrend.hrvPct != null && <span className="text-gray-500"> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</span>}</p>
+        ) : null}
 
         {/* 2. What do I do? + 3. Why */}
         {call && (
@@ -171,7 +171,6 @@ export function CoachCard() {
 
         {showDetail && (
           <div className="mt-4 pt-4 border-t space-y-3">
-            <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} />
             {(w || latest) && (
               <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                 {hrv != null && <div><span className="text-gray-500 text-xs">HRV</span><div className="font-semibold">{hrv} ms</div></div>}
@@ -271,10 +270,6 @@ function WellnessPills({ data }: { data: HealthData }) {
   );
 }
 
-const FORM_CLASS: Record<string, string> = {
-  Fresh: 'border-sky-400 text-sky-600', Balanced: 'border-green-500 text-green-600', Productive: 'border-lime-500 text-lime-600',
-  Overreaching: 'border-orange-500 text-orange-600', Overtraining: 'border-red-500 text-red-600', Detrained: 'border-gray-400 text-gray-500',
-};
 const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
 const recoveryClass = (r: number) => (r >= 67 ? 'border-green-600 text-green-600' : r >= 34 ? 'border-yellow-500 text-yellow-500' : 'border-red-600 text-red-600');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;

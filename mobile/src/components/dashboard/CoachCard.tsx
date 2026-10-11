@@ -120,7 +120,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
 
   // ── KISS layout: How am I? → What do I do? → Why (one line). Details on tap. ──
   const form = getStatus(tsb, training?.ctl ?? 0, training?.atl ?? 0);
-  const formColor = FORM_COLORS[form.label] || '#94a3b8';
 
   // Body signal: WHOOP recovery (today, or latest while today isn't scored), else watch HRV trend.
   const w = readiness?.wellness?.source === 'whoop' ? readiness.wellness : null;
@@ -154,37 +153,40 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
       call = { label: 'Tomorrow', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'rest' : 'tomorrow' };
     }
   }
+  // Banner stays honest: fresh/balanced LEGS but a struggling BODY → say so.
+  const bodyLow = (recovery != null && recovery < 34) || hrvTrend?.status === 'low';
+  const bodyMid = !bodyLow && ((recovery != null && recovery < 67) || hrvTrend?.status === 'slightly_low');
+  const positiveForm = ['Fresh', 'Balanced', 'Detrained'].includes(form.label);
+  const bannerSubtitle = positiveForm && bodyLow
+    ? 'Rested legs, but your body needs recovery today'
+    : positiveForm && bodyMid
+      ? 'Rested legs — recovery is moderate, keep it controlled'
+      : null;
+
   const why = adjusting ? s!.adjustment!.reason : (s?.keyPoints?.[0] ?? firstSentence(s?.recommendation));
   const otherPoints = adjusting ? (s?.keyPoints ?? []) : (s?.keyPoints ?? []).slice(1);
   const ride = hasRidden ? s?.todaysRides?.[0] : null;
 
   return (
     <Card>
-      {/* 1. How am I? — body + load, side by side */}
-      <View style={styles.statusRow}>
-        {recovery != null ? (
-          <View style={styles.bodyBlock}>
-            <View style={[styles.ring, { borderColor: recoveryColor(recovery) }]}>
-              <Text style={[styles.ringText, { color: recoveryColor(recovery) }]}>{recovery}%</Text>
-            </View>
-            <View style={{ flexShrink: 1 }}>
-              <Text style={styles.bodyTitle}>Recovery{recoveryStale ? ' (yesterday)' : ''}</Text>
-              {bodyStats ? <Text style={styles.bodyStats} numberOfLines={1}>{bodyStats}</Text> : null}
-            </View>
+      {/* 1. How am I? — the load banner (subtitle honest about the body), then recovery */}
+      <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} subtitleOverride={bannerSubtitle} />
+      {recovery != null ? (
+        <View style={styles.bodyRow}>
+          <View style={[styles.ring, { borderColor: recoveryColor(recovery) }]}>
+            <Text style={[styles.ringText, { color: recoveryColor(recovery) }]}>{recovery}%</Text>
           </View>
-        ) : hrvTrend?.status ? (
-          <View style={styles.bodyBlock}>
-            <View style={{ flexShrink: 1 }}>
-              <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}</Text>
-              {hrvTrend.hrvPct != null ? <Text style={styles.bodyStats}>{hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs your baseline</Text> : null}
-            </View>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={styles.bodyTitle}>Recovery{recoveryStale ? ' (yesterday)' : ''} <Text style={styles.whoopTag}>WHOOP</Text></Text>
+            {bodyStats ? <Text style={styles.bodyStats} numberOfLines={1}>{bodyStats}</Text> : null}
           </View>
-        ) : <View style={{ flex: 1 }} />}
-        <View style={[styles.formChip, { borderColor: formColor }]}>
-          <Text style={styles.formLabel}>Form</Text>
-          <Text style={[styles.formValue, { color: formColor }]}>{form.label}</Text>
         </View>
-      </View>
+      ) : hrvTrend?.status ? (
+        <View style={styles.bodyRow}>
+          <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}</Text>
+          {hrvTrend.hrvPct != null ? <Text style={styles.bodyStats}> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</Text> : null}
+        </View>
+      ) : null}
 
       {/* 2. What do I do? — ONE call, big */}
       {call && (
@@ -246,7 +248,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
 
       {showDetail && (
         <View style={styles.details}>
-          <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} />
           {(w || latest) && (
             <View style={styles.detailGrid}>
               {[
@@ -276,9 +277,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   );
 }
 
-const FORM_COLORS: Record<string, string> = {
-  Fresh: '#38bdf8', Balanced: '#22c55e', Productive: '#84cc16', Overreaching: '#f97316', Overtraining: '#ef4444', Detrained: '#94a3b8',
-};
 const TONE_COLORS = { today: '#60a5fa', change: '#fbbf24', rest: '#22c55e', tomorrow: '#a78bfa' } as const;
 const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
 const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
@@ -287,8 +285,8 @@ const clean = (name: string) => name.replace(/^Draft - /, '');
 const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');
 
 const styles = StyleSheet.create({
-  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  bodyBlock: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  bodyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  whoopTag: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   ring: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
   ringText: { fontSize: 15, fontWeight: '800' },
   bodyTitle: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
