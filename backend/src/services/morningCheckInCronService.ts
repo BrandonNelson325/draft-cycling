@@ -50,6 +50,9 @@ async function hasCheckedInToday(athleteId: string, todayDate: string): Promise<
   return !!data?.check_in_completed;
 }
 
+/** Local time of the Whoop users' "no recovery today" fallback nudge. */
+const WHOOP_MISSING_REMINDER_HHMM = '12:00';
+
 async function hasWhoopRecoveryToday(athleteId: string, todayDate: string): Promise<boolean> {
   const { data } = await supabaseAdmin
     .from('daily_metrics').select('wellness_source, readiness_score')
@@ -84,6 +87,23 @@ export function startMorningCheckInCron() {
         const alreadySentToday = athlete.morning_notif_sent_date === todayDate;
         const alreadyRemindedToday = athlete.morning_reminder_sent_date === todayDate;
 
+        // --- WHOOP users: no check-in nag. Their recovery push fires when Whoop
+        // scores them (whenever they wake). The only fallback is a noon nudge if
+        // Whoop never scored — a fixed noon (not check-in time + 4h) so a
+        // sleep-in day doesn't get a false "no recovery" at 9am.
+        if (athlete.whoop_access_token) {
+          if (!alreadyRemindedToday && localNow === WHOOP_MISSING_REMINDER_HHMM) {
+            try {
+              const done = (await hasCheckedInToday(athlete.id, todayDate)) || (await hasWhoopRecoveryToday(athlete.id, todayDate));
+              if (!done) await sendWhoopMissingReminder(athlete.id);
+              await supabaseAdmin.from('athletes').update({ morning_reminder_sent_date: todayDate }).eq('id', athlete.id);
+            } catch (err) {
+              logger.error(`[MorningCron] Failed Whoop reminder for athlete ${athlete.id}:`, err);
+            }
+          }
+          continue;
+        }
+
         // --- Initial notification: send once when time matches ---
         if (!alreadySentToday && checkinHHMM === localNow) {
           try {
@@ -91,7 +111,7 @@ export function startMorningCheckInCron() {
             // notification the moment Whoop scores them (whoopService).
             // Skip also if they already completed the check-in.
             const alreadyDone = await hasCheckedInToday(athlete.id, todayDate);
-            if (!alreadyDone && !athlete.whoop_access_token) {
+            if (!alreadyDone) {
               await sendMorningCheckInNotification(athlete.id);
             }
             // Mark as sent for today regardless, so we don't re-send
@@ -114,13 +134,7 @@ export function startMorningCheckInCron() {
               const completed = await hasCheckedInToday(athlete.id, todayDate);
               if (completed) continue;
 
-              if (athlete.whoop_access_token) {
-                // Whoop user: only nudge if Whoop never scored today (strap off?).
-                if (await hasWhoopRecoveryToday(athlete.id, todayDate)) continue;
-                await sendWhoopMissingReminder(athlete.id);
-              } else {
-                await sendMorningCheckInReminder(athlete.id);
-              }
+              await sendMorningCheckInReminder(athlete.id);
               await supabaseAdmin
                 .from('athletes')
                 .update({ morning_reminder_sent_date: todayDate })
