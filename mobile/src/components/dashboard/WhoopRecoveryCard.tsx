@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import Card from '../ui/Card';
 import { dailyCheckInService, type WellnessData, type WhoopReadinessStatus } from '../../services/dailyCheckInService';
 
 const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
@@ -29,45 +30,39 @@ export default function WhoopRecoveryCard() {
   }, []);
 
   if (!w || w.readinessScore == null) return null;
-  const other = (w.otherActivities || []).filter(Boolean);
+
+  const stats = [
+    w.hrv != null ? `HRV ${w.hrv}` : null,
+    w.rhr != null ? `RHR ${w.rhr}` : null,
+    w.sleepSeconds != null ? `Sleep ${hm(w.sleepSeconds)}${w.sleepNeedSeconds ? `/${hm(w.sleepNeedSeconds)}` : ''}` : null,
+    w.dayStrain != null ? `Strain ${w.dayStrain.toFixed(1)}` : null,
+  ].filter(Boolean).join(' · ');
+  const note = stale
+    ? `${new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} · today not scored yet`
+    : w.recoveryCalibrating ? 'calibrating' : null;
 
   return (
-    <View style={styles.panel}>
-      <View style={styles.header}>
-        <Text style={styles.title}>RECOVERY</Text>
-        <Text style={styles.source}>WHOOP</Text>
+    <Card style={styles.strip}>
+      <View style={[styles.badge, { borderColor: recoveryColor(w.readinessScore) }]}>
+        <Text style={[styles.badgeText, { color: recoveryColor(w.readinessScore) }]}>{w.readinessScore}%</Text>
       </View>
-      <View style={styles.row}>
-        <Text style={[styles.big, { color: recoveryColor(w.readinessScore) }]}>{w.readinessScore}%</Text>
-        <View style={styles.stats}>
-          {w.hrv != null && <Text style={styles.stat}>HRV <Text style={styles.val}>{w.hrv}ms</Text></Text>}
-          {w.rhr != null && <Text style={styles.stat}>RHR <Text style={styles.val}>{w.rhr}</Text></Text>}
-          {w.sleepSeconds != null && (
-            <Text style={styles.stat}>
-              Sleep <Text style={styles.val}>{hm(w.sleepSeconds)}{w.sleepNeedSeconds ? ` / ${hm(w.sleepNeedSeconds)}` : ''}</Text>
-            </Text>
-          )}
-          {w.dayStrain != null && <Text style={styles.stat}>Strain <Text style={styles.val}>{w.dayStrain.toFixed(1)}</Text></Text>}
+      <View style={{ flex: 1 }}>
+        <View style={styles.topRow}>
+          <Text style={styles.title}>Recovery</Text>
+          <Text style={styles.source}>WHOOP{note ? ` · ${note}` : ''}</Text>
         </View>
+        <Text style={styles.stats} numberOfLines={1}>{stats}</Text>
       </View>
-      {stale ? <Text style={styles.note}>Showing {new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} — today's recovery isn't scored yet.</Text> : null}
-      {w.recoveryCalibrating ? <Text style={styles.note}>WHOOP is still calibrating — low confidence for now.</Text> : null}
-      {other.length > 0 && (
-        <Text style={styles.note}>Off the bike: {other.map((a) => `${a.sport} ${a.minutes}min`).join(', ')}</Text>
-      )}
-    </View>
+    </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  panel: { marginTop: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#334155', backgroundColor: '#0b1220' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  title: { color: '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
-  source: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  big: { fontSize: 34, fontWeight: '800' },
-  stats: { flex: 1, gap: 2 },
-  stat: { color: '#94a3b8', fontSize: 13 },
-  val: { color: '#e2e8f0', fontWeight: '600' },
-  note: { color: '#94a3b8', fontSize: 12, marginTop: 8 },
+  strip: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 12 },
+  badge: { borderWidth: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, minWidth: 58, alignItems: 'center' },
+  badgeText: { fontSize: 17, fontWeight: '800' },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { color: '#e2e8f0', fontSize: 13, fontWeight: '700' },
+  source: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  stats: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
 });

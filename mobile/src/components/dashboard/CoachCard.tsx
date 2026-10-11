@@ -5,7 +5,6 @@ import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import Card from '../ui/Card';
 import FreshnessGauge from './FreshnessGauge';
-import WhoopRecoveryCard from './WhoopRecoveryCard';
 import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
 import { trainingService } from '../../services/trainingService';
@@ -119,9 +118,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
 
       {/* Freshness Gauge — compact, no CTL/ATL details */}
       <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} />
-
-      {/* WHOOP recovery — its own panel, separate from the coach's words (Whoop users only) */}
-      <WhoopRecoveryCard />
 
       {/* Workout blocks + recommendation */}
       {s && (

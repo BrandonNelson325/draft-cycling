@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
+import { Card, CardContent } from '../ui/card';
 import { dailyCheckInService, type WellnessData } from '../../services/dailyCheckInService';
 
 const recoveryColor = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-500' : 'text-red-600');
+const recoveryBorder = (r: number) => (r >= 67 ? 'border-green-600' : r >= 34 ? 'border-yellow-500' : 'border-red-600');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
 /**
@@ -27,30 +29,31 @@ export function WhoopRecoveryCard() {
   }, []);
 
   if (!w || w.readinessScore == null) return null;
-  const other = (w.otherActivities || []).filter(Boolean);
+
+  const stats = [
+    w.hrv != null ? `HRV ${w.hrv}ms` : null,
+    w.rhr != null ? `RHR ${w.rhr}` : null,
+    w.sleepSeconds != null ? `Sleep ${hm(w.sleepSeconds)}${w.sleepNeedSeconds ? ` / ${hm(w.sleepNeedSeconds)}` : ''}` : null,
+    w.dayStrain != null ? `Strain ${w.dayStrain.toFixed(1)}` : null,
+  ].filter(Boolean).join(' · ');
+  const note = stale
+    ? `${new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} · today not scored yet`
+    : w.recoveryCalibrating ? 'calibrating' : null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[11px] font-extrabold tracking-widest text-gray-500">RECOVERY</span>
-        <span className="text-[10px] font-bold tracking-widest text-gray-400">WHOOP</span>
-      </div>
-      <div className="flex items-center gap-5">
-        <div className={`text-4xl font-extrabold ${recoveryColor(w.readinessScore)}`}>{w.readinessScore}%</div>
-        <div className="grid grid-cols-2 gap-x-5 gap-y-0.5 text-sm text-gray-600">
-          {w.hrv != null && <div>HRV <span className="font-semibold text-gray-900">{w.hrv}ms</span></div>}
-          {w.rhr != null && <div>RHR <span className="font-semibold text-gray-900">{w.rhr}</span></div>}
-          {w.sleepSeconds != null && (
-            <div>Sleep <span className="font-semibold text-gray-900">{hm(w.sleepSeconds)}{w.sleepNeedSeconds ? ` / ${hm(w.sleepNeedSeconds)}` : ''}</span></div>
-          )}
-          {w.dayStrain != null && <div>Strain <span className="font-semibold text-gray-900">{w.dayStrain.toFixed(1)}</span></div>}
+    <Card>
+      <CardContent className="py-3 px-4 flex items-center gap-4">
+        <div className={`rounded-full border-2 px-3 py-0.5 text-lg font-extrabold ${recoveryColor(w.readinessScore)} ${recoveryBorder(w.readinessScore)}`}>
+          {w.readinessScore}%
         </div>
-      </div>
-      {stale && <p className="text-xs text-gray-500 mt-2">Showing {new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} — today's recovery isn't scored yet.</p>}
-      {w.recoveryCalibrating && <p className="text-xs text-gray-500 mt-2">WHOOP is still calibrating — low confidence for now.</p>}
-      {other.length > 0 && (
-        <p className="text-xs text-gray-500 mt-2">Off the bike: {other.map((a) => `${a.sport} ${a.minutes}min`).join(', ')}</p>
-      )}
-    </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-900">Recovery</span>
+            <span className="text-[10px] font-bold tracking-wider text-gray-400">WHOOP{note ? ` · ${note}` : ''}</span>
+          </div>
+          <div className="text-xs text-gray-500 truncate">{stats}</div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

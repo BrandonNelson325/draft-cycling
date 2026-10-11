@@ -5,6 +5,7 @@ import { WeeklyVolumeChart } from '../components/dashboard/WeeklyVolumeChart';
 import { PowerCurveChart } from '../components/dashboard/PowerCurveChart';
 import { CoachCard } from '../components/dashboard/CoachCard';
 import { FitnessTrendChart } from '../components/dashboard/FitnessTrendChart';
+import { WhoopRecoveryCard } from '../components/dashboard/WhoopRecoveryCard';
 import { OtherTrainingCard } from '../components/dashboard/OtherTrainingCard';
 
 export function DashboardPage() {
@@ -16,6 +17,9 @@ export function DashboardPage() {
         <CoachCard />
         <MetricsCard />
       </div>
+
+      {/* WHOOP recovery — slim strip, Whoop users only */}
+      <WhoopRecoveryCard />
 
       {/* Fitness & Fatigue trend — full width */}
       <FitnessTrendChart />
