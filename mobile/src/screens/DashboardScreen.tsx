@@ -93,9 +93,9 @@ export default function DashboardScreen() {
           />
         }
       >
-        {/* WHOOP recovery first — body state, then the coach's call (Whoop users only) */}
-        <WhoopRecoveryCard key={`whoop-${refreshKey}`} />
         <CoachCard key={`coach-${refreshKey}`} onWorkoutPress={handleWorkoutPress} />
+        {/* WHOOP recovery right under the coach's call (Whoop users only) */}
+        <WhoopRecoveryCard key={`whoop-${refreshKey}`} />
         <MetricsCard key={`metrics-${refreshKey}`} />
         <FitnessTrendChart key={`fitness-${refreshKey}`} />
         <WeeklyVolumeChart key={`weekly-${refreshKey}`} />

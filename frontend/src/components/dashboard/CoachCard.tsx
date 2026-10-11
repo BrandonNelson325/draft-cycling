@@ -104,7 +104,7 @@ export function CoachCard() {
               <div>
                 <ul className="space-y-1">
                   {s.keyPoints!.map((p, i) => (
-                    <li key={i} className="flex gap-2 text-sm font-semibold text-gray-900">
+                    <li key={i} className="flex gap-2 text-[13px] font-medium text-gray-700">
                       <span className="text-blue-500">•</span><span>{p}</span>
                     </li>
                   ))}

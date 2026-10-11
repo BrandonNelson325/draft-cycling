@@ -31,38 +31,50 @@ export default function WhoopRecoveryCard() {
 
   if (!w || w.readinessScore == null) return null;
 
-  const stats = [
-    w.hrv != null ? `HRV ${w.hrv}` : null,
-    w.rhr != null ? `RHR ${w.rhr}` : null,
-    w.sleepSeconds != null ? `Sleep ${hm(w.sleepSeconds)}${w.sleepNeedSeconds ? `/${hm(w.sleepNeedSeconds)}` : ''}` : null,
-    w.dayStrain != null ? `Strain ${w.dayStrain.toFixed(1)}` : null,
-  ].filter(Boolean).join(' · ');
+  const stats: [string, string][] = [];
+  if (w.hrv != null) stats.push(['HRV', `${w.hrv} ms`]);
+  if (w.rhr != null) stats.push(['Resting HR', `${w.rhr} bpm`]);
+  if (w.sleepSeconds != null) stats.push(['Sleep', `${hm(w.sleepSeconds)}${w.sleepNeedSeconds ? ` / ${hm(w.sleepNeedSeconds)}` : ''}`]);
+  if (w.dayStrain != null) stats.push(['Strain', w.dayStrain.toFixed(1)]);
   const note = stale
-    ? `${new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} · today not scored yet`
-    : w.recoveryCalibrating ? 'calibrating' : null;
+    ? `Showing ${new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} — today's recovery isn't scored yet`
+    : w.recoveryCalibrating ? 'WHOOP is still calibrating — low confidence for now' : null;
 
   return (
-    <Card style={styles.strip}>
-      <View style={[styles.badge, { borderColor: recoveryColor(w.readinessScore) }]}>
-        <Text style={[styles.badgeText, { color: recoveryColor(w.readinessScore) }]}>{w.readinessScore}%</Text>
+    <Card style={styles.card}>
+      <View style={styles.header}>
+        <Text style={styles.title}>Recovery</Text>
+        <Text style={styles.source}>WHOOP</Text>
       </View>
-      <View style={{ flex: 1 }}>
-        <View style={styles.topRow}>
-          <Text style={styles.title}>Recovery</Text>
-          <Text style={styles.source}>WHOOP{note ? ` · ${note}` : ''}</Text>
+      <View style={styles.row}>
+        <View style={[styles.badge, { borderColor: recoveryColor(w.readinessScore) }]}>
+          <Text style={[styles.badgeText, { color: recoveryColor(w.readinessScore) }]}>{w.readinessScore}%</Text>
         </View>
-        <Text style={styles.stats} numberOfLines={1}>{stats}</Text>
+        <View style={styles.grid}>
+          {stats.map(([label, value]) => (
+            <View key={label} style={styles.cell}>
+              <Text style={styles.label}>{label}</Text>
+              <Text style={styles.value}>{value}</Text>
+            </View>
+          ))}
+        </View>
       </View>
+      {note ? <Text style={styles.note}>{note}</Text> : null}
     </Card>
   );
 }
 
 const styles = StyleSheet.create({
-  strip: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingHorizontal: 12 },
-  badge: { borderWidth: 2, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4, minWidth: 58, alignItems: 'center' },
-  badgeText: { fontSize: 17, fontWeight: '800' },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  title: { color: '#e2e8f0', fontSize: 13, fontWeight: '700' },
-  source: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  stats: { color: '#94a3b8', fontSize: 12, marginTop: 2 },
+  card: { paddingVertical: 12, paddingHorizontal: 14 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  title: { color: '#f1f5f9', fontSize: 15, fontWeight: '700' },
+  source: { color: '#64748b', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  badge: { borderWidth: 3, borderRadius: 999, width: 68, height: 68, alignItems: 'center', justifyContent: 'center' },
+  badgeText: { fontSize: 21, fontWeight: '800' },
+  grid: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', rowGap: 6 },
+  cell: { width: '50%' },
+  label: { color: '#64748b', fontSize: 11 },
+  value: { color: '#e2e8f0', fontSize: 14, fontWeight: '600' },
+  note: { color: '#94a3b8', fontSize: 12, marginTop: 8 },
 });

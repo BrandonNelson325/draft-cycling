@@ -30,29 +30,36 @@ export function WhoopRecoveryCard() {
 
   if (!w || w.readinessScore == null) return null;
 
-  const stats = [
-    w.hrv != null ? `HRV ${w.hrv}ms` : null,
-    w.rhr != null ? `RHR ${w.rhr}` : null,
-    w.sleepSeconds != null ? `Sleep ${hm(w.sleepSeconds)}${w.sleepNeedSeconds ? ` / ${hm(w.sleepNeedSeconds)}` : ''}` : null,
-    w.dayStrain != null ? `Strain ${w.dayStrain.toFixed(1)}` : null,
-  ].filter(Boolean).join(' · ');
+  const stats: [string, string][] = [];
+  if (w.hrv != null) stats.push(['HRV', `${w.hrv} ms`]);
+  if (w.rhr != null) stats.push(['Resting HR', `${w.rhr} bpm`]);
+  if (w.sleepSeconds != null) stats.push(['Sleep', `${hm(w.sleepSeconds)}${w.sleepNeedSeconds ? ` / ${hm(w.sleepNeedSeconds)}` : ''}`]);
+  if (w.dayStrain != null) stats.push(['Strain', w.dayStrain.toFixed(1)]);
   const note = stale
-    ? `${new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} · today not scored yet`
-    : w.recoveryCalibrating ? 'calibrating' : null;
+    ? `Showing ${new Date(stale + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short' })} — today's recovery isn't scored yet`
+    : w.recoveryCalibrating ? 'WHOOP is still calibrating — low confidence for now' : null;
 
   return (
     <Card>
-      <CardContent className="py-3 px-4 flex items-center gap-4">
-        <div className={`rounded-full border-2 px-3 py-0.5 text-lg font-extrabold ${recoveryColor(w.readinessScore)} ${recoveryBorder(w.readinessScore)}`}>
-          {w.readinessScore}%
+      <CardContent className="py-3 px-4">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-sm font-semibold text-gray-900">Recovery</span>
+          <span className="text-[10px] font-bold tracking-widest text-gray-400">WHOOP</span>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-900">Recovery</span>
-            <span className="text-[10px] font-bold tracking-wider text-gray-400">WHOOP{note ? ` · ${note}` : ''}</span>
+        <div className="flex items-center gap-4">
+          <div className={`w-16 h-16 rounded-full border-[3px] flex items-center justify-center text-xl font-extrabold ${recoveryColor(w.readinessScore)} ${recoveryBorder(w.readinessScore)}`}>
+            {w.readinessScore}%
           </div>
-          <div className="text-xs text-gray-500 truncate">{stats}</div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 flex-1">
+            {stats.map(([label, value]) => (
+              <div key={label}>
+                <div className="text-[11px] text-gray-500">{label}</div>
+                <div className="text-sm font-semibold text-gray-900">{value}</div>
+              </div>
+            ))}
+          </div>
         </div>
+        {note && <p className="text-xs text-gray-500 mt-2">{note}</p>}
       </CardContent>
     </Card>
   );
