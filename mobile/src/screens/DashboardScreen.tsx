@@ -11,7 +11,6 @@ import CoachCard from '../components/dashboard/CoachCard';
 import MetricsCard from '../components/dashboard/MetricsCard';
 import WeeklyVolumeChart from '../components/dashboard/WeeklyVolumeChart';
 import FitnessTrendChart from '../components/dashboard/FitnessTrendChart';
-import WhoopRecoveryCard from '../components/dashboard/WhoopRecoveryCard';
 import PowerCurveChart from '../components/dashboard/PowerCurveChart';
 import FTPEstimateCard from '../components/dashboard/FTPEstimateCard';
 import OtherTrainingCard from '../components/dashboard/OtherTrainingCard';
@@ -94,8 +93,6 @@ export default function DashboardScreen() {
         }
       >
         <CoachCard key={`coach-${refreshKey}`} onWorkoutPress={handleWorkoutPress} />
-        {/* WHOOP recovery right under the coach's call (Whoop users only) */}
-        <WhoopRecoveryCard key={`whoop-${refreshKey}`} />
         <MetricsCard key={`metrics-${refreshKey}`} />
         <FitnessTrendChart key={`fitness-${refreshKey}`} />
         <WeeklyVolumeChart key={`weekly-${refreshKey}`} />

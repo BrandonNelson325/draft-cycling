@@ -4,10 +4,11 @@ import { useNavigation } from '@react-navigation/native';
 import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
 import Card from '../ui/Card';
-import FreshnessGauge from './FreshnessGauge';
+import FreshnessGauge, { getStatus } from './FreshnessGauge';
 import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
 import { trainingService } from '../../services/trainingService';
+import { dailyCheckInService, type DailyReadiness } from '../../services/dailyCheckInService';
 import type { MainTabParamList } from '../../navigation/types';
 
 interface TrainingStatus {
@@ -29,16 +30,20 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const [error, setError] = useState(false);
   const [adjustmentBusy, setAdjustmentBusy] = useState(false);
   const [showDetail, setShowDetail] = useState(false);
+  const [readiness, setReadiness] = useState<DailyReadiness | null>(null);
 
   useEffect(() => {
     let failed = 0;
     Promise.all([
       dailyAnalysisService.getTodaySuggestion().catch(() => { failed++; return null; }),
       trainingService.getTrainingStatus().catch(() => { failed++; return null; }),
-    ]).then(([s, t]) => {
+      // Recovery (WHOOP) / HRV trend for the top row — optional.
+      dailyCheckInService.getDailyReadiness().catch(() => null),
+    ]).then(([s, t, r]) => {
       if (failed === 2) setError(true);
       setSuggestion(s);
       setTraining(t ?? null);
+      setReadiness(r);
       setLoading(false);
     });
   }, []);
@@ -113,180 +118,200 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
     navigation.navigate('Chat', { initialMessage: msg });
   };
 
+  // ── KISS layout: How am I? → What do I do? → Why (one line). Details on tap. ──
+  const form = getStatus(tsb, training?.ctl ?? 0, training?.atl ?? 0);
+  const formColor = FORM_COLORS[form.label] || '#94a3b8';
+
+  // Body signal: WHOOP recovery (today, or latest while today isn't scored), else watch HRV trend.
+  const w = readiness?.wellness?.source === 'whoop' ? readiness.wellness : null;
+  const latest = !w && readiness?.whoop?.connected ? readiness.whoop.latest : null;
+  const recovery = w?.readinessScore ?? latest?.readinessScore ?? null;
+  const recoveryStale = !w && !!latest;
+  const hrvTrend = readiness?.hrvTrend && !readiness.hrvTrend.suspect ? readiness.hrvTrend : null;
+  const bodyStats = [
+    (w?.hrv ?? latest?.hrv) != null ? `HRV ${w?.hrv ?? latest?.hrv}` : null,
+    (w?.sleepSeconds ?? latest?.sleepSeconds) != null
+      ? `Sleep ${hm((w?.sleepSeconds ?? latest?.sleepSeconds)!)}${(w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds) ? `/${hm((w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds)!)}` : ''}`
+      : null,
+  ].filter(Boolean).join(' · ');
+
+  // The ONE call to show, in priority order.
+  type Call = { label: string; title: string; meta?: string; workoutId?: string; tone: 'today' | 'change' | 'rest' | 'tomorrow' };
+  let call: Call | null = null;
+  const adjusting = !!(s && !hasRidden && s.todaysWorkout && s.adjustment && s.adjustment.kind !== 'none');
+  if (s) {
+    if (adjusting) {
+      call = { label: 'Today · coach suggests', title: s.adjustment!.headline, tone: 'change' };
+    } else if (!hasRidden && s.todaysWorkout) {
+      call = { label: 'Today', title: clean(s.todaysWorkout.name), meta: `${s.todaysWorkout.duration} min · ${s.todaysWorkout.type}`, workoutId: s.todaysWorkout.workoutId, tone: 'today' };
+    } else if (!hasRidden && s.isRestDay) {
+      call = { label: 'Today', title: 'Rest day', tone: 'rest' };
+    } else if (!hasRidden && s.suggestedWorkout) {
+      call = { label: 'Today', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'rest' : 'today' };
+    } else if (hasRidden && s.tomorrowsWorkout) {
+      call = { label: 'Tomorrow', title: clean(s.tomorrowsWorkout.name), meta: `${s.tomorrowsWorkout.duration} min · ${s.tomorrowsWorkout.type}`, workoutId: s.tomorrowsWorkout.workoutId, tone: 'tomorrow' };
+    } else if (hasRidden && s.suggestedWorkout) {
+      call = { label: 'Tomorrow', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'rest' : 'tomorrow' };
+    }
+  }
+  const why = adjusting ? s!.adjustment!.reason : (s?.keyPoints?.[0] ?? firstSentence(s?.recommendation));
+  const otherPoints = adjusting ? (s?.keyPoints ?? []) : (s?.keyPoints ?? []).slice(1);
+  const ride = hasRidden ? s?.todaysRides?.[0] : null;
+
   return (
     <Card>
-      <Text style={styles.title}>Training Status</Text>
-
-      {/* Freshness Gauge — compact, no CTL/ATL details */}
-      <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} />
-
-      {/* Workout blocks + recommendation */}
-      {s && (
-        <View style={styles.aiSection}>
-          {/* Today's completed rides (post-ride) */}
-          {hasRidden && s.todaysRides.length > 0 && (
-            <View style={[styles.workoutBox, styles.completedBox]}>
-              <Text style={[styles.workoutLabel, styles.completedLabel]}>Completed Today</Text>
-              {s.todaysRides.map((ride, i) => (
-                <View key={i} style={styles.rideRow}>
-                  <Text style={styles.rideName}>{ride.name}</Text>
-                  <Text style={styles.rideMeta}>{ride.duration}min · Load {ride.tss}</Text>
-                </View>
-              ))}
+      {/* 1. How am I? — body + load, side by side */}
+      <View style={styles.statusRow}>
+        {recovery != null ? (
+          <View style={styles.bodyBlock}>
+            <View style={[styles.ring, { borderColor: recoveryColor(recovery) }]}>
+              <Text style={[styles.ringText, { color: recoveryColor(recovery) }]}>{recovery}%</Text>
             </View>
-          )}
-
-          {/* Coach override (pre-ride): AI thinks the plan should change */}
-          {!hasRidden && s.todaysWorkout && s.adjustment && s.adjustment.kind !== 'none' && (
-            <View style={[styles.workoutBox, styles.adjustmentBox]}>
-              <Text style={[styles.workoutLabel, styles.adjustmentLabel]}>Suggested</Text>
-              <Text style={styles.workoutName}>{s.adjustment.headline}</Text>
-              <Text style={styles.workoutMeta}>{s.adjustment.reason}</Text>
-              <View style={styles.adjustmentButtons}>
-                {s.adjustment.kind === 'rest' && (
-                  <TouchableOpacity
-                    style={[styles.adjustmentButton, styles.adjustmentAccept, adjustmentBusy && styles.adjustmentDisabled]}
-                    onPress={handleAcceptAdjustment}
-                    disabled={adjustmentBusy}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.adjustmentAcceptText}>Take rest day</Text>
-                  </TouchableOpacity>
-                )}
-                <TouchableOpacity
-                  style={[styles.adjustmentButton, styles.adjustmentDismiss, adjustmentBusy && styles.adjustmentDisabled]}
-                  onPress={handleDismissAdjustment}
-                  disabled={adjustmentBusy}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.adjustmentDismissText}>Keep planned</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={{ flexShrink: 1 }}>
+              <Text style={styles.bodyTitle}>Recovery{recoveryStale ? ' (yesterday)' : ''}</Text>
+              {bodyStats ? <Text style={styles.bodyStats} numberOfLines={1}>{bodyStats}</Text> : null}
             </View>
-          )}
+          </View>
+        ) : hrvTrend?.status ? (
+          <View style={styles.bodyBlock}>
+            <View style={{ flexShrink: 1 }}>
+              <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}</Text>
+              {hrvTrend.hrvPct != null ? <Text style={styles.bodyStats}>{hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs your baseline</Text> : null}
+            </View>
+          </View>
+        ) : <View style={{ flex: 1 }} />}
+        <View style={[styles.formChip, { borderColor: formColor }]}>
+          <Text style={styles.formLabel}>Form</Text>
+          <Text style={[styles.formValue, { color: formColor }]}>{form.label}</Text>
+        </View>
+      </View>
 
-          {/* Today's planned workout (pre-ride) — dimmed when there's an active override */}
-          {!hasRidden && s.todaysWorkout && (
+      {/* 2. What do I do? — ONE call, big */}
+      {call && (
+        <TouchableOpacity
+          activeOpacity={call.workoutId ? 0.7 : 1}
+          disabled={!call.workoutId}
+          onPress={() => call?.workoutId && onWorkoutPress?.(call.workoutId)}
+          style={styles.callBlock}
+        >
+          <Text style={[styles.callLabel, { color: TONE_COLORS[call.tone] }]}>{call.label}</Text>
+          <Text style={styles.callTitle}>{call.title}</Text>
+          {call.meta ? <Text style={styles.callMeta}>{call.meta}</Text> : null}
+          {/* 3. Why — one line */}
+          {why ? <Text style={styles.why}>{why}</Text> : null}
+        </TouchableOpacity>
+      )}
+
+      {/* Coach suggests a change → athlete decides */}
+      {adjusting && (
+        <View style={styles.adjustmentButtons}>
+          {s!.adjustment!.kind === 'rest' && (
             <TouchableOpacity
-              activeOpacity={s.todaysWorkout.workoutId ? 0.7 : 1}
-              onPress={() => s.todaysWorkout?.workoutId && onWorkoutPress?.(s.todaysWorkout.workoutId)}
-              disabled={!s.todaysWorkout.workoutId}
+              style={[styles.adjustmentButton, styles.adjustmentAccept, adjustmentBusy && styles.adjustmentDisabled]}
+              onPress={handleAcceptAdjustment}
+              disabled={adjustmentBusy}
+              activeOpacity={0.7}
             >
-              <View style={[styles.workoutBox, s.adjustment && s.adjustment.kind !== 'none' && styles.dimmedBox]}>
-                <Text style={styles.workoutLabel}>
-                  {s.adjustment && s.adjustment.kind !== 'none' ? 'Originally Planned' : 'Planned'}
-                </Text>
-                <Text style={styles.workoutName}>{s.todaysWorkout.name}</Text>
-                <Text style={styles.workoutMeta}>
-                  {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · Load {s.todaysWorkout.tss}
-                </Text>
-              </View>
+              <Text style={styles.adjustmentAcceptText}>Take rest day</Text>
             </TouchableOpacity>
           )}
-
-          {/* Rest day (pre-ride): explicit rest, no workout planned */}
-          {!hasRidden && s.isRestDay && (
-            <View style={[styles.workoutBox, styles.restBox]}>
-              <Text style={[styles.workoutLabel, styles.restLabel]}>Today</Text>
-              <Text style={styles.workoutName}>Rest day</Text>
-              <Text style={styles.workoutMeta}>Recovery is part of the plan.</Text>
-            </View>
-          )}
-
-          {/* Suggested workout or rest day (pre-ride, no plan, not a rest day) */}
-          {!hasRidden && !s.isRestDay && s.suggestedWorkout && !s.todaysWorkout && (
-            <TouchableOpacity
-              activeOpacity={s.suggestedWorkout.workoutId ? 0.7 : 1}
-              onPress={() => s.suggestedWorkout?.workoutId && onWorkoutPress?.(s.suggestedWorkout.workoutId)}
-              disabled={!s.suggestedWorkout.workoutId}
-            >
-              <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
-                <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
-                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
-                </Text>
-                <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
-                {s.suggestedWorkout.type !== 'rest' && (
-                  <Text style={styles.workoutMeta}>
-                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Tomorrow's scheduled workout (after a ride or on rest days) */}
-          {(hasRidden || s.isRestDay) && s.tomorrowsWorkout && (
-            <TouchableOpacity
-              activeOpacity={s.tomorrowsWorkout.workoutId ? 0.7 : 1}
-              onPress={() => s.tomorrowsWorkout?.workoutId && onWorkoutPress?.(s.tomorrowsWorkout.workoutId)}
-              disabled={!s.tomorrowsWorkout.workoutId}
-            >
-              <View style={[styles.workoutBox, styles.tomorrowBox]}>
-                <Text style={[styles.workoutLabel, styles.tomorrowLabel]}>Tomorrow</Text>
-                <Text style={styles.workoutName}>{s.tomorrowsWorkout.name}</Text>
-                <Text style={styles.workoutMeta}>
-                  {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · Load {s.tomorrowsWorkout.tss}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Suggested tomorrow workout or rest day (post-ride, no scheduled workout) */}
-          {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
-            <TouchableOpacity
-              activeOpacity={s.suggestedWorkout.workoutId ? 0.7 : 1}
-              onPress={() => s.suggestedWorkout?.workoutId && onWorkoutPress?.(s.suggestedWorkout.workoutId)}
-              disabled={!s.suggestedWorkout.workoutId}
-            >
-              <View style={[styles.workoutBox, s.suggestedWorkout.type === 'rest' ? styles.restBox : styles.suggestedBox]}>
-                <Text style={[styles.workoutLabel, s.suggestedWorkout.type === 'rest' ? styles.restLabel : styles.suggestedLabel]}>
-                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
-                </Text>
-                <Text style={styles.workoutName}>{s.suggestedWorkout.name}</Text>
-                {s.suggestedWorkout.type !== 'rest' && (
-                  <Text style={styles.workoutMeta}>
-                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
-                  </Text>
-                )}
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {/* Key points first (glanceable); the full reasoning sits behind "See more". */}
-          {(s.keyPoints?.length ?? 0) > 0 ? (
-            <View style={styles.keyPoints}>
-              {s.keyPoints!.map((p, i) => (
-                <View key={i} style={styles.keyPointRow}>
-                  <Text style={styles.keyPointDot}>•</Text>
-                  <Text style={styles.keyPointText}>{p}</Text>
-                </View>
-              ))}
-              <TouchableOpacity onPress={() => setShowDetail((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.seeMore}>{showDetail ? 'Hide detail ▴' : 'See more detail ▾'}</Text>
-              </TouchableOpacity>
-              {showDetail && (
-                <Text style={styles.recommendation}>{[s.summary, s.recommendation].filter(Boolean).join(' ')}</Text>
-              )}
-            </View>
-          ) : (
-            <Text style={styles.recommendation}>{s.recommendation}</Text>
-          )}
+          <TouchableOpacity
+            style={[styles.adjustmentButton, styles.adjustmentDismiss, adjustmentBusy && styles.adjustmentDisabled]}
+            onPress={handleDismissAdjustment}
+            disabled={adjustmentBusy}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.adjustmentDismissText}>Keep {clean(s!.todaysWorkout!.name)}</Text>
+          </TouchableOpacity>
         </View>
       )}
 
-      {/* Fitness & fatigue now live in the always-visible FitnessTrendChart on
-          the dashboard (not hidden behind a toggle here). */}
+      {/* Done today — one line */}
+      {ride && (
+        <Text style={styles.doneLine} numberOfLines={1}>
+          ✓ Today: {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
+        </Text>
+      )}
 
-      {/* Chat button */}
-      <TouchableOpacity style={styles.chatButton} onPress={handleChatPress} activeOpacity={0.7}>
-        <Ionicons name="chatbubbles-outline" size={18} color="#fff" />
-        <Text style={styles.chatButtonText}>Chat with Coach</Text>
-      </TouchableOpacity>
+      {/* Details (gauge, all recovery stats, full reasoning) + Coach */}
+      <View style={styles.footer}>
+        <TouchableOpacity onPress={() => setShowDetail((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.detailsLink}>{showDetail ? 'Hide details ▴' : 'Details ▾'}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.coachButton} onPress={handleChatPress} activeOpacity={0.7}>
+          <Ionicons name="chatbubbles-outline" size={15} color="#fff" />
+          <Text style={styles.coachButtonText}>Coach</Text>
+        </TouchableOpacity>
+      </View>
+
+      {showDetail && (
+        <View style={styles.details}>
+          <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} />
+          {(w || latest) && (
+            <View style={styles.detailGrid}>
+              {[
+                ['HRV', (w?.hrv ?? latest?.hrv) != null ? `${w?.hrv ?? latest?.hrv} ms` : null],
+                ['Resting HR', (w?.rhr ?? latest?.rhr) != null ? `${w?.rhr ?? latest?.rhr} bpm` : null],
+                ['Sleep', (w?.sleepSeconds ?? latest?.sleepSeconds) != null ? `${hm((w?.sleepSeconds ?? latest?.sleepSeconds)!)}${(w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds) ? ` / ${hm((w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds)!)}` : ''}` : null],
+                ['Strain', (w?.dayStrain ?? latest?.dayStrain) != null ? (w?.dayStrain ?? latest?.dayStrain)!.toFixed(1) : null],
+              ].filter(([, v]) => v).map(([k, v]) => (
+                <View key={k as string} style={styles.detailCell}>
+                  <Text style={styles.detailLabel}>{k}</Text>
+                  <Text style={styles.detailValueSm}>{v}</Text>
+                </View>
+              ))}
+              {w?.recoveryCalibrating ? <Text style={styles.detailNote}>WHOOP is still calibrating — low confidence for now.</Text> : null}
+            </View>
+          )}
+          {otherPoints.map((p, i) => (
+            <Text key={i} style={styles.detailPoint}>• {p}</Text>
+          ))}
+          {s ? <Text style={styles.recommendation}>{[s.summary, s.recommendation].filter(Boolean).join(' ')}</Text> : null}
+          {adjusting && s?.todaysWorkout ? (
+            <Text style={styles.recommendation}>Originally planned: {clean(s.todaysWorkout.name)} · {s.todaysWorkout.duration} min</Text>
+          ) : null}
+        </View>
+      )}
     </Card>
   );
 }
 
+const FORM_COLORS: Record<string, string> = {
+  Fresh: '#38bdf8', Balanced: '#22c55e', Productive: '#84cc16', Overreaching: '#f97316', Overtraining: '#ef4444', Detrained: '#94a3b8',
+};
+const TONE_COLORS = { today: '#60a5fa', change: '#fbbf24', rest: '#22c55e', tomorrow: '#a78bfa' } as const;
+const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
+const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
+const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
+const clean = (name: string) => name.replace(/^Draft - /, '');
+const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');
+
 const styles = StyleSheet.create({
+  statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  bodyBlock: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  ring: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  ringText: { fontSize: 15, fontWeight: '800' },
+  bodyTitle: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
+  bodyStats: { color: '#94a3b8', fontSize: 12, marginTop: 1 },
+  formChip: { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' },
+  formLabel: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
+  formValue: { fontSize: 14, fontWeight: '800' },
+  callBlock: { marginTop: 14, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#334155' },
+  callLabel: { fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.6 },
+  callTitle: { color: '#f8fafc', fontSize: 19, fontWeight: '700', marginTop: 3 },
+  callMeta: { color: '#94a3b8', fontSize: 13, marginTop: 2 },
+  why: { color: '#cbd5e1', fontSize: 13, lineHeight: 18, marginTop: 6 },
+  doneLine: { color: '#34d399', fontSize: 13, marginTop: 10 },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+  detailsLink: { color: '#60a5fa', fontSize: 13, fontWeight: '600' },
+  coachButton: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#3b82f6', borderRadius: 999, paddingHorizontal: 14, paddingVertical: 7 },
+  coachButtonText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  details: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: '#334155', gap: 8 },
+  detailGrid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 6 },
+  detailCell: { width: '50%' },
+  detailValueSm: { color: '#e2e8f0', fontSize: 14, fontWeight: '600', marginTop: 1 },
+  detailNote: { color: '#94a3b8', fontSize: 12, width: '100%', marginTop: 2 },
+  detailPoint: { color: '#cbd5e1', fontSize: 13, lineHeight: 18 },
   title: {
     fontSize: 18,
     fontWeight: '600',

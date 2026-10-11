@@ -57,7 +57,7 @@ function textColorForBg(pct: number): string {
  * Scales to individual fitness — high-CTL athletes can sustain larger loads.
  * Falls back to simplified TSB thresholds for new athletes (CTL < 15).
  */
-function getStatus(tsb: number, ctl = 0, atl = 0) {
+export function getStatus(tsb: number, ctl = 0, atl = 0) {
   if (ctl < 15) {
     if (tsb > 10) return { label: 'Fresh', subtitle: 'Ready to train — build your base consistently' };
     if (tsb >= -10) return { label: 'Balanced', subtitle: 'Good balance of training and recovery' };

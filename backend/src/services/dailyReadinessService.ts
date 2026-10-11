@@ -60,6 +60,8 @@ export interface DailyReadiness {
   reasoning: string;
   wellness: WellnessData | null;
   whoop?: WhoopReadinessStatus;
+  /** HRV vs baseline for non-Whoop watches (Apple Health / intervals.icu). */
+  hrvTrend?: { status: string | null; hrvPct: number | null; lowStreak: number; suspect: boolean } | null;
 }
 
 export const dailyReadinessService = {
@@ -167,6 +169,7 @@ export const dailyReadinessService = {
       recentActivity,
       ...readinessAnalysis,
       wellness,
+      hrvTrend: hrvTrend ? { status: hrvTrend.status, hrvPct: hrvTrend.hrvPct, lowStreak: hrvTrend.lowStreak, suspect: hrvTrend.suspect } : null,
       whoop: await this.getWhoopStatus(athleteId, today, todayMetrics, todaysWorkout?.name ?? null),
     };
   },

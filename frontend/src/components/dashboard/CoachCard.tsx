@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Moon, Activity, Heart, Battery, TrendingUp, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
-import { FreshnessGauge } from './FreshnessGauge';
+import { FreshnessGauge, getStatus } from './FreshnessGauge';
 import { WorkoutDetail } from '../workout/WorkoutDetail';
 import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
 import { trainingService } from '../../services/trainingService';
+import { dailyCheckInService, type DailyReadiness } from '../../services/dailyCheckInService';
 import { healthDataService } from '../../services/healthDataService';
 import type { HealthData } from '../../services/healthDataService';
 import { workoutService } from '../../services/workoutService';
@@ -26,6 +27,7 @@ export function CoachCard() {
   const [suggestion, setSuggestion] = useState<TodaySuggestion | null>(null);
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
+  const [readiness, setReadiness] = useState<DailyReadiness | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const [loadingWorkoutId, setLoadingWorkoutId] = useState<string | null>(null);
@@ -62,10 +64,12 @@ export function CoachCard() {
       dailyAnalysisService.getTodaySuggestion().catch(() => null),
       trainingService.getTrainingStatus().catch(() => null),
       healthDataService.getTodaysHealthData().catch(() => null),
-    ]).then(([s, t, h]) => {
+      dailyCheckInService.getDailyReadiness().catch(() => null),
+    ]).then(([s, t, h, r]) => {
       setSuggestion(s);
       setTraining(t ?? null);
       setHealthData(h);
+      setReadiness(r);
       setLoading(false);
     });
   }, []);
@@ -88,137 +92,100 @@ export function CoachCard() {
   const s = suggestion?.suggestion;
   const hasRidden = suggestion?.hasRiddenToday ?? false;
 
+  // ── KISS layout: How am I? → What do I do? → Why (one line). Details on click. ──
+  const form = getStatus(tsb, training?.ctl ?? 0, training?.atl ?? 0);
+  const w = readiness?.wellness?.source === 'whoop' ? readiness.wellness : null;
+  const latest = !w && readiness?.whoop?.connected ? readiness.whoop.latest : null;
+  const recovery = w?.readinessScore ?? latest?.readinessScore ?? null;
+  const hrvTrend = readiness?.hrvTrend && !readiness.hrvTrend.suspect ? readiness.hrvTrend : null;
+  const hrv = w?.hrv ?? latest?.hrv ?? null;
+  const sleep = w?.sleepSeconds ?? latest?.sleepSeconds ?? null;
+  const need = w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds ?? null;
+  const rhr = w?.rhr ?? latest?.rhr ?? null;
+  const strain = w?.dayStrain ?? latest?.dayStrain ?? null;
+
+  type Call = { label: string; title: string; meta?: string; workoutId?: string; tone: string };
+  let call: Call | null = null;
+  if (s) {
+    if (!hasRidden && s.todaysWorkout) call = { label: 'Today', title: clean(s.todaysWorkout.name), meta: `${s.todaysWorkout.duration} min · ${s.todaysWorkout.type}`, workoutId: s.todaysWorkout.workoutId, tone: 'text-blue-600' };
+    else if (!hasRidden && s.isRestDay) call = { label: 'Today', title: 'Rest day', tone: 'text-green-600' };
+    else if (!hasRidden && s.suggestedWorkout) call = { label: 'Today', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'text-green-600' : 'text-blue-600' };
+    else if (hasRidden && s.tomorrowsWorkout) call = { label: 'Tomorrow', title: clean(s.tomorrowsWorkout.name), meta: `${s.tomorrowsWorkout.duration} min · ${s.tomorrowsWorkout.type}`, workoutId: s.tomorrowsWorkout.workoutId, tone: 'text-purple-600' };
+    else if (hasRidden && s.suggestedWorkout) call = { label: 'Tomorrow', title: clean(s.suggestedWorkout.name), meta: s.suggestedWorkout.type === 'rest' ? undefined : `${s.suggestedWorkout.duration} min · ${s.suggestedWorkout.type}`, workoutId: s.suggestedWorkout.workoutId, tone: s.suggestedWorkout.type === 'rest' ? 'text-green-600' : 'text-purple-600' };
+  }
+  const why = s?.keyPoints?.[0] ?? firstSentence(s?.recommendation);
+  const ride = hasRidden ? s?.todaysRides?.[0] : null;
+
   return (
     <Card>
-      <CardContent className="p-5 space-y-4">
-        <h3 className="text-lg font-semibold">Training Status</h3>
-
-        {/* Freshness Gauge — the visual hook */}
-        <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} />
-
-        {/* AI summary */}
-        {s && (
-          <div className="space-y-3">
-            {/* Key points first (glanceable); the full reasoning sits behind "See more". */}
-            {(s.keyPoints?.length ?? 0) > 0 ? (
-              <div>
-                <ul className="space-y-1">
-                  {s.keyPoints!.map((p, i) => (
-                    <li key={i} className="flex gap-2 text-[13px] font-medium text-gray-700">
-                      <span className="text-blue-500">•</span><span>{p}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button onClick={() => setShowDetail((v) => !v)} className="text-xs font-semibold text-blue-600 mt-1">
-                  {showDetail ? 'Hide detail ▴' : 'See more detail ▾'}
-                </button>
-                {showDetail && (
-                  <p className="text-sm text-gray-600 leading-relaxed mt-1">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>
-                )}
+      <CardContent className="p-5">
+        {/* 1. How am I? — body + load */}
+        <div className="flex items-center justify-between gap-3">
+          {recovery != null ? (
+            <div className="flex items-center gap-3 min-w-0">
+              <div className={`w-12 h-12 shrink-0 rounded-full border-[3px] flex items-center justify-center text-sm font-extrabold ${recoveryClass(recovery)}`}>{recovery}%</div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-gray-900">Recovery{latest ? ' (yesterday)' : ''} <span className="text-[10px] font-bold tracking-widest text-gray-400 ml-1">WHOOP</span></div>
+                <div className="text-xs text-gray-500 truncate">{[hrv != null ? `HRV ${hrv}` : null, sleep != null ? `Sleep ${hm(sleep)}${need ? `/${hm(need)}` : ''}` : null].filter(Boolean).join(' · ')}</div>
               </div>
-            ) : (
-              <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
-            )}
+            </div>
+          ) : hrvTrend?.status ? (
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}</div>
+              {hrvTrend.hrvPct != null && <div className="text-xs text-gray-500">{hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs your baseline</div>}
+            </div>
+          ) : <div />}
+          <div className={`rounded-lg border-2 px-3 py-1 text-center shrink-0 ${FORM_CLASS[form.label] || 'border-gray-300 text-gray-600'}`}>
+            <div className="text-[10px] font-bold tracking-wide text-gray-400">FORM</div>
+            <div className="text-sm font-extrabold">{form.label}</div>
+          </div>
+        </div>
 
-            {/* Today's completed rides (post-ride) */}
-            {hasRidden && s.todaysRides.length > 0 && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700 mb-1">
-                  Completed Today
-                </p>
-                {s.todaysRides.map((ride, i) => (
-                  <div key={i} className="flex justify-between text-sm">
-                    <span className="text-gray-700">{ride.name}</span>
-                    <span className="text-gray-500">{ride.duration}min · {ride.tss} TSS</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Today's planned workout (pre-ride) */}
-            {!hasRidden && s.todaysWorkout && (
-              <div
-                className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${s.todaysWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                onClick={() => handleWorkoutClick(s.todaysWorkout?.workoutId)}
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Planned</p>
-                <p className="text-sm font-medium text-gray-800">{s.todaysWorkout.name}</p>
-                <p className="text-xs text-gray-500">
-                  {s.todaysWorkout.duration}min · {s.todaysWorkout.type} · {s.todaysWorkout.tss} TSS
-                </p>
-              </div>
-            )}
-
-            {/* Suggested workout or rest day (pre-ride, no plan) */}
-            {!hasRidden && s.suggestedWorkout && !s.todaysWorkout && (
-              <div
-                className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'} ${s.suggestedWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                onClick={() => handleWorkoutClick(s.suggestedWorkout?.workoutId)}
-              >
-                <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${s.suggestedWorkout.type === 'rest' ? 'text-green-700' : 'text-purple-700'}`}>
-                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day' : 'Suggested'}
-                </p>
-                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
-                {s.suggestedWorkout.type !== 'rest' && (
-                  <p className="text-xs text-gray-500">
-                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
-                  </p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">{s.suggestedWorkout.description}</p>
-              </div>
-            )}
-
-            {/* Tomorrow's scheduled workout (post-ride) */}
-            {hasRidden && s.tomorrowsWorkout && (
-              <div
-                className={`rounded-lg border border-blue-200 bg-blue-50 p-3 ${s.tomorrowsWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                onClick={() => handleWorkoutClick(s.tomorrowsWorkout?.workoutId)}
-              >
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-blue-700 mb-1">Tomorrow</p>
-                <p className="text-sm font-medium text-gray-800">{s.tomorrowsWorkout.name}</p>
-                <p className="text-xs text-gray-500">
-                  {s.tomorrowsWorkout.duration}min · {s.tomorrowsWorkout.type} · {s.tomorrowsWorkout.tss} TSS
-                </p>
-              </div>
-            )}
-
-            {/* Suggested tomorrow workout or rest day (post-ride, no scheduled workout) */}
-            {hasRidden && !s.tomorrowsWorkout && s.suggestedWorkout && (
-              <div
-                className={`rounded-lg border p-3 ${s.suggestedWorkout.type === 'rest' ? 'border-green-200 bg-green-50' : 'border-purple-200 bg-purple-50'} ${s.suggestedWorkout.workoutId ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-                onClick={() => handleWorkoutClick(s.suggestedWorkout?.workoutId)}
-              >
-                <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1 ${s.suggestedWorkout.type === 'rest' ? 'text-green-700' : 'text-purple-700'}`}>
-                  {s.suggestedWorkout.type === 'rest' ? 'Rest Day Tomorrow' : 'Suggested for Tomorrow'}
-                </p>
-                <p className="text-sm font-medium text-gray-800">{s.suggestedWorkout.name}</p>
-                {s.suggestedWorkout.type !== 'rest' && (
-                  <p className="text-xs text-gray-500">
-                    {s.suggestedWorkout.duration}min · {s.suggestedWorkout.type}
-                  </p>
-                )}
-                <p className="text-xs text-gray-500 mt-1">{s.suggestedWorkout.description}</p>
-              </div>
-            )}
-
-            {/* Recommendation (only when there are no key points — otherwise it's in "See more") */}
-            {!(s.keyPoints?.length) && <p className="text-sm text-gray-500">{s.recommendation}</p>}
+        {/* 2. What do I do? + 3. Why */}
+        {call && (
+          <div
+            className={`mt-4 pt-3 border-t ${call.workoutId ? 'cursor-pointer' : ''}`}
+            onClick={() => handleWorkoutClick(call?.workoutId)}
+          >
+            <div className={`text-[11px] font-bold uppercase tracking-wider ${call.tone}`}>{call.label}</div>
+            <div className="text-lg font-bold text-gray-900">{call.title}</div>
+            {call.meta && <div className="text-xs text-gray-500">{call.meta}</div>}
+            {why && <p className="text-sm text-gray-600 mt-1.5">{why}</p>}
           </div>
         )}
 
-        {/* Wellness pills */}
-        {healthData && <WellnessPills data={healthData} />}
+        {ride && (
+          <p className="text-sm text-emerald-700 mt-3 truncate">
+            ✓ Today: {clean(ride.name)} · {ride.duration} min{(s?.todaysRides?.length ?? 0) > 1 ? ` (+${s!.todaysRides.length - 1})` : ''}
+          </p>
+        )}
 
-        {/* Fitness & fatigue now live in the always-visible FitnessTrendChart
-            on the dashboard (not hidden behind a toggle here). */}
+        <div className="flex items-center justify-between mt-4">
+          <button onClick={() => setShowDetail((v) => !v)} className="text-sm font-semibold text-blue-600">
+            {showDetail ? 'Hide details ▴' : 'Details ▾'}
+          </button>
+          <Link to="/chat" className="rounded-full bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700">
+            Coach
+          </Link>
+        </div>
 
-        {/* Chat link */}
-        <Link
-          to="/chat"
-          className="flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-        >
-          Chat with Coach
-        </Link>
+        {showDetail && (
+          <div className="mt-4 pt-4 border-t space-y-3">
+            <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} />
+            {(w || latest) && (
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                {hrv != null && <div><span className="text-gray-500 text-xs">HRV</span><div className="font-semibold">{hrv} ms</div></div>}
+                {rhr != null && <div><span className="text-gray-500 text-xs">Resting HR</span><div className="font-semibold">{rhr} bpm</div></div>}
+                {sleep != null && <div><span className="text-gray-500 text-xs">Sleep</span><div className="font-semibold">{hm(sleep)}{need ? ` / ${hm(need)}` : ''}</div></div>}
+                {strain != null && <div><span className="text-gray-500 text-xs">Strain</span><div className="font-semibold">{strain.toFixed(1)}</div></div>}
+                {w?.recoveryCalibrating && <p className="col-span-2 text-xs text-gray-500">WHOOP is still calibrating — low confidence for now.</p>}
+              </div>
+            )}
+            {healthData && <WellnessPills data={healthData} />}
+            {(s?.keyPoints ?? []).slice(1).map((p, i) => <p key={i} className="text-sm text-gray-700">• {p}</p>)}
+            {s && <p className="text-sm text-gray-600 leading-relaxed">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>}
+          </div>
+        )}
       </CardContent>
 
       {selectedWorkout && (
@@ -303,3 +270,13 @@ function WellnessPills({ data }: { data: HealthData }) {
     </div>
   );
 }
+
+const FORM_CLASS: Record<string, string> = {
+  Fresh: 'border-sky-400 text-sky-600', Balanced: 'border-green-500 text-green-600', Productive: 'border-lime-500 text-lime-600',
+  Overreaching: 'border-orange-500 text-orange-600', Overtraining: 'border-red-500 text-red-600', Detrained: 'border-gray-400 text-gray-500',
+};
+const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
+const recoveryClass = (r: number) => (r >= 67 ? 'border-green-600 text-green-600' : r >= 34 ? 'border-yellow-500 text-yellow-500' : 'border-red-600 text-red-600');
+const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
+const clean = (name: string) => name.replace(/^Draft - /, '');
+const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');

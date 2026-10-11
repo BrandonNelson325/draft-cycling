@@ -5,20 +5,16 @@ import { WeeklyVolumeChart } from '../components/dashboard/WeeklyVolumeChart';
 import { PowerCurveChart } from '../components/dashboard/PowerCurveChart';
 import { CoachCard } from '../components/dashboard/CoachCard';
 import { FitnessTrendChart } from '../components/dashboard/FitnessTrendChart';
-import { WhoopRecoveryCard } from '../components/dashboard/WhoopRecoveryCard';
 import { OtherTrainingCard } from '../components/dashboard/OtherTrainingCard';
 
 export function DashboardPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
-      {/* Coach Card (left) | Training Metrics + WHOOP recovery (right — fills the column) */}
+      {/* Coach Card (left, includes WHOOP recovery) | Training Metrics (right) */}
       <div className="grid gap-4 md:grid-cols-2">
         <CoachCard />
-        <div className="space-y-4">
-          <MetricsCard />
-          <WhoopRecoveryCard />
-        </div>
+        <MetricsCard />
       </div>
 
       {/* Fitness & Fatigue trend — full width */}

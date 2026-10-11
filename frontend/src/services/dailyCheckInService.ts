@@ -28,6 +28,8 @@ export interface WhoopReadinessStatus {
 
 export interface DailyReadiness {
   whoop?: WhoopReadinessStatus;
+  /** HRV vs baseline for non-Whoop watches. */
+  hrvTrend?: { status: 'normal' | 'slightly_low' | 'low' | 'high' | null; hrvPct: number | null; lowStreak: number; suspect: boolean } | null;
   date: string;
   hasCheckedInToday: boolean;
   todaysWorkout: {
