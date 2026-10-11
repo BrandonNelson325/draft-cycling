@@ -1,14 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import Card from '../ui/Card';
 import { dailyCheckInService, type WellnessData, type WhoopReadinessStatus } from '../../services/dailyCheckInService';
 
 const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
 /**
- * Today's WHOOP recovery, sleep and strain. Renders nothing unless WHOOP is the
- * athlete's recovery source today — other athletes never see it.
+ * Today's WHOOP recovery, sleep and strain — a compact, visually separate
+ * section inside the Coach card (its own bordered panel, so it never blends
+ * into the coach's words). Renders nothing for athletes without WHOOP.
  */
 export default function WhoopRecoveryCard() {
   const [w, setW] = useState<Partial<WellnessData> | null>(null);
@@ -32,9 +32,9 @@ export default function WhoopRecoveryCard() {
   const other = (w.otherActivities || []).filter(Boolean);
 
   return (
-    <Card>
+    <View style={styles.panel}>
       <View style={styles.header}>
-        <Text style={styles.title}>Recovery</Text>
+        <Text style={styles.title}>RECOVERY</Text>
         <Text style={styles.source}>WHOOP</Text>
       </View>
       <View style={styles.row}>
@@ -55,16 +55,17 @@ export default function WhoopRecoveryCard() {
       {other.length > 0 && (
         <Text style={styles.note}>Off the bike: {other.map((a) => `${a.sport} ${a.minutes}min`).join(', ')}</Text>
       )}
-    </Card>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  title: { color: '#f1f5f9', fontSize: 16, fontWeight: '700' },
-  source: { color: '#64748b', fontSize: 11, fontWeight: '700', letterSpacing: 1 },
+  panel: { marginTop: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#334155', backgroundColor: '#0b1220' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  title: { color: '#94a3b8', fontSize: 11, fontWeight: '800', letterSpacing: 1 },
+  source: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  big: { fontSize: 40, fontWeight: '800' },
+  big: { fontSize: 34, fontWeight: '800' },
   stats: { flex: 1, gap: 2 },
   stat: { color: '#94a3b8', fontSize: 13 },
   val: { color: '#e2e8f0', fontWeight: '600' },

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Moon, Activity, Heart, Battery, TrendingUp, AlertCircle } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { FreshnessGauge } from './FreshnessGauge';
+import { WhoopRecoveryCard } from './WhoopRecoveryCard';
 import { WorkoutDetail } from '../workout/WorkoutDetail';
 import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
@@ -94,6 +95,9 @@ export function CoachCard() {
 
         {/* Freshness Gauge — the visual hook */}
         <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} />
+
+        {/* WHOOP recovery — its own panel, separate from the coach's words (Whoop users only) */}
+        <WhoopRecoveryCard />
 
         {/* AI summary */}
         {s && (
