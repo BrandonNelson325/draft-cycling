@@ -118,9 +118,7 @@ export function CoachCard() {
 
   return (
     <Card>
-      <CardContent className="p-5 space-y-4">
-        <h3 className="text-lg font-semibold">Training Status</h3>
-
+      <CardContent className="p-5 space-y-5">
         {/* Freshness Gauge — the visual hook */}
         <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} subtitleOverride={bannerSubtitle} />
 
@@ -155,30 +153,9 @@ export function CoachCard() {
 
         {/* AI summary */}
         {s && (
-          <div className="space-y-3">
-            {/* Key points first (glanceable); the full reasoning sits behind "See more". */}
-            {(s.keyPoints?.length ?? 0) > 0 ? (
-              <div>
-                <ul className="space-y-1">
-                  {s.keyPoints!.map((p, i) => (
-                    <li key={i} className="flex gap-2 text-[13px] font-medium text-gray-700">
-                      <span className="text-blue-500">•</span><span>{p}</span>
-                    </li>
-                  ))}
-                </ul>
-                <button onClick={() => setShowDetail((v) => !v)} className="text-xs font-semibold text-blue-600 mt-1">
-                  {showDetail ? 'Hide detail ▴' : 'See more detail ▾'}
-                </button>
-                {showDetail && (
-                  <p className="text-sm text-gray-600 leading-relaxed mt-1">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
-            )}
-
+          <div className="space-y-5">
             {/* Day boxes — one compact row each */}
-            <div className="space-y-1.5">
+            <div className="space-y-2">
             {hasRidden && s.todaysRides.map((ride, i) => (
               <WorkoutRow key={i} tone="done" label={i === 0 ? 'Done today' : ''} name={ride.name} meta={`${ride.duration}min · ${ride.tss} TSS`} />
             ))}
@@ -206,6 +183,27 @@ export function CoachCard() {
                 onClick={s.suggestedWorkout.workoutId ? () => handleWorkoutClick(s.suggestedWorkout?.workoutId) : undefined} />
             )}
             </div>
+
+            {/* The why — key points (glanceable); full reasoning sits behind "See more". */}
+            {(s.keyPoints?.length ?? 0) > 0 ? (
+              <div>
+                <ul className="space-y-2">
+                  {s.keyPoints!.map((p, i) => (
+                    <li key={i} className="flex gap-2 text-sm leading-snug font-medium text-gray-700">
+                      <span className="text-blue-500">•</span><span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button onClick={() => setShowDetail((v) => !v)} className="text-xs font-semibold text-blue-600 mt-1">
+                  {showDetail ? 'Hide detail ▴' : 'See more detail ▾'}
+                </button>
+                {showDetail && (
+                  <p className="text-sm text-gray-600 leading-relaxed mt-1">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
+            )}
 
             {/* Recommendation (only when there are no key points — otherwise it's in "See more") */}
             {!(s.keyPoints?.length) && <p className="text-sm text-gray-500">{s.recommendation}</p>}
@@ -255,11 +253,11 @@ function WorkoutRow({ tone, label, name, meta, onClick }: { tone: keyof typeof R
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-md border px-2.5 py-1.5 ${t.box} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}
+      className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 ${t.box} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}
     >
-      <span className={`w-[72px] shrink-0 whitespace-nowrap text-[10px] font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
-      <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-gray-800">{name}</span>
-      {meta && <span className="shrink-0 text-[11px] text-gray-500">{meta}</span>}
+      <span className={`w-20 shrink-0 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
+      <span className="flex-1 min-w-0 truncate text-sm font-medium text-gray-800">{name}</span>
+      {meta && <span className="shrink-0 text-xs text-gray-500">{meta}</span>}
     </div>
   );
 }

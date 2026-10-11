@@ -143,8 +143,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
 
   return (
     <Card>
-      <Text style={styles.title}>Training Status</Text>
-
       {/* Freshness Gauge — compact, no CTL/ATL details */}
       <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} subtitleOverride={bannerSubtitle} />
 
@@ -335,24 +333,24 @@ const styles = StyleSheet.create({
     gap: 8,
     borderRadius: 6,
     borderLeftWidth: 3,
-    paddingVertical: 7,
-    paddingHorizontal: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
   },
   rowLabel: {
-    width: 78,
-    fontSize: 10,
+    width: 84,
+    fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
     letterSpacing: 0.4,
   },
   rowName: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '600',
     color: '#f1f5f9',
   },
   rowMeta: {
-    fontSize: 11,
+    fontSize: 12,
     color: '#94a3b8',
   },
   pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#0f172a' },
@@ -374,8 +372,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   aiSection: {
-    marginTop: 16,
-    gap: 6,
+    marginTop: 20,
+    gap: 8,
   },
   workoutBox: {
     backgroundColor: '#0f172a',
@@ -492,11 +490,11 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     lineHeight: 18,
   },
-  keyPoints: { gap: 2 },
+  keyPoints: { gap: 6, marginTop: 10 },
   keyPointRow: { flexDirection: 'row', gap: 6 },
-  keyPointDot: { color: '#60a5fa', fontSize: 13, lineHeight: 18 },
-  keyPointText: { color: '#cbd5e1', fontSize: 13, lineHeight: 18, fontWeight: '500', flex: 1 },
-  seeMore: { color: '#60a5fa', fontSize: 12, fontWeight: '600', marginTop: 4, marginBottom: 2 },
+  keyPointDot: { color: '#60a5fa', fontSize: 14, lineHeight: 20 },
+  keyPointText: { color: '#cbd5e1', fontSize: 14, lineHeight: 20, fontWeight: '500', flex: 1 },
+  seeMore: { color: '#60a5fa', fontSize: 13, fontWeight: '600', marginTop: 6, marginBottom: 2 },
   detailsSection: {
     borderTopWidth: 1,
     borderTopColor: '#1e293b',
