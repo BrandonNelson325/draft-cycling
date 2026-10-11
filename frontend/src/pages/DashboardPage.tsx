@@ -12,14 +12,14 @@ export function DashboardPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
+      {/* WHOOP recovery first — body state, then the coach's call (Whoop users only) */}
+      <WhoopRecoveryCard />
+
       {/* Coach Card: gauge + AI summary + workout + wellness + chat */}
       <div className="grid gap-4 md:grid-cols-2">
         <CoachCard />
         <MetricsCard />
       </div>
-
-      {/* WHOOP recovery — slim strip, Whoop users only */}
-      <WhoopRecoveryCard />
 
       {/* Fitness & Fatigue trend — full width */}
       <FitnessTrendChart />
