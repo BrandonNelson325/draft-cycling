@@ -28,6 +28,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [adjustmentBusy, setAdjustmentBusy] = useState(false);
+  const [showDetail, setShowDetail] = useState(false);
 
   useEffect(() => {
     let failed = 0;
@@ -251,8 +252,25 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
             </TouchableOpacity>
           )}
 
-          {/* Single recommendation line — the only AI text shown */}
-          <Text style={styles.recommendation}>{s.recommendation}</Text>
+          {/* Key points first (glanceable); the full reasoning sits behind "See more". */}
+          {(s.keyPoints?.length ?? 0) > 0 ? (
+            <View style={styles.keyPoints}>
+              {s.keyPoints!.map((p, i) => (
+                <View key={i} style={styles.keyPointRow}>
+                  <Text style={styles.keyPointDot}>•</Text>
+                  <Text style={styles.keyPointText}>{p}</Text>
+                </View>
+              ))}
+              <TouchableOpacity onPress={() => setShowDetail((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.seeMore}>{showDetail ? 'Hide detail ▴' : 'See more detail ▾'}</Text>
+              </TouchableOpacity>
+              {showDetail && (
+                <Text style={styles.recommendation}>{[s.summary, s.recommendation].filter(Boolean).join(' ')}</Text>
+              )}
+            </View>
+          ) : (
+            <Text style={styles.recommendation}>{s.recommendation}</Text>
+          )}
         </View>
       )}
 
@@ -394,6 +412,11 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     lineHeight: 18,
   },
+  keyPoints: { gap: 4 },
+  keyPointRow: { flexDirection: 'row', gap: 6 },
+  keyPointDot: { color: '#60a5fa', fontSize: 15, lineHeight: 20 },
+  keyPointText: { color: '#e2e8f0', fontSize: 15, lineHeight: 20, fontWeight: '600', flex: 1 },
+  seeMore: { color: '#60a5fa', fontSize: 13, fontWeight: '600', marginTop: 4, marginBottom: 2 },
   detailsSection: {
     borderTopWidth: 1,
     borderTopColor: '#1e293b',

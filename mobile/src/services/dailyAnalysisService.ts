@@ -43,6 +43,8 @@ export interface TodaySuggestion {
   suggestion: {
     summary: string;
     recommendation: string;
+    /** 2–3 glanceable takeaways (older backends may omit). */
+    keyPoints?: string[];
     suggestedAction: 'proceed-as-planned' | 'make-easier' | 'add-rest' | 'can-do-more' | 'suggested-workout';
     todaysWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     suggestedWorkout: { workoutId?: string; name: string; type: string; duration: number; description: string } | null;

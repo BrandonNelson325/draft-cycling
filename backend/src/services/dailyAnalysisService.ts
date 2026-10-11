@@ -43,6 +43,21 @@ export interface AdjustmentSuggestion {
   generatedAt: string;
 }
 
+const KEY_POINTS_INSTRUCTION = `
+
+ALSO include in the same JSON object:
+  "keyPoints": ["2–3 glanceable takeaways, MAX 8 words each, no full sentences — the athlete reads these first. e.g. 'HRV down, short sleep', 'Swap intervals for easy Z2', 'Hard work again in ~2 days'"]`;
+
+/** 2–3 short points; falls back to the first sentences of the text if the model skipped them. */
+export function cleanKeyPoints(raw: unknown, recommendation?: string, summary?: string): string[] {
+  const pts = Array.isArray(raw)
+    ? raw.filter((x) => typeof x === 'string').map((x) => (x as string).trim().replace(/\.$/, '')).filter(Boolean)
+    : [];
+  if (pts.length) return pts.slice(0, 3).map((p) => (p.length > 70 ? p.slice(0, 67).trimEnd() + '…' : p));
+  const sentences = `${recommendation || ''} ${summary || ''}`.split(/(?<=[.!?])\s+/).map((x) => x.trim()).filter(Boolean);
+  return sentences.slice(0, 2).map((p) => (p.length > 90 ? p.slice(0, 87).trimEnd() + '…' : p));
+}
+
 export interface TodaySuggestion {
   hasRiddenToday: boolean;
   suggestion: {
@@ -52,6 +67,8 @@ export interface TodaySuggestion {
     todaysWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     suggestedWorkout: { workoutId?: string; name: string; type: string; duration: number; description: string } | null;
     status: 'well-recovered' | 'slightly-tired' | 'fatigued' | 'fresh';
+    /** 2–3 glanceable takeaways shown on the Coach card; full text sits behind "See more". */
+    keyPoints: string[];
     currentTSB: number;
     tomorrowsWorkout: { workoutId?: string; name: string; type: string; duration: number; tss: number } | null;
     todaysRides: { name: string; duration: number; tss: number }[];
@@ -795,6 +812,7 @@ Format as JSON:
       suggestion: {
         summary: aiResult.summary,
         recommendation: aiResult.recommendation,
+        keyPoints: cleanKeyPoints(aiResult.keyPoints, aiResult.recommendation, aiResult.summary),
         suggestedAction: aiResult.suggestedAction,
         todaysWorkout: hasPlannedWorkout
           ? {
@@ -1115,12 +1133,15 @@ Format as JSON:
     suggestedAction: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['suggestedAction'];
     suggestedWorkout?: { workoutId?: string; name: string; type: string; duration: number; description: string };
     adjustment?: { kind: 'rest' | 'easier' | 'none'; headline: string; reason: string };
+    keyPoints?: string[];
   }> {
     try {
       const response = await anthropic.messages.create({
         model: MODEL,
         max_tokens: 1000,
-        messages: [{ role: 'user', content: context }],
+        // Every suggestion variant also returns glanceable key points — the
+        // Coach card leads with them (athletes skipped the wordy paragraph).
+        messages: [{ role: 'user', content: context + KEY_POINTS_INSTRUCTION }],
       });
 
       const content = response.content[0];

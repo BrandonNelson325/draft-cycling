@@ -10,6 +10,7 @@
  * Run: npm run test:live-state
  */
 import { formatLiveState } from '../utils/liveState';
+import { cleanKeyPoints } from '../services/dailyAnalysisService';
 import { findStateContradictions } from '../utils/stateGuard';
 import { aiCoachService } from '../services/aiCoachService';
 import { supabaseAdmin } from '../utils/supabase';
@@ -126,6 +127,12 @@ function check(label: string, cond: boolean, detail?: string) {
   check('Active plan + no decision → build refused, coach told to ask', /ACTIVE_PLAN_EXISTS/.test(blockedBody) && enqueued === 0);
   await call({ goal_event: 'Gran fondo', event_date: '2027-03-20', existing_plan_action: 'replace' });
   check('Decision given ("replace") → build queued', enqueued === 1);
+
+  // ---- Coach card key points ----
+  const kp = cleanKeyPoints(['HRV down, short sleep.', 'Swap intervals for easy Z2', 'Hard work again in ~2 days', 'extra'], 'r', 's');
+  check('Key points: max 3, trailing period dropped', kp.length === 3 && kp[0] === 'HRV down, short sleep', JSON.stringify(kp));
+  const fb = cleanKeyPoints(undefined, 'Skip the intervals and spin easy. Ready for hard work in ~2 days. Extra.', 'Carrying fatigue.');
+  check('Key points fallback: first sentences when the model skips them', fb.length === 2 && fb[0] === 'Skip the intervals and spin easy.', JSON.stringify(fb));
 
   console.log(`\n${failures === 0 ? '✅ ALL CHECKS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);
   process.exit(failures === 0 ? 0 : 1);

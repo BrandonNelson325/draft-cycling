@@ -22,6 +22,7 @@ interface TrainingStatus {
 }
 
 export function CoachCard() {
+  const [showDetail, setShowDetail] = useState(false);
   const [suggestion, setSuggestion] = useState<TodaySuggestion | null>(null);
   const [training, setTraining] = useState<TrainingStatus | null>(null);
   const [healthData, setHealthData] = useState<HealthData | null>(null);
@@ -98,7 +99,26 @@ export function CoachCard() {
         {/* AI summary */}
         {s && (
           <div className="space-y-3">
-            <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
+            {/* Key points first (glanceable); the full reasoning sits behind "See more". */}
+            {(s.keyPoints?.length ?? 0) > 0 ? (
+              <div>
+                <ul className="space-y-1">
+                  {s.keyPoints!.map((p, i) => (
+                    <li key={i} className="flex gap-2 text-sm font-semibold text-gray-900">
+                      <span className="text-blue-500">•</span><span>{p}</span>
+                    </li>
+                  ))}
+                </ul>
+                <button onClick={() => setShowDetail((v) => !v)} className="text-xs font-semibold text-blue-600 mt-1">
+                  {showDetail ? 'Hide detail ▴' : 'See more detail ▾'}
+                </button>
+                {showDetail && (
+                  <p className="text-sm text-gray-600 leading-relaxed mt-1">{[s.summary, s.recommendation].filter(Boolean).join(' ')}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
+            )}
 
             {/* Today's completed rides (post-ride) */}
             {hasRidden && s.todaysRides.length > 0 && (
@@ -181,8 +201,8 @@ export function CoachCard() {
               </div>
             )}
 
-            {/* Recommendation */}
-            <p className="text-sm text-gray-500">{s.recommendation}</p>
+            {/* Recommendation (only when there are no key points — otherwise it's in "See more") */}
+            {!(s.keyPoints?.length) && <p className="text-sm text-gray-500">{s.recommendation}</p>}
           </div>
         )}
 
