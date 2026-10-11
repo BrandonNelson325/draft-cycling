@@ -117,9 +117,18 @@ export function CoachCard() {
   const bodyLow = (recovery != null && recovery < 34) || hrvTrend?.status === 'low';
   const bodyMid = !bodyLow && ((recovery != null && recovery < 67) || hrvTrend?.status === 'slightly_low');
   const positiveForm = ['Fresh', 'Balanced', 'Detrained'].includes(form.label);
-  const bannerSubtitle = positiveForm && bodyLow
-    ? 'Rested legs, but your body needs recovery today'
-    : positiveForm && bodyMid ? 'Rested legs — recovery is moderate, keep it controlled' : null;
+  // The banner sticks to LOAD; the recovery block carries the body's verdict.
+  const bannerSubtitle = positiveForm && (bodyLow || bodyMid) ? 'Training load is low — legs are rested' : null;
+  const hardToday = /vo2|threshold|interval|anaerobic|sprint|race|test|tempo|sweet/i.test(`${s?.todaysWorkout?.type ?? ''} ${s?.todaysWorkout?.name ?? ''}`);
+  const bodyMeaning = recovery != null
+    ? recovery < 34
+      ? "In the red: your body hasn't bounced back. Keep today easy, with no hard efforts."
+      : recovery < 67
+        ? (hardToday ? "Yellow: you can do the work today. Hit the targets but don't chase extra." : 'Yellow: fine to train. Keep the effort controlled.')
+        : (hardToday ? "Green: you're recovered. A good day to go hard." : "Green: you're recovered. Today's plan is a go.")
+    : hrvTrend?.status ? HRV_MEANING[hrvTrend.status] : null;
+  const watch = readiness?.wellness && readiness.wellness.source !== 'whoop' ? readiness.wellness : null;
+  const watchStats = watch ? [watch.hrv != null ? `HRV ${watch.hrv}` : null, watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ') : '';
 
   const why = s?.keyPoints?.[0] ?? firstSentence(s?.recommendation);
   const ride = hasRidden ? s?.todaysRides?.[0] : null;
@@ -134,11 +143,16 @@ export function CoachCard() {
             <div className={`w-12 h-12 shrink-0 rounded-full border-[3px] flex items-center justify-center text-sm font-extrabold ${recoveryClass(recovery)}`}>{recovery}%</div>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-gray-900">Recovery{latest ? ' (yesterday)' : ''} <span className="text-[10px] font-bold tracking-widest text-gray-400 ml-1">WHOOP</span></div>
-              <div className="text-xs text-gray-500 truncate">{[hrv != null ? `HRV ${hrv}` : null, sleep != null ? `Sleep ${hm(sleep)}${need ? `/${hm(need)}` : ''}` : null].filter(Boolean).join(' · ')}</div>
+              <div className="text-xs text-gray-500 truncate">{[hrv != null ? `HRV ${hrv}` : null, rhr != null ? `RHR ${rhr}` : null, sleep != null ? `Sleep ${hm(sleep)}${need ? `/${hm(need)}` : ''}` : null].filter(Boolean).join(' · ')}</div>
+              {bodyMeaning && <div className={`text-sm font-medium mt-0.5 ${recoveryText(recovery)}`}>{bodyMeaning}</div>}
             </div>
           </div>
         ) : hrvTrend?.status ? (
-          <p className="text-sm mt-3"><span className="font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}</span>{hrvTrend.hrvPct != null && <span className="text-gray-500"> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</span>}</p>
+          <div className="mt-3">
+            <p className="text-sm"><span className="font-semibold text-gray-900">{HRV_LABEL[hrvTrend.status]}</span>{hrvTrend.hrvPct != null && <span className="text-gray-500"> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</span>}</p>
+            {watchStats && <p className="text-xs text-gray-500">{watchStats}</p>}
+            {bodyMeaning && <p className={`text-sm font-medium ${HRV_TEXT[hrvTrend.status]}`}>{bodyMeaning}</p>}
+          </div>
         ) : null}
 
         {/* 2. What do I do? + 3. Why */}
@@ -271,6 +285,14 @@ function WellnessPills({ data }: { data: HealthData }) {
 }
 
 const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
+const HRV_MEANING: Record<string, string> = {
+  low: 'Your body is under stress. Go easier than planned today.',
+  slightly_low: 'A little run down. Fine to train, keep the intensity controlled.',
+  normal: 'Right on your baseline. Train as planned.',
+  high: 'Well recovered. A good day for the hard work.',
+};
+const HRV_TEXT: Record<string, string> = { low: 'text-red-600', slightly_low: 'text-yellow-600', normal: 'text-green-600', high: 'text-green-600' };
+const recoveryText = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-600' : 'text-red-600');
 const recoveryClass = (r: number) => (r >= 67 ? 'border-green-600 text-green-600' : r >= 34 ? 'border-yellow-500 text-yellow-500' : 'border-red-600 text-red-600');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
 const clean = (name: string) => name.replace(/^Draft - /, '');

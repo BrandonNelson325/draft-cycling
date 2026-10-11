@@ -93,8 +93,8 @@ export default function DashboardScreen() {
         }
       >
         <CoachCard key={`coach-${refreshKey}`} onWorkoutPress={handleWorkoutPress} />
-        <MetricsCard key={`metrics-${refreshKey}`} />
         <FitnessTrendChart key={`fitness-${refreshKey}`} />
+        <MetricsCard key={`metrics-${refreshKey}`} />
         <WeeklyVolumeChart key={`weekly-${refreshKey}`} />
         <PowerCurveChart key={`power-${refreshKey}`} />
         <FTPEstimateCard key={`ftp-${refreshKey}`} />

@@ -127,12 +127,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const recovery = w?.readinessScore ?? latest?.readinessScore ?? null;
   const recoveryStale = !w && !!latest;
   const hrvTrend = readiness?.hrvTrend && !readiness.hrvTrend.suspect ? readiness.hrvTrend : null;
-  const bodyStats = [
-    (w?.hrv ?? latest?.hrv) != null ? `HRV ${w?.hrv ?? latest?.hrv}` : null,
-    (w?.sleepSeconds ?? latest?.sleepSeconds) != null
-      ? `Sleep ${hm((w?.sleepSeconds ?? latest?.sleepSeconds)!)}${(w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds) ? `/${hm((w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds)!)}` : ''}`
-      : null,
-  ].filter(Boolean).join(' · ');
 
   // The ONE call to show, in priority order.
   type Call = { label: string; title: string; meta?: string; workoutId?: string; tone: 'today' | 'change' | 'rest' | 'tomorrow' };
@@ -157,10 +151,43 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const bodyLow = (recovery != null && recovery < 34) || hrvTrend?.status === 'low';
   const bodyMid = !bodyLow && ((recovery != null && recovery < 67) || hrvTrend?.status === 'slightly_low');
   const positiveForm = ['Fresh', 'Balanced', 'Detrained'].includes(form.label);
-  const bannerSubtitle = positiveForm && bodyLow
-    ? 'Rested legs, but your body needs recovery today'
-    : positiveForm && bodyMid
-      ? 'Rested legs — recovery is moderate, keep it controlled'
+  // The banner sticks to LOAD; the recovery panel below carries the body's
+  // verdict — each thing said once, never "ideal for racing" next to "go easy".
+  const bannerSubtitle = positiveForm && (bodyLow || bodyMid) ? 'Training load is low — legs are rested' : null;
+  // Watch users (Apple Health / intervals.icu): their shared numbers.
+  const watch = readiness?.wellness && readiness.wellness.source !== 'whoop' ? readiness.wellness : null;
+  const watchStats = watch ? [
+    watch.hrv != null ? `HRV ${watch.hrv}` : null,
+    watch.rhr != null ? `RHR ${watch.rhr}` : null,
+    watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null,
+  ].filter(Boolean).join(' · ') : '';
+
+  // Recovery panel: the numbers, then ONE line on what they mean for today's training.
+  const bodyCells = ([
+    ['HRV', (w?.hrv ?? latest?.hrv) != null ? `${w?.hrv ?? latest?.hrv} ms` : null],
+    ['Resting HR', (w?.rhr ?? latest?.rhr) != null ? `${w?.rhr ?? latest?.rhr} bpm` : null],
+    ['Sleep', (w?.sleepSeconds ?? latest?.sleepSeconds) != null
+      ? `${hm((w?.sleepSeconds ?? latest?.sleepSeconds)!)}${(w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds) ? ` / ${hm((w?.sleepNeedSeconds ?? latest?.sleepNeedSeconds)!)}` : ''}`
+      : null],
+    ['Strain', (w?.dayStrain ?? latest?.dayStrain) != null ? (w?.dayStrain ?? latest?.dayStrain)!.toFixed(1) : null],
+  ] as [string, string | null][]).filter(([, v]) => v) as [string, string][];
+  const hardToday = /vo2|threshold|interval|anaerobic|sprint|race|test|tempo|sweet/i.test(
+    `${s?.todaysWorkout?.type ?? ''} ${s?.todaysWorkout?.name ?? ''}`
+  );
+  const bodyMeaning = recovery != null
+    ? recovery < 34
+      ? adjusting
+        ? 'In the red: your body hasn\'t bounced back, which is why the coach is easing today off.'
+        : 'In the red: your body hasn\'t bounced back. Keep today easy, with no hard efforts.'
+      : recovery < 67
+        ? hardToday
+          ? 'Yellow: you can do the work today. Hit the targets but don\'t chase extra.'
+          : 'Yellow: fine to train. Keep the effort controlled.'
+        : hardToday
+          ? 'Green: you\'re recovered. A good day to go hard.'
+          : 'Green: you\'re recovered. Today\'s plan is a go.'
+    : hrvTrend?.status
+      ? HRV_MEANING[hrvTrend.status]
       : null;
 
   const why = adjusting ? s!.adjustment!.reason : (s?.keyPoints?.[0] ?? firstSentence(s?.recommendation));
@@ -172,19 +199,33 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
       {/* 1. How am I? — the load banner (subtitle honest about the body), then recovery */}
       <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} showDetails={false} subtitleOverride={bannerSubtitle} />
       {recovery != null ? (
-        <View style={styles.bodyRow}>
-          <View style={[styles.ring, { borderColor: recoveryColor(recovery) }]}>
-            <Text style={[styles.ringText, { color: recoveryColor(recovery) }]}>{recovery}%</Text>
+        <View style={styles.bodyPanel}>
+          <View style={styles.bodyRow}>
+            <View style={[styles.ring, { borderColor: recoveryColor(recovery) }]}>
+              <Text style={[styles.ringText, { color: recoveryColor(recovery) }]}>{recovery}%</Text>
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bodyTitle}>Recovery{recoveryStale ? ' (yesterday)' : ''} <Text style={styles.whoopTag}>WHOOP</Text></Text>
+              <View style={styles.bodyGrid}>
+                {bodyCells.map(([k, v]) => (
+                  <View key={k} style={styles.bodyCell}>
+                    <Text style={styles.bodyCellLabel}>{k}</Text>
+                    <Text style={styles.bodyCellValue}>{v}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
           </View>
-          <View style={{ flexShrink: 1 }}>
-            <Text style={styles.bodyTitle}>Recovery{recoveryStale ? ' (yesterday)' : ''} <Text style={styles.whoopTag}>WHOOP</Text></Text>
-            {bodyStats ? <Text style={styles.bodyStats} numberOfLines={1}>{bodyStats}</Text> : null}
-          </View>
+          {bodyMeaning ? <Text style={[styles.bodyMeaning, { color: recoveryColor(recovery) }]}>{bodyMeaning}</Text> : null}
         </View>
       ) : hrvTrend?.status ? (
-        <View style={styles.bodyRow}>
-          <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}</Text>
-          {hrvTrend.hrvPct != null ? <Text style={styles.bodyStats}> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</Text> : null}
+        <View style={styles.bodyPanel}>
+          <View style={[styles.bodyRow, { marginTop: 0 }]}>
+            <Text style={styles.bodyTitle}>{HRV_LABEL[hrvTrend.status]}</Text>
+            {hrvTrend.hrvPct != null ? <Text style={styles.bodyStats}> · {hrvTrend.hrvPct > 0 ? '+' : ''}{hrvTrend.hrvPct}% vs baseline</Text> : null}
+          </View>
+          {watchStats ? <Text style={[styles.bodyStats, { marginTop: 2 }]}>{watchStats}</Text> : null}
+          {bodyMeaning ? <Text style={[styles.bodyMeaning, { color: HRV_COLOR[hrvTrend.status] }]}>{bodyMeaning}</Text> : null}
         </View>
       ) : null}
 
@@ -278,6 +319,13 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
 }
 
 const TONE_COLORS = { today: '#60a5fa', change: '#fbbf24', rest: '#22c55e', tomorrow: '#a78bfa' } as const;
+const HRV_MEANING: Record<string, string> = {
+  low: 'Your body is under stress. Go easier than planned today.',
+  slightly_low: 'A little run down. Fine to train, keep the intensity controlled.',
+  normal: 'Right on your baseline. Train as planned.',
+  high: 'Well recovered. A good day for the hard work.',
+};
+const HRV_COLOR: Record<string, string> = { low: '#ef4444', slightly_low: '#eab308', normal: '#22c55e', high: '#22c55e' };
 const HRV_LABEL: Record<string, string> = { normal: 'HRV normal', slightly_low: 'HRV slightly low', low: 'HRV low', high: 'HRV above baseline' };
 const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h${String(Math.round((sec % 3600) / 60)).padStart(2, '0')}`;
@@ -285,10 +333,16 @@ const clean = (name: string) => name.replace(/^Draft - /, '');
 const firstSentence = (t?: string) => (t ? (t.split(/(?<=[.!?])\s+/)[0] || t) : '');
 
 const styles = StyleSheet.create({
-  bodyRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 12 },
+  bodyPanel: { marginTop: 12, padding: 10, borderRadius: 12, backgroundColor: '#0f172a' },
+  bodyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  bodyGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4, rowGap: 4 },
+  bodyCell: { width: '50%' },
+  bodyCellLabel: { color: '#64748b', fontSize: 11 },
+  bodyCellValue: { color: '#e2e8f0', fontSize: 13, fontWeight: '600' },
+  bodyMeaning: { fontSize: 13, fontWeight: '600', marginTop: 8, lineHeight: 18 },
   whoopTag: { color: '#64748b', fontSize: 10, fontWeight: '700', letterSpacing: 1 },
-  ring: { width: 50, height: 50, borderRadius: 25, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
-  ringText: { fontSize: 15, fontWeight: '800' },
+  ring: { width: 60, height: 60, borderRadius: 30, borderWidth: 3, alignItems: 'center', justifyContent: 'center' },
+  ringText: { fontSize: 17, fontWeight: '800' },
   bodyTitle: { color: '#f1f5f9', fontSize: 14, fontWeight: '700' },
   bodyStats: { color: '#94a3b8', fontSize: 12, marginTop: 1 },
   formChip: { borderWidth: 1.5, borderRadius: 10, paddingHorizontal: 10, paddingVertical: 4, alignItems: 'center' },

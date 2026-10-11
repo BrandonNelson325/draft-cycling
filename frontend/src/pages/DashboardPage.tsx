@@ -11,14 +11,14 @@ export function DashboardPage() {
 
   return (
     <div className="container mx-auto p-4 md:p-6 space-y-4">
-      {/* Coach Card (left, includes WHOOP recovery) | Training Metrics (right) */}
+      {/* Coach Card (left) | Fitness & Fatigue (right) — fitness matters more than weekly stats */}
       <div className="grid gap-4 md:grid-cols-2">
         <CoachCard />
-        <MetricsCard />
+        <FitnessTrendChart />
       </div>
 
-      {/* Fitness & Fatigue trend — full width */}
-      <FitnessTrendChart />
+      {/* Weekly stats — full width */}
+      <MetricsCard />
 
       {/* Second Row: Weekly Volume + Power Curve */}
       <div className="grid gap-4 md:grid-cols-2">
