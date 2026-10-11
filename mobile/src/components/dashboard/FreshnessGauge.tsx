@@ -101,11 +101,11 @@ export default function FreshnessGauge({ tsb, ctl = 0, atl = 0, showDetails = tr
   const pct = acwrToGaugePct(ctl, atl, tsb);
   const bg = interpolateColor(pct);
   const textColor = textColorForBg(pct);
-  // Chip slides proportionally along the bar (left at Fresh, right at Overreaching)
-  // so it always stays inside; the caret points exactly at the marker.
+  // Chip is centred on the marker, clamped so it never runs off either end;
+  // the caret always points exactly at the marker.
   const [barW, setBarW] = useState(0);
   const [chipW, setChipW] = useState(0);
-  const chipLeft = Math.max(0, (pct / 100) * (barW - chipW));
+  const chipLeft = Math.min(Math.max(0, (pct / 100) * barW - chipW / 2), Math.max(0, barW - chipW));
   const caretLeft = (pct / 100) * barW - 5;
 
   return (

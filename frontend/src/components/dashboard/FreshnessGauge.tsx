@@ -87,6 +87,7 @@ export function FreshnessGauge({ tsb, ctl = 0, atl = 0, subtitleOverride }: Fres
   const status = getStatus(tsb, ctl, atl);
   // The explanation line is one click away — the label + colour say enough at a glance.
   const [showWhy, setShowWhy] = useState(false);
+  const [chipW, setChipW] = useState(0);
 
   // Use ACWR-based gauge position (scales to individual fitness)
   const pct = acwrToGaugePct(ctl, atl, tsb);
@@ -95,11 +96,12 @@ export function FreshnessGauge({ tsb, ctl = 0, atl = 0, subtitleOverride }: Fres
 
   return (
     <button type="button" onClick={() => setShowWhy((x) => !x)} className="block w-full text-left">
-      {/* Status chip rides above the marker (slides proportionally so it never overflows) */}
+      {/* Status chip centred on the marker, clamped so it never overflows */}
       <div className="relative h-8">
         <div
           className="absolute bottom-1.5 px-2.5 py-0.5 rounded-full text-sm font-bold whitespace-nowrap shadow-sm transition-all"
-          style={{ left: `${pct}%`, transform: `translateX(-${pct}%)`, backgroundColor: bg, color: textColor }}
+          style={{ left: `clamp(0px, calc(${pct}% - ${chipW / 2}px), calc(100% - ${chipW}px))`, backgroundColor: bg, color: textColor }}
+          ref={(el) => { if (el && el.offsetWidth !== chipW) setChipW(el.offsetWidth); }}
         >
           {status.label}
         </div>
