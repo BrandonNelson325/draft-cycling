@@ -9,6 +9,7 @@ import { buildDailyWhoop, localDateTime, isCyclingSport, verifyWhoopSignature } 
 import { canWriteWellness } from '../utils/wellnessSource';
 import { summarizeWhoop, bandFor, buildRecoveryPush, buildProvisionalCall } from '../utils/whoopCoaching';
 import { dailyReadinessService } from '../services/dailyReadinessService';
+import { summarizeHrvTrend } from '../utils/wellnessTrend';
 
 let failures = 0;
 function check(label: string, cond: boolean, detail?: string) {
@@ -130,6 +131,23 @@ const r = dailyReadinessService.calculateReadiness(light, { wellness_source: 'wh
 check('Readiness: Whoop red drives it (great "feeling" ignored)', r.readinessScore < 5 && /Whoop recovery 25% \(red\)/.test(r.reasoning), `${r.readinessScore.toFixed(1)} — ${r.reasoning}`);
 const g = dailyReadinessService.calculateReadiness(light, { wellness_source: 'whoop', readiness_score: 90 });
 check('Readiness: Whoop green → high', g.readinessScore >= 8, g.readinessScore.toFixed(1));
+
+// ---- HRV trend for non-Whoop watches (Apple Health / intervals.icu) ----
+const ah = (date: string, hrv: number, rhr = 50, sleep = 7.5 * 3600) => ({ date, wellness_source: 'apple_health', hrv, rhr, sleep_seconds: sleep });
+const baseAh = [ah('2026-10-08', 60), ah('2026-10-07', 62), ah('2026-10-06', 58), ah('2026-10-05', 61)];
+const low = summarizeHrvTrend('2026-10-09', [ah('2026-10-09', 44, 56, 6 * 3600), ...baseAh]);
+check('HRV: low vs baseline, elevated RHR, short sleep → LOW (not suspect)', low.status === 'low' && !low.suspect && /HRV 44ms \(-27% vs 7-day avg 60 — LOW\)/.test(low.line) && /resting HR 56 \(\+6 vs avg\)/.test(low.line), low.line);
+const streak = summarizeHrvTrend('2026-10-09', [ah('2026-10-09', 44, 56), ah('2026-10-08', 46, 55), ah('2026-10-07', 62), ah('2026-10-06', 58), ah('2026-10-05', 61), ah('2026-10-04', 60)]);
+check('HRV: 2 low days in a row flagged', streak.lowStreak >= 2 && /days in a row ≥15% below baseline/.test(streak.line), streak.line);
+const badRead = summarizeHrvTrend('2026-10-09', [ah('2026-10-09', 40, 50), ...baseAh]);
+check('HRV: big drop with normal RHR + sleep after a normal day → suspect, ask first', badRead.suspect && /CHECK with the athlete/.test(badRead.line), badRead.line);
+check('HRV: normal day', summarizeHrvTrend('2026-10-09', [ah('2026-10-09', 59), ...baseAh]).status === 'normal');
+check('HRV: not enough history → nothing (no invented signal)', summarizeHrvTrend('2026-10-09', [ah('2026-10-09', 40), ah('2026-10-08', 60)]).line === '');
+check('HRV: never claims a recovery %', !/recovery/i.test(low.line));
+const rLow = dailyReadinessService.calculateReadiness(light, { wellness_source: 'apple_health', hrv_trend: low, sleep_score: 7, feeling_score: 7 });
+check('Readiness: low HRV lowers it', rLow.readinessScore < 7 && /HRV 27% below your baseline/.test(rLow.reasoning), `${rLow.readinessScore} — ${rLow.reasoning}`);
+const rSus = dailyReadinessService.calculateReadiness(light, { wellness_source: 'apple_health', hrv_trend: badRead, sleep_score: 7, feeling_score: 7 });
+check('Readiness: suspect low HRV not trusted', /possibly a bad reading/.test(rSus.reasoning) && rSus.readinessScore >= rLow.readinessScore, rSus.reasoning);
 
 console.log(`\n${failures === 0 ? '✅ ALL CHECKS PASSED' : `❌ ${failures} CHECK(S) FAILED`}`);
 process.exit(failures === 0 ? 0 : 1);

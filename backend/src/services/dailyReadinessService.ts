@@ -5,6 +5,7 @@ import { whoopService } from './whoopService';
 import { crossTrainingService } from './crossTrainingService';
 import { buildProvisionalCall } from '../utils/whoopCoaching';
 import { trainingLoadService } from './trainingLoadService';
+import { summarizeHrvTrend } from '../utils/wellnessTrend';
 
 async function getAthleteTz(athleteId: string): Promise<string> {
   const { data } = await supabaseAdmin
@@ -89,10 +90,22 @@ export const dailyReadinessService = {
     // Get recent activity (last 7 days)
     const recentActivity = await this.getRecentActivity(athleteId);
 
+    // HRV vs the athlete's own baseline (Apple Health / intervals.icu users —
+    // Whoop users use Whoop recovery instead).
+    let hrvTrend = null;
+    if (todayMetrics?.hrv != null && todayMetrics?.wellness_source !== 'whoop') {
+      const since = new Date(new Date(today + 'T12:00:00Z').getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
+      const { data: hist } = await supabaseAdmin
+        .from('daily_metrics').select('date, wellness_source, hrv, rhr, sleep_seconds')
+        .eq('athlete_id', athleteId).gte('date', since).lte('date', today);
+      const t = summarizeHrvTrend(today, hist || []);
+      if (t.hasToday) hrvTrend = t;
+    }
+
     // Calculate readiness score
     const readinessAnalysis = this.calculateReadiness(
       recentActivity,
-      todayMetrics
+      hrvTrend ? { ...todayMetrics, hrv_trend: hrvTrend } : todayMetrics
     );
 
     // Build wellness object only when there's an objective source. The manual
@@ -299,6 +312,23 @@ export const dailyReadinessService = {
       readinessScore = 1 + (whoopRecovery / 100) * 9;
       const band = whoopRecovery >= 67 ? 'green' : whoopRecovery >= 34 ? 'yellow' : 'red';
       reasoning += `Whoop recovery ${whoopRecovery}% (${band})${metrics.recovery_calibrating ? ' — still calibrating' : ''}. `;
+    }
+
+    // HRV vs baseline (non-Whoop watches): a suppressed HRV lowers readiness;
+    // a reading nothing else supports (suspect) is not trusted.
+    const hrvTrend = whoopRecovery == null ? metrics?.hrv_trend : null;
+    if (hrvTrend && !hrvTrend.suspect) {
+      if (hrvTrend.status === 'low') {
+        readinessScore -= hrvTrend.lowStreak >= 2 ? 2 : 1.5;
+        reasoning += `HRV ${Math.abs(hrvTrend.hrvPct)}% below your baseline${hrvTrend.lowStreak >= 2 ? ` (${hrvTrend.lowStreak} days running)` : ''}. `;
+      } else if (hrvTrend.status === 'slightly_low') {
+        readinessScore -= 0.75;
+        reasoning += `HRV a little below baseline (${hrvTrend.hrvPct}%). `;
+      } else if (hrvTrend.status === 'high') {
+        readinessScore += 0.5;
+      }
+    } else if (hrvTrend?.suspect) {
+      reasoning += 'HRV reads low but resting HR and sleep look normal — possibly a bad reading. ';
     }
 
     // Factor 1: Sleep quality (if available)
