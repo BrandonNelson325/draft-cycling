@@ -32,7 +32,7 @@ function interpolateHsl(pct: number): { h: number; s: number; l: number } {
   };
 }
 
-function interpolateColor(pct: number): string {
+export function interpolateColor(pct: number): string {
   const { h, s, l } = interpolateHsl(pct);
   return `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
 }
@@ -79,7 +79,7 @@ function acwrToGaugePct(ctl: number, atl: number, tsb: number): number {
 }
 
 // CSS gradient string matching the HSL stops
-const GRADIENT_CSS = `linear-gradient(to right, ${HSL_STOPS.map(
+export const GRADIENT_CSS = `linear-gradient(to right, ${HSL_STOPS.map(
   (s) => `hsl(${s.h}, ${s.s}%, ${s.l}%) ${s.pos * 100}%`
 ).join(', ')})`;
 

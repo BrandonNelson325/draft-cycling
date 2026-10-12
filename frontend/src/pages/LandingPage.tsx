@@ -1,43 +1,53 @@
 import { Link } from 'react-router-dom';
+import { PhoneDemo } from '../components/landing/PhoneDemo';
+import { CoachChatDemo } from '../components/landing/CoachChatDemo';
 
 const FEATURES = [
   {
-    title: 'AI-Powered Coaching',
+    title: 'Ask your coach anything, anytime',
     description:
-      'Chat with your personal cycling coach anytime. Get advice on training, nutrition, race strategy, and recovery — all tailored to your fitness level.',
-    icon: '\u{1F9E0}',
+      'Training, fueling, pacing, race strategy, a niggle in your knee at 10pm — your coach knows your data and answers in seconds.',
+    icon: '\u{1F4AC}',
   },
   {
-    title: 'Adaptive Training Plans',
+    title: 'Plans built around your life',
     description:
-      "Plans that adapt to what you actually do. Missed a workout or went off-script? Your coach adjusts the plan automatically — no guilt, just progress.",
+      'Tell it your goal and how much time you have each day. You get a periodized plan with structured workouts — and it adjusts when life happens.',
     icon: '\u{1F4C8}',
   },
   {
-    title: 'Strava Integration',
+    title: 'Reads your recovery',
     description:
-      'Connect Strava and your rides sync automatically. Your coach sees every ride and uses the data to fine-tune your plan.',
+      'Connect WHOOP or Apple Health and your coach weighs HRV, resting heart rate and sleep before every session. It suggests changes and asks before making them.',
+    icon: '\u{1F49A}',
+  },
+  {
+    title: 'Every ride counts',
+    description:
+      'Strava rides sync automatically, and so do your runs, lifts and hikes — rated for how hard they hit your cycling legs.',
     icon: 'strava',
   },
   {
-    title: 'Structured Workouts',
+    title: 'Workouts on your head unit',
     description:
-      'Get structured workouts with power targets you can export to your bike computer. Zwift-compatible ZWO and FIT file downloads.',
+      'Planned workouts sync to Wahoo and, through intervals.icu, to Garmin and Zwift. Or download ZWO and FIT files.',
     icon: '\u{26A1}',
   },
   {
-    title: 'Morning Readiness Check-ins',
+    title: 'Learns what works for you',
     description:
-      'Quick daily check-ins help your coach understand how you feel, so your training matches your body — not just the calendar.',
-    icon: '\u{2600}\u{FE0F}',
-  },
-  {
-    title: 'Post-Ride Feedback',
-    description:
-      'After every ride, rate your effort and the coach learns what works for you. Over time, your plans get smarter and more personal.',
+      'Rate each ride in a tap. Your coach uses how hard it felt — not just the numbers — to shape what comes next.',
     icon: '\u{1F3AF}',
   },
 ];
+
+const STEPS = [
+  { n: '1', title: 'Connect', body: 'Link Strava, plus WHOOP or Apple Health if you have them. Takes about a minute.' },
+  { n: '2', title: 'Get your plan', body: 'Tell your coach your goal, event and weekly schedule. It builds a plan around the time you actually have.' },
+  { n: '3', title: 'It adapts every day', body: 'Slept badly? Crushed a group ride? Your coach reads it and suggests tomorrow’s ride — you stay in control.' },
+];
+
+const WORKS_WITH = ['Strava', 'WHOOP', 'Apple Health', 'Wahoo', 'intervals.icu', 'Garmin', 'Zwift'];
 
 const PRICING = [
   {
@@ -101,41 +111,85 @@ export function LandingPage() {
       </nav>
 
       {/* Hero */}
-      <section className="pt-32 pb-20 px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl md:text-6xl font-extrabold leading-tight tracking-tight">
-            Your personal cycling coach,{' '}
-            <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-              powered by AI
-            </span>
-          </h1>
-          <p className="mt-6 text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed">
-            Adaptive training plans, real-time coaching, and Strava integration
-            — all for less than the price of two coffees a month.
-          </p>
-          <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/login?register=true"
-              className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors"
-            >
-              Start Free 7-Day Trial
-            </Link>
-            <a
-              href="https://apps.apple.com/us/app/draft-cycling/id6759934039"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2.5 px-8 py-3.5 text-base font-semibold bg-white text-gray-900 hover:bg-gray-200 rounded-xl transition-colors"
-            >
-              <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" xmlns="http://www.w3.org/2000/svg">
-                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-              </svg>
-              Download on the App Store
-            </a>
+      <section className="pt-28 pb-16 px-6">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
+          <div className="text-center lg:text-left">
+            <h1 className="text-5xl md:text-6xl font-extrabold leading-[1.05] tracking-tight">
+              Training that adapts to{' '}
+              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                how you actually feel
+              </span>
+            </h1>
+            <p className="mt-6 text-lg md:text-xl text-gray-400 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+              Connect Strava and WHOOP or Apple Health. Draft builds your plan around your schedule, then adjusts it
+              every day — and you can ask your coach anything, anytime. All for less than two coffees a month.
+            </p>
+            <div className="mt-9 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+              <Link
+                to="/login?register=true"
+                className="inline-flex items-center justify-center px-8 py-3.5 text-base font-semibold bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-colors"
+              >
+                Start Free 7-Day Trial
+              </Link>
+              <a
+                href="https://apps.apple.com/us/app/draft-cycling/id6759934039"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2.5 px-8 py-3.5 text-base font-semibold bg-white text-gray-900 hover:bg-gray-200 rounded-xl transition-colors"
+              >
+                <svg viewBox="0 0 24 24" className="w-6 h-6 fill-current" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                </svg>
+                Download on the App Store
+              </a>
+            </div>
+            <p className="mt-4 text-sm text-gray-500">
+              Now on iOS · Android coming soon · 7-day free trial — no credit card to explore.
+            </p>
           </div>
-          <p className="mt-4 text-sm text-gray-500">
-            Now on iOS · Android coming soon · 7-day free trial — no credit card to explore.{' '}
-            <a href="#features" className="text-gray-400 hover:text-white underline underline-offset-2">Learn more</a>
-          </p>
+
+          <PhoneDemo />
+        </div>
+      </section>
+
+      {/* Works with */}
+      <section className="pb-14 px-6">
+        <div className="max-w-5xl mx-auto text-center">
+          <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 mb-4">Works with</p>
+          <div className="flex flex-wrap justify-center gap-x-8 gap-y-3 text-lg font-semibold text-gray-400">
+            {WORKS_WITH.map((w) => <span key={w}>{w}</span>)}
+          </div>
+        </div>
+      </section>
+
+      {/* How it works */}
+      <section id="how" className="py-20 px-6 bg-gray-900/50">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold text-center mb-14">How it works</h2>
+          <div className="grid md:grid-cols-3 gap-8">
+            {STEPS.map((st) => (
+              <div key={st.n} className="text-center md:text-left">
+                <div className="mx-auto md:mx-0 mb-4 flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 font-bold">{st.n}</div>
+                <h3 className="text-lg font-semibold mb-2">{st.title}</h3>
+                <p className="text-sm text-gray-400 leading-relaxed">{st.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Coach chat demo */}
+      <section className="py-20 px-6">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-2 gap-12 items-center">
+          <div className="text-center lg:text-left">
+            <h2 className="text-3xl md:text-4xl font-bold mb-4">Ask your coach anything, anytime</h2>
+            <p className="text-gray-400 leading-relaxed max-w-lg mx-auto lg:mx-0">
+              Your coach sees every ride, your recovery and your whole plan — so its answers are about <em>you</em>, not
+              cyclists in general. It explains its reasoning, suggests changes, and always asks before it moves anything
+              on your calendar.
+            </p>
+          </div>
+          <CoachChatDemo />
         </div>
       </section>
 
@@ -146,7 +200,7 @@ export function LandingPage() {
             Everything you need to ride stronger
           </h2>
           <p className="text-gray-400 text-center mb-14 max-w-2xl mx-auto">
-            Draft combines AI coaching with your real ride data to create training plans that actually work for your life.
+            A real coach in your pocket — powered by AI, built on your own ride and recovery data.
           </p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {FEATURES.map((f) => (
