@@ -112,12 +112,12 @@ export function LandingPage() {
 
       {/* Hero */}
       <section className="pt-28 pb-16 px-6">
-        <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.1fr_1fr] gap-12 items-center">
+        <div className="max-w-6xl mx-auto grid lg:grid-cols-[1.25fr_1fr] gap-10 items-center">
           <div className="text-center lg:text-left">
-            <h1 className="text-5xl md:text-6xl font-extrabold leading-[1.05] tracking-tight">
-              Training that adapts to{' '}
-              <span className="bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
-                how you actually feel
+            <h1 className="text-4xl sm:text-5xl lg:text-[44px] xl:text-[56px] font-extrabold leading-[1.08] tracking-tight [text-wrap:balance]">
+              Training that adapts{' '}
+              <span className="lg:block lg:whitespace-nowrap bg-gradient-to-r from-blue-400 to-cyan-400 bg-clip-text text-transparent">
+                to how you actually feel
               </span>
             </h1>
             <p className="mt-6 text-lg md:text-xl text-gray-400 max-w-xl mx-auto lg:mx-0 leading-relaxed">
