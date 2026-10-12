@@ -140,6 +140,9 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   const bodyMeaning = recovery != null
     ? (recovery >= 67 ? "Green: you're recovered — a good day for intensity." : recovery >= 34 ? 'Yellow: fine to train — keep the effort controlled.' : "Red: your body hasn't bounced back — keep it easy.")
     : hrvTrend?.status ? HRV_MEANING[hrvTrend.status] : null;
+  // Tile sentence: what it means for training today (the colour carries green/yellow/red).
+  const tileMeaning = bodyMeaning ? bodyMeaning.split(': ').slice(1).join(': ') || bodyMeaning : null;
+  const tileTitle = recovery != null ? (latest ? 'Recovery · yesterday' : 'Recovery') : 'HRV vs your baseline';
 
   return (
     <Card>
@@ -148,11 +151,15 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
 
       {/* Recovery — one line; tap for the full numbers */}
       {pillColor && pillLead ? (
-        <TouchableOpacity onPress={() => setShowBody((x) => !x)} activeOpacity={0.7} style={styles.pill}>
-          <View style={[styles.pillDot, { backgroundColor: pillColor }]} />
-          <Text style={[styles.pillLead, { color: pillColor }]}>{pillLead}</Text>
-          {pillStats ? <Text style={styles.pillStats} numberOfLines={1}>· {pillStats}</Text> : null}
-          <Text style={styles.pillChevron}>{showBody ? '⌄' : '›'}</Text>
+        <TouchableOpacity onPress={() => setShowBody((x) => !x)} activeOpacity={0.7} style={styles.tile}>
+          <View style={styles.tileTop}>
+            <View style={[styles.pillDot, { backgroundColor: pillColor }]} />
+            <Text style={[styles.pillLead, { color: pillColor }]}>{pillLead}</Text>
+            <Text style={styles.tileTitle}>{tileTitle}</Text>
+            <Text style={styles.pillChevron}>{showBody ? '⌄' : '›'}</Text>
+          </View>
+          {tileMeaning ? <Text style={styles.tileMeaning}>{tileMeaning}</Text> : null}
+          {pillStats ? <Text style={styles.pillStats} numberOfLines={1}>{pillStats}</Text> : null}
         </TouchableOpacity>
       ) : null}
       {showBody && pillColor ? (
@@ -174,7 +181,6 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
           ) : watch ? (
             <Text style={styles.bodyValue}>{[watch.hrv != null ? `HRV ${watch.hrv} ms` : null, watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ')}</Text>
           ) : null}
-          {bodyMeaning ? <Text style={[styles.bodyMeaning, { color: pillColor }]}>{bodyMeaning}</Text> : null}
           {w?.recoveryCalibrating ? <Text style={styles.bodyLabel}>WHOOP is still calibrating — low confidence for now.</Text> : null}
         </View>
       ) : null}
@@ -226,7 +232,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
               onPress={s.todaysWorkout.workoutId ? () => onWorkoutPress?.(s.todaysWorkout!.workoutId!) : undefined}
             />
           )}
-          {!hasRidden && s.isRestDay && <WorkoutRow tone="rest" label="Today" name="Rest day" meta="Recovery day" />}
+          {!hasRidden && s.isRestDay && <WorkoutRow tone="rest" label="Today" name="Rest day" meta="Recovery is part of the plan" />}
           {!hasRidden && !s.isRestDay && s.suggestedWorkout && !s.todaysWorkout && (
             <WorkoutRow
               tone={s.suggestedWorkout.type === 'rest' ? 'rest' : 'suggest'}
@@ -311,6 +317,9 @@ const ROW_TONES = {
   rest: { color: '#22c55e', bg: '#052e16' },
 } as const;
 
+// Every planned workout is prefixed "Draft - " — noise on the card (calendar/exports keep it).
+const cleanName = (n: string) => n.replace(/^Draft\s*[-–—:]\s*/i, '');
+
 function WorkoutRow({ tone, label, name, meta, onPress, dimmed }: {
   tone: keyof typeof ROW_TONES; label: string; name: string; meta?: string; onPress?: () => void; dimmed?: boolean;
 }) {
@@ -318,9 +327,11 @@ function WorkoutRow({ tone, label, name, meta, onPress, dimmed }: {
   return (
     <TouchableOpacity activeOpacity={onPress ? 0.7 : 1} onPress={onPress} disabled={!onPress}>
       <View style={[styles.row, { backgroundColor: t.bg, borderLeftColor: t.color }, dimmed && styles.dimmedBox]}>
-        <Text style={[styles.rowLabel, { color: t.color }]} numberOfLines={1}>{label}</Text>
-        <Text style={styles.rowName} numberOfLines={1}>{name}</Text>
-        {meta ? <Text style={styles.rowMeta}>{meta}</Text> : null}
+        <Text style={styles.rowTop} numberOfLines={1}>
+          <Text style={[styles.rowLabel, { color: t.color }]}>{label}</Text>
+          {meta ? <Text style={styles.rowMeta}>{label ? '  ·  ' : ''}{meta}</Text> : null}
+        </Text>
+        <Text style={styles.rowName} numberOfLines={2}>{cleanName(name)}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -328,35 +339,38 @@ function WorkoutRow({ tone, label, name, meta, onPress, dimmed }: {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderRadius: 6,
+    gap: 3,
+    borderRadius: 8,
     borderLeftWidth: 3,
-    paddingVertical: 11,
+    paddingVertical: 10,
     paddingHorizontal: 12,
   },
+  rowTop: {
+    fontSize: 11,
+  },
   rowLabel: {
-    width: 84,
     fontSize: 11,
     fontWeight: '700',
     textTransform: 'uppercase',
-    letterSpacing: 0.4,
+    letterSpacing: 0.5,
   },
   rowName: {
-    flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: '#f1f5f9',
   },
   rowMeta: {
     fontSize: 12,
     color: '#94a3b8',
+    textTransform: 'none',
   },
-  pill: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 999, backgroundColor: '#0f172a' },
-  pillDot: { width: 8, height: 8, borderRadius: 4 },
-  pillLead: { fontSize: 14, fontWeight: '800' },
-  pillStats: { color: '#94a3b8', fontSize: 13, flex: 1 },
+  tile: { marginTop: 12, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#0f172a', gap: 4 },
+  tileTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  tileTitle: { color: '#94a3b8', fontSize: 13, fontWeight: '600', flex: 1 },
+  tileMeaning: { color: '#e2e8f0', fontSize: 14, fontWeight: '500', lineHeight: 19 },
+  pillDot: { width: 10, height: 10, borderRadius: 5 },
+  pillLead: { fontSize: 22, fontWeight: '800' },
+  pillStats: { color: '#94a3b8', fontSize: 13 },
   pillChevron: { color: '#64748b', fontSize: 16, fontWeight: '700' },
   bodyPanel: { marginTop: 8, padding: 10, borderRadius: 12, backgroundColor: '#0f172a', gap: 6 },
   bodyTag: { color: '#64748b', fontSize: 9, fontWeight: '700', letterSpacing: 1 },

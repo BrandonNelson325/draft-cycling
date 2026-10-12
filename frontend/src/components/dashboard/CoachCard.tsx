@@ -115,6 +115,9 @@ export function CoachCard() {
   const bodyMeaning = band === 'green' ? "Green: you're recovered — a good day for intensity."
     : band === 'yellow' ? 'Yellow: fine to train — keep the effort controlled.'
     : band === 'red' ? "Red: your body hasn't bounced back — keep it easy." : null;
+  // Tile sentence: what it means for training today (the colour carries green/yellow/red).
+  const tileMeaning = bodyMeaning ? bodyMeaning.split(': ').slice(1).join(': ') : null;
+  const tileTitle = recovery != null ? (latest ? 'Recovery · yesterday' : 'Recovery') : 'HRV vs your baseline';
 
   return (
     <Card>
@@ -122,13 +125,17 @@ export function CoachCard() {
         {/* Freshness Gauge — the visual hook */}
         <FreshnessGauge tsb={tsb} ctl={training?.ctl ?? 0} atl={training?.atl ?? 0} subtitleOverride={bannerSubtitle} />
 
-        {/* Recovery — one line; click for the full numbers */}
+        {/* Recovery tile — number, what it means for today, the stats; click for the full numbers */}
         {pillLead && (
-          <button onClick={() => setShowBody((x) => !x)} className="w-full flex items-center gap-2 rounded-full bg-gray-50 border px-3 py-1.5 text-left hover:bg-gray-100">
-            <span className={`w-2 h-2 rounded-full ${pillDot}`} />
-            <span className={`text-sm font-extrabold ${pillText}`}>{pillLead}</span>
-            {pillStats && <span className="text-sm text-gray-500 truncate flex-1">· {pillStats}</span>}
-            <span className="text-gray-400 text-sm">{showBody ? '⌄' : '›'}</span>
+          <button onClick={() => setShowBody((x) => !x)} className="w-full rounded-xl bg-gray-50 border px-3.5 py-2.5 text-left hover:bg-gray-100 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${pillDot}`} />
+              <span className={`text-xl font-extrabold ${pillText}`}>{pillLead}</span>
+              <span className="text-sm font-semibold text-gray-500 flex-1">{tileTitle}</span>
+              <span className="text-gray-400 text-sm">{showBody ? '⌄' : '›'}</span>
+            </div>
+            {tileMeaning && <p className="text-sm font-medium text-gray-800">{tileMeaning}</p>}
+            {pillStats && <p className="text-[13px] text-gray-500 truncate">{pillStats}</p>}
           </button>
         )}
         {showBody && pillLead && (
@@ -146,7 +153,6 @@ export function CoachCard() {
             ) : watch ? (
               <p className="text-sm font-semibold">{[watch.hrv != null ? `HRV ${watch.hrv} ms` : null, watch.rhr != null ? `RHR ${watch.rhr}` : null, watch.sleepSeconds != null ? `Sleep ${hm(watch.sleepSeconds)}` : null].filter(Boolean).join(' · ')}</p>
             ) : null}
-            {bodyMeaning && <p className={`text-sm font-medium ${pillText}`}>{bodyMeaning}</p>}
             {w?.recoveryCalibrating && <p className="text-xs text-gray-500">WHOOP is still calibrating — low confidence for now.</p>}
           </div>
         )}
@@ -248,16 +254,21 @@ const ROW_TONES = {
   rest: { box: 'border-green-200 bg-green-50', label: 'text-green-700' },
 } as const;
 
+// Every planned workout is prefixed "Draft - " — noise on the card (calendar/exports keep it).
+const cleanName = (n: string) => n.replace(/^Draft\s*[-–—:]\s*/i, '');
+
 function WorkoutRow({ tone, label, name, meta, onClick }: { tone: keyof typeof ROW_TONES; label: string; name: string; meta?: string; onClick?: () => void }) {
   const t = ROW_TONES[tone];
   return (
     <div
       onClick={onClick}
-      className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 ${t.box} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}
+      className={`rounded-lg border px-3 py-2.5 ${t.box} ${onClick ? 'cursor-pointer hover:shadow-sm transition-shadow' : ''}`}
     >
-      <span className={`w-20 shrink-0 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
-      <span className="flex-1 min-w-0 truncate text-sm font-medium text-gray-800">{name}</span>
-      {meta && <span className="shrink-0 text-xs text-gray-500">{meta}</span>}
+      <div className="truncate text-[11px]">
+        <span className={`font-semibold uppercase tracking-wide ${t.label}`}>{label}</span>
+        {meta && <span className="text-gray-500">{label ? '  ·  ' : ''}{meta}</span>}
+      </div>
+      <div className="text-[15px] font-semibold text-gray-800 line-clamp-2">{cleanName(name)}</div>
     </div>
   );
 }
