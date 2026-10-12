@@ -116,7 +116,7 @@ export function CoachCard() {
     : band === 'yellow' ? 'Yellow: fine to train — keep the effort controlled.'
     : band === 'red' ? "Red: your body hasn't bounced back — keep it easy." : null;
   // Tile sentence: what it means for training today (the colour carries green/yellow/red).
-  const tileMeaning = bodyMeaning ? bodyMeaning.split(': ').slice(1).join(': ') : null;
+  const tileMeaning = bodyMeaning ? cap(bodyMeaning.split(': ').slice(1).join(': ') || bodyMeaning) : null;
   const tileTitle = recovery != null ? (latest ? 'Recovery · yesterday' : 'Recovery') : 'HRV vs your baseline';
 
   return (
@@ -253,6 +253,8 @@ const ROW_TONES = {
   suggest: { box: 'border-purple-200 bg-purple-50', label: 'text-purple-700' },
   rest: { box: 'border-green-200 bg-green-50', label: 'text-green-700' },
 } as const;
+
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 // Every planned workout is prefixed "Draft - " — noise on the card (calendar/exports keep it).
 const cleanName = (n: string) => n.replace(/^Draft\s*[-–—:]\s*/i, '');

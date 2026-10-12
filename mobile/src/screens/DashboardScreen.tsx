@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { ScrollView, StyleSheet, View, AppState, RefreshControl } from 'react-native';
+import { ScrollView, StyleSheet, View, Text, AppState, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
@@ -15,6 +15,7 @@ import PowerCurveChart from '../components/dashboard/PowerCurveChart';
 import FTPEstimateCard from '../components/dashboard/FTPEstimateCard';
 import OtherTrainingCard from '../components/dashboard/OtherTrainingCard';
 import RecentActivities from '../components/dashboard/RecentActivities';
+import { useAuthStore } from '../stores/useAuthStore';
 import ActivityDetailSheet from '../components/activity/ActivityDetailSheet';
 import WorkoutDetailSheet from '../components/workout/WorkoutDetailSheet';
 
@@ -23,6 +24,21 @@ const SNAP_POINTS = ['60%', '85%'];
 const renderBackdrop = (props: any) => (
   <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
 );
+
+// Screen anchor: a time-of-day greeting + today's date (also anchors the card's Today/Tomorrow rows).
+function DashboardGreeting() {
+  const user = useAuthStore((st) => st.user);
+  const now = new Date();
+  const h = now.getHours();
+  const part = h < 5 ? 'evening' : h < 12 ? 'morning' : h < 17 ? 'afternoon' : 'evening';
+  const first = user?.full_name?.trim().split(/\s+/)[0];
+  return (
+    <View style={styles.greeting}>
+      <Text style={styles.greetingTitle}>Good {part}{first ? `, ${first}` : ''}</Text>
+      <Text style={styles.greetingDate}>{now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' })}</Text>
+    </View>
+  );
+}
 
 export default function DashboardScreen() {
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
@@ -92,6 +108,7 @@ export default function DashboardScreen() {
           />
         }
       >
+        <DashboardGreeting />
         <CoachCard key={`coach-${refreshKey}`} onWorkoutPress={handleWorkoutPress} />
         <FitnessTrendChart key={`fitness-${refreshKey}`} />
         <MetricsCard key={`metrics-${refreshKey}`} />
@@ -149,6 +166,22 @@ const styles = StyleSheet.create({
   },
   bottomPad: {
     height: 16,
+  },
+  greeting: {
+    paddingHorizontal: 4,
+    paddingTop: 4,
+    marginBottom: 14,
+  },
+  greetingTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#f1f5f9',
+    letterSpacing: -0.3,
+  },
+  greetingDate: {
+    fontSize: 14,
+    color: '#94a3b8',
+    marginTop: 2,
   },
   sheetBg: { backgroundColor: '#1e293b' },
   sheetHandle: { backgroundColor: '#475569' },

@@ -141,7 +141,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
     ? (recovery >= 67 ? "Green: you're recovered — a good day for intensity." : recovery >= 34 ? 'Yellow: fine to train — keep the effort controlled.' : "Red: your body hasn't bounced back — keep it easy.")
     : hrvTrend?.status ? HRV_MEANING[hrvTrend.status] : null;
   // Tile sentence: what it means for training today (the colour carries green/yellow/red).
-  const tileMeaning = bodyMeaning ? bodyMeaning.split(': ').slice(1).join(': ') || bodyMeaning : null;
+  const tileMeaning = bodyMeaning ? cap(bodyMeaning.split(': ').slice(1).join(': ') || bodyMeaning) : null;
   const tileTitle = recovery != null ? (latest ? 'Recovery · yesterday' : 'Recovery') : 'HRV vs your baseline';
 
   return (
@@ -316,6 +316,8 @@ const ROW_TONES = {
   suggest: { color: '#a78bfa', bg: '#0f172a' },
   rest: { color: '#22c55e', bg: '#052e16' },
 } as const;
+
+const cap = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 
 // Every planned workout is prefixed "Draft - " — noise on the card (calendar/exports keep it).
 const cleanName = (n: string) => n.replace(/^Draft\s*[-–—:]\s*/i, '');
