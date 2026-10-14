@@ -64,6 +64,9 @@ export function usePushNotifications(onRideNotificationTap?: () => void, onMorni
       } catch (err) {
         console.warn('[Push] Failed to register push token:', err);
       }
+    }).catch((err) => {
+      // Android throws here until FCM credentials are configured
+      console.warn('[Push] Failed to get push token:', err);
     });
   }, [user?.id]);
 
