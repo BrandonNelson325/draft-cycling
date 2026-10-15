@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ride Your Name: a Morse Code Interval Workout | Draft Cycling</title>
+<meta name="description" content="Type your name, get a real interval workout that spells it in Morse code. Dots are short efforts, dashes are long ones. Ride it on Zwift and your power graph spells your name. Free, no sign-up." />
+<link rel="canonical" href="https://draftcycling.com/tools/ride-your-name" />
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Ride Your Name: your name, in Morse code, in watts" />
+<meta property="og:description" content="A free tool that turns your name into an interval workout. Dots are sprints, dashes hurt more. Ride it and your power graph spells your name." />
+<meta property="og:url" content="https://draftcycling.com/tools/ride-your-name" />
+<meta property="og:image" content="https://draftcycling.com/tools/ride-your-name-og.png" />
+<meta name="twitter:card" content="summary_large_image" />
+<link rel="icon" href="/logoSquareTransparent.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet" />
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Ride Your Name: Morse Code Cycling Workout Generator",
+  "applicationCategory": "HealthApplication",
+  "operatingSystem": "Web",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "description": "Turn any name into a structured cycling interval workout that spells it in Morse code. Export to Zwift (.zwo) or .mrc.",
+  "url": "https://draftcycling.com/tools/ride-your-name"
+}
+</script>
+<style>
+  :root{
+    --bg:#030712; --panel:#0b1220; --panel2:#111a2b; --border:#1f2937;
+    --text:#e5e7eb; --muted:#9ca3af; --faint:#6b7280;
+    --blue:#2563eb; --blue-hi:#3b82f6; --blue-lite:#60a5fa; --cyan:#22d3ee;
+    --green:#22c55e; --green-lite:#4ade80; --warn:#fbbf24; --red:#ef4444;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased}
+  a{color:var(--blue-lite);text-decoration:none}
+  a:hover{color:#93c5fd}
+  .wrap{max-width:860px;margin:0 auto;padding:0 16px}
+  nav{position:sticky;top:0;z-index:20;background:rgba(3,7,18,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--border)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px}
+  nav img{height:34px;width:auto}
+  .cta-sm{background:var(--blue);color:#fff;font-weight:600;font-size:14px;padding:8px 16px;border-radius:10px}
+  .cta-sm:hover{background:var(--blue-hi);color:#fff}
+  header{padding:48px 0 8px;text-align:center}
+  .kicker{font-family:'JetBrains Mono',monospace;color:var(--green-lite);font-size:14px;letter-spacing:3px;margin-bottom:14px}
+  h1{font-size:44px;line-height:1.05;font-weight:900;letter-spacing:-.03em;margin:0 0 14px}
+  .grad{background:linear-gradient(90deg,var(--green-lite),var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent}
+  header p{color:var(--muted);font-size:18px;max-width:600px;margin:0 auto}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:22px;margin:22px 0}
+  .card h2{font-size:19px;font-weight:700;margin:0 0 4px}
+  .card .sub{color:var(--faint);font-size:13px;margin:0 0 18px}
+  label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin:0 0 6px}
+  .row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+  .field{flex:1;min-width:140px}
+  .field.name{flex:3;min-width:220px}
+  input[type=text],input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:20px;font-weight:700;padding:12px 14px;font-family:inherit}
+  input[type=text]{text-transform:uppercase;letter-spacing:2px}
+  input:focus{outline:none;border-color:var(--green);box-shadow:0 0 0 3px rgba(34,197,94,.25)}
+  input::-webkit-outer-spin-button,input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .modes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+  .mode{background:var(--panel2);border:1.5px solid var(--border);border-radius:12px;padding:12px;cursor:pointer;text-align:left;color:var(--text);font-family:inherit}
+  .mode b{display:block;font-size:15px}
+  .mode span{font-size:12px;color:var(--faint)}
+  .mode.on{border-color:var(--green);background:rgba(34,197,94,.08)}
+  .morse{font-family:'JetBrains Mono',monospace;display:flex;flex-wrap:wrap;gap:6px 14px;margin:6px 0 16px;color:var(--muted);font-size:14px}
+  .morse .l b{color:var(--text);margin-right:6px}
+  .chart{width:100%;height:auto;display:block;background:#060b16;border:1px solid var(--border);border-radius:12px}
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:14px}
+  .stat{background:var(--panel2);border:1px solid var(--border);border-radius:12px;padding:12px}
+  .stat .k{font-size:12px;color:var(--faint);font-weight:600}
+  .stat .v{font-size:22px;font-weight:800;margin-top:2px}
+  .verdict{margin-top:14px;padding:14px 16px;border-radius:12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);font-size:15px}
+  .verdict.hard{background:rgba(251,191,36,.08);border-color:rgba(251,191,36,.35)}
+  .verdict.brutal{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.35)}
+  .btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+  .btn{display:inline-flex;align-items:center;gap:8px;border:0;cursor:pointer;font-family:inherit;font-weight:700;font-size:15px;padding:12px 18px;border-radius:11px;background:var(--panel2);color:var(--text);border:1px solid var(--border)}
+  .btn:hover{border-color:#334155}
+  .btn.primary{background:var(--green);color:#052e16;border-color:var(--green)}
+  .btn.primary:hover{background:var(--green-lite)}
+  .toast{opacity:0;position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(80px);background:#111827;border:1px solid #334155;color:#fff;padding:10px 18px;border-radius:999px;font-weight:600;font-size:14px;transition:transform .25s;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .how ol{margin:0;padding-left:20px;color:var(--muted)}
+  .how li{margin:6px 0}
+  .how b{color:var(--text)}
+  .pitch{text-align:center;background:linear-gradient(135deg,rgba(34,197,94,.12),rgba(37,99,235,.12))}
+  .pitch h2{font-size:24px}
+  .pitch p{color:var(--muted);max-width:560px;margin:8px auto 18px}
+  .examples{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:var(--panel2);border:1px solid var(--border);color:var(--muted);border-radius:999px;padding:6px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:'JetBrains Mono',monospace}
+  .chip:hover{color:var(--text);border-color:#334155}
+  footer{border-top:1px solid var(--border);margin-top:40px;padding:26px 0;color:var(--faint);font-size:13px}
+  footer .wrap{display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;align-items:center}
+  footer a{color:var(--muted)}
+  @media (max-width:640px){
+    h1{font-size:34px}
+    .modes{grid-template-columns:1fr}
+    .stats{grid-template-columns:repeat(2,1fr)}
+    .btn{flex:1;justify-content:center}
+  }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a href="https://draftcycling.com/"><img src="/logo-dark.png" alt="Draft Cycling" /></a>
+  <a class="cta-sm" href="https://draftcycling.com/login?register=true">Try Draft Free</a>
+</div></nav>
+
+<main class="wrap">
+  <header>
+    <div class="kicker">·-· ·· -·· ·   -·-- --- ··- ·-·   -· ·- -- ·</div>
+    <h1>Ride <span class="grad">your name.</span></h1>
+    <p>Type a name and get a real interval workout that spells it in Morse code. Dots are short efforts and dashes are long ones. Ride it, and your power graph spells your name on Strava.</p>
+  </header>
+
+  <section class="card">
+    <div class="row">
+      <div class="field name">
+        <label for="name">Name (or anything, up to 16 characters)</label>
+        <input id="name" type="text" maxlength="16" value="DRAFT" autocomplete="off" spellcheck="false" />
+      </div>
+      <div class="field">
+        <label for="ftp">Your FTP (watts)</label>
+        <input id="ftp" type="number" min="80" max="600" value="230" />
+      </div>
+    </div>
+    <div class="modes" id="modes">
+      <button class="mode on" data-mode="sprint"><b>⚡ Sprint</b><span>Dot 10s · Dash 30s · anaerobic</span></button>
+      <button class="mode" data-mode="vo2"><b>🔥 VO2 max</b><span>Dot 30s · Dash 90s · lungs on fire</span></button>
+      <button class="mode" data-mode="sweetspot"><b>🧱 Sweet spot</b><span>Dot 1 min · Dash 3 min · long and steady</span></button>
+    </div>
+    <div class="examples" style="margin-top:14px">
+      <span style="font-size:13px;color:var(--faint);align-self:center">Try:</span>
+      <button class="chip">SOS</button><button class="chip">ZWIFT</button><button class="chip">KOM</button><button class="chip">HTFU</button><button class="chip">PAIN</button><button class="chip">TOUR</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 id="title">DRAFT, in watts</h2>
+    <p class="sub" id="subtitle">Warm-up, your name, cool-down.</p>
+    <div class="morse" id="morse"></div>
+    <svg class="chart" id="chart" viewBox="0 0 1000 300" preserveAspectRatio="none" role="img" aria-label="Workout power profile"></svg>
+    <div class="stats">
+      <div class="stat"><div class="k">Duration</div><div class="v" id="sDur">–</div></div>
+      <div class="stat"><div class="k">Efforts</div><div class="v" id="sEff">–</div></div>
+      <div class="stat"><div class="k">Time above FTP</div><div class="v" id="sHard">–</div></div>
+      <div class="stat"><div class="k">Est. TSS</div><div class="v" id="sTss">–</div></div>
+    </div>
+    <div class="verdict" id="verdict"></div>
+    <div class="btns">
+      <button class="btn primary" id="dlZwo">⬇ Zwift workout (.zwo)</button>
+      <button class="btn" id="dlMrc">⬇ .mrc (most other trainer apps)</button>
+      <button class="btn" id="dlCard">🖼 Share image</button>
+      <button class="btn" id="copyLink">🔗 Challenge a friend</button>
+      <button class="btn" id="copyTitle">📋 Copy Strava title</button>
+    </div>
+  </section>
+
+  <section class="card how">
+    <h2>How to ride it</h2>
+    <ol>
+      <li><b>Zwift:</b> put the .zwo file in <code>Documents/Zwift/Workouts/&lt;your id&gt;</code>, then find it under Custom Workouts. On-screen messages tell you which letter you're riding.</li>
+      <li><b>intervals.icu:</b> drag the .zwo onto your calendar and it syncs to your Garmin or Wahoo.</li>
+      <li><b>Other trainer apps:</b> most of them import the .mrc file.</li>
+      <li><b>Then post it.</b> Paste the Strava title, and let your followers try to decode the graph.</li>
+    </ol>
+  </section>
+
+  <section class="card pitch">
+    <h2>Fun workout. Real coach behind it.</h2>
+    <p>Draft is an AI cycling coach that builds your whole plan around your goal event, adjusts each day to your WHOOP recovery, and sends every workout straight to your Wahoo. You can also just text it questions, like a real coach. $9.99/mo, and you can try it free for 7 days.</p>
+    <a class="btn primary" href="https://draftcycling.com/login?register=true">Get a coach that never sleeps</a>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  <span>© Draft Cycling · Made by a rider who couldn't stop thinking about this.</span>
+  <span><a href="/tools/ftp-calculator">FTP calculator</a> · <a href="https://draftcycling.com/blog/">Blog</a> · <a href="https://draftcycling.com/">Home</a></span>
+</div></footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const MORSE = {A:'.-',B:'-...',C:'-.-.',D:'-..',E:'.',F:'..-.',G:'--.',H:'....',I:'..',J:'.---',K:'-.-',L:'.-..',M:'--',N:'-.',O:'---',P:'.--.',Q:'--.-',R:'.-.',S:'...',T:'-',U:'..-',V:'...-',W:'.--',X:'-..-',Y:'-.--',Z:'--..',
+  '0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.'};
+const MODES = {
+  sprint:    {label:'Sprint',     dot:[10,1.40], dash:[30,1.40], gap:[30,0.45], letter:[90,0.50], word:[180,0.50]},
+  vo2:       {label:'VO2 max',    dot:[30,1.18], dash:[90,1.18], gap:[45,0.50], letter:[120,0.50], word:[180,0.50]},
+  sweetspot: {label:'Sweet spot', dot:[60,0.92], dash:[180,0.92], gap:[30,0.60], letter:[90,0.55], word:[120,0.55]},
+};
+const WARM = 600, COOL = 480;
+let mode = 'sprint';
+const $ = id => document.getElementById(id);
+const pretty = s => s.replace(/\./g,'·').replace(/-/g,'–');
+
+function clean(v){ return (v||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').replace(/\s+/g,' ').trim().slice(0,16); }
+
+// Build list of segments: {dur, lo, hi, kind, letter, symbol}
+function build(name){
+  const m = MODES[mode]; const segs = [];
+  segs.push({dur:WARM, lo:0.50, hi:0.75, kind:'warm'});
+  segs.push({dur:120, lo:0.55, hi:0.55, kind:'rest', msg:'Get ready. Your name starts in 2 minutes.'});
+  const words = name.split(' ');
+  words.forEach((w, wi) => {
+    [...w].forEach((ch, ci) => {
+      const code = MORSE[ch]; if(!code) return;
+      [...code].forEach((sym, si) => {
+        const [d,p] = sym === '.' ? m.dot : m.dash;
+        segs.push({dur:d, lo:p, hi:p, kind: sym==='.'?'dot':'dash', letter:ch, symbol:sym, code, first: si===0});
+        const last = si === code.length-1;
+        if(!last) segs.push({dur:m.gap[0], lo:m.gap[1], hi:m.gap[1], kind:'rest'});
+      });
+      const lastLetter = ci === w.length-1;
+      if(!lastLetter) segs.push({dur:m.letter[0], lo:m.letter[1], hi:m.letter[1], kind:'rest', letterGap:true});
+    });
+    if(wi < words.length-1) segs.push({dur:m.word[0], lo:m.word[1], hi:m.word[1], kind:'rest', wordGap:true});
+  });
+  segs.push({dur:COOL, lo:0.65, hi:0.45, kind:'cool'});
+  return segs;
+}
+
+function zoneColor(p){ return p<0.56?'#475569':p<0.76?'#3b82f6':p<0.88?'#22c55e':p<0.95?'#eab308':p<1.06?'#f97316':'#ef4444'; }
+function fmt(sec){ const h=Math.floor(sec/3600), m=Math.round((sec%3600)/60); return h?`${h}h ${m}m`:`${m} min`; }
+
+function stats(segs){
+  const total = segs.reduce((a,s)=>a+s.dur,0);
+  const efforts = segs.filter(s=>s.kind==='dot'||s.kind==='dash').length;
+  const hard = segs.filter(s=>s.lo>1.0).reduce((a,s)=>a+s.dur,0);
+  // TSS = sum(dur * IF^2)/3600*100, using avg power per segment
+  const tss = segs.reduce((a,s)=>{const p=(s.lo+s.hi)/2; return a + s.dur*p*p;},0)/36;
+  return {total, efforts, hard, tss:Math.round(tss)};
+}
+
+function render(){
+  const name = clean($('name').value) || 'DRAFT';
+  const segs = build(name); const st = stats(segs);
+  $('title').textContent = `${name}, in watts`;
+  const ftp = Math.max(80, Math.min(600, +$('ftp').value || 230)); const M = MODES[mode];
+  $('subtitle').textContent = `${M.label} mode: dots at ${Math.round(M.dot[1]*ftp)} W, dashes at ${Math.round(M.dash[1]*ftp)} W. 10 min warm-up, your name, 8 min cool-down.`;
+  $('morse').innerHTML = [...name].map(c => c===' ' ? '<span class="l">/</span>' : `<span class="l"><b>${c}</b>${pretty(MORSE[c]||'')}</span>`).join('');
+  drawChart($('chart'), segs, name);
+  $('sDur').textContent = fmt(st.total);
+  $('sEff').textContent = st.efforts;
+  $('sHard').textContent = st.hard ? fmt(st.hard) : '0 min';
+  $('sTss').textContent = st.tss;
+  const v = $('verdict');
+  const tough = mode==='sweetspot' ? st.total>5400 : st.hard > (mode==='sprint'?900:1500);
+  const brutal = mode==='sweetspot' ? st.total>7200 : st.hard > (mode==='sprint'?1500:2400);
+  v.className = 'verdict' + (brutal?' brutal':tough?' hard':'');
+  const dashes = segs.filter(s=>s.kind==='dash').length;
+  v.textContent = brutal ? `Coach's take: that's a brutal name. ${dashes} dashes. Maybe ride your nickname, or ride it once and tell everyone about it forever.`
+    : tough ? `Coach's take: this one is properly hard. ${dashes} dashes in ${MODES[mode].label.toLowerCase()} mode. Fuel up first.`
+    : `Coach's take: very doable. ${st.efforts} efforts that make a solid ${MODES[mode].label.toLowerCase()} session. Don't skip the cool-down.`;
+  const url = new URL(location.href); url.searchParams.set('n', name); url.searchParams.set('m', mode);
+  history.replaceState(null,'',url);
+  return {name, segs, st};
+}
+
+function drawChart(svg, segs, name, W=1000, H=300){
+  const total = segs.reduce((a,s)=>a+s.dur,0); const maxP = 1.6; const pad = 34;
+  let x = 0, out = '';
+  // FTP line
+  const ftpY = H - pad - (1.0/maxP)*(H-pad-10);
+  out += `<line x1="0" x2="${W}" y1="${ftpY}" y2="${ftpY}" stroke="#334155" stroke-dasharray="4 6"/>`;
+  out += `<text x="6" y="${ftpY-6}" fill="#64748b" font-size="13" font-family="Inter">FTP</text>`;
+  const labels = [];
+  segs.forEach(s => {
+    const w = s.dur/total*W;
+    const y1 = H - pad - (s.lo/maxP)*(H-pad-10), y2 = H - pad - (s.hi/maxP)*(H-pad-10);
+    const c = zoneColor((s.lo+s.hi)/2);
+    out += `<polygon points="${x},${H-pad} ${x},${y1} ${x+w},${y2} ${x+w},${H-pad}" fill="${c}" opacity="${s.kind==='rest'||s.kind==='warm'||s.kind==='cool'?0.55:1}"/>`;
+    if(s.letter){ if(s.first) labels.push({letter:s.letter, x0:x, x1:x+w}); else labels[labels.length-1].x1 = x+w; }
+    x += w;
+  });
+  labels.forEach(l => { out += `<text x="${(l.x0+l.x1)/2}" y="${H-10}" fill="#e5e7eb" font-size="18" font-weight="800" text-anchor="middle" font-family="Inter">${l.letter}</text>`; });
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = out;
+}
+
+function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function toZwo({name, segs}){
+  const lines = segs.map(s => {
+    if(s.kind==='warm') return `    <Warmup Duration="${s.dur}" PowerLow="${s.lo.toFixed(2)}" PowerHigh="${s.hi.toFixed(2)}"/>`;
+    if(s.kind==='cool') return `    <Cooldown Duration="${s.dur}" PowerLow="${s.lo.toFixed(2)}" PowerHigh="${s.hi.toFixed(2)}"/>`;
+    let msg = s.msg || '';
+    if(s.letter) msg = `${s.letter}  ${s.code}  ${s.symbol==='.'?'DOT':'DASH'}`;
+    if(s.letterGap) msg = 'Letter done. Breathe.';
+    if(s.wordGap) msg = 'Word done. Recover.';
+    const ev = msg ? `\n      <textevent timeoffset="0" message="${esc(msg)}"/>\n    ` : '';
+    return `    <SteadyState Duration="${s.dur}" Power="${s.lo.toFixed(2)}">${ev}</SteadyState>`;
+  });
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<workout_file>
+  <author>Draft Cycling (draftcycling.com)</author>
+  <name>${esc('Ride Your Name: ' + name)}</name>
+  <description>${esc(`"${name}" in Morse code (${MODES[mode].label} mode). Dots are short efforts, dashes are long ones. Made at draftcycling.com/tools/ride-your-name`)}</description>
+  <sportType>bike</sportType>
+  <tags><tag name="DraftCycling"/><tag name="RideYourName"/></tags>
+  <workout>
+${lines.join('\n')}
+  </workout>
+</workout_file>
+`;
+}
+
+function toMrc({name, segs}){
+  let t = 0; const rows = [];
+  segs.forEach(s => { rows.push(`${(t/60).toFixed(2)}\t${Math.round(s.lo*100)}`); t += s.dur; rows.push(`${(t/60).toFixed(2)}\t${Math.round(s.hi*100)}`); });
+  return `[COURSE HEADER]\nVERSION = 2\nUNITS = ENGLISH\nDESCRIPTION = Ride Your Name: ${name} (Morse code). draftcycling.com/tools/ride-your-name\nFILE NAME = ride-your-name-${name.toLowerCase().replace(/ /g,'-')}\nMINUTES PERCENT\n[END COURSE HEADER]\n[COURSE DATA]\n${rows.join('\n')}\n[END COURSE DATA]\n`;
+}
+
+function download(filename, content, type){
+  const blob = content instanceof Blob ? content : new Blob([content], {type});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'), 2200); }
+async function copy(text, msg){ try{ await navigator.clipboard.writeText(text); toast(msg); }catch(e){ prompt('Copy this:', text); } }
+
+function shareCard({name, segs, st}){
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1080; const g = c.getContext('2d');
+  const grd = g.createRadialGradient(860,760,50,860,760,700); grd.addColorStop(0,'rgba(34,197,94,.25)'); grd.addColorStop(1,'rgba(3,7,18,0)');
+  g.fillStyle = '#030712'; g.fillRect(0,0,1080,1080); g.fillStyle = grd; g.fillRect(0,0,1080,1080);
+  g.fillStyle = '#4ade80'; g.font = '700 26px "JetBrains Mono", monospace'; g.fillText('RIDE YOUR NAME', 72, 110);
+  g.fillStyle = '#fff'; g.font = '900 ' + (name.length>9?96:132) + 'px Inter'; g.fillText(name, 66, 250);
+  g.fillStyle = '#94a3b8'; g.font = '500 30px "JetBrains Mono", monospace';
+  g.fillText([...name].map(ch => ch===' '?'/':pretty(MORSE[ch]||'')).join('  ').slice(0,46), 72, 315);
+  // chart: draw main set only (skip warm/cool for legibility)
+  const main = segs.filter(s => s.kind!=='warm' && s.kind!=='cool');
+  const total = main.reduce((a,s)=>a+s.dur,0); const X0=72, X1=1008, Y0=820, Hh=400, maxP=1.6;
+  let x = X0; const labels=[];
+  main.forEach(s => { const w = s.dur/total*(X1-X0); const h = (s.lo/maxP)*Hh; g.globalAlpha = s.kind==='rest'?0.45:1; g.fillStyle = zoneColor(s.lo); g.fillRect(x, Y0-h, Math.max(1,w-1), h);
+    if(s.letter){ if(s.first) labels.push({l:s.letter,a:x,b:x+w}); else labels[labels.length-1].b = x+w; } x += w; });
+  g.globalAlpha = 1; g.fillStyle = '#e5e7eb'; g.font = '800 30px Inter'; g.textAlign = 'center';
+  labels.forEach(l => g.fillText(l.l, (l.a+l.b)/2, Y0+44)); g.textAlign = 'left';
+  g.fillStyle = '#e5e7eb'; g.font = '700 32px Inter';
+  g.fillText(`${fmt(st.total)}  ·  ${st.efforts} efforts  ·  ${MODES[mode].label}`, 72, 960);
+  g.fillStyle = '#4ade80'; g.font = '800 30px Inter'; g.fillText('draftcycling.com/tools/ride-your-name', 72, 1012);
+  c.toBlob(b => download(`ride-your-name-${name.toLowerCase().replace(/ /g,'-')}.png`, b), 'image/png');
+}
+
+let current;
+function update(){ current = render(); }
+$('name').addEventListener('input', update);
+$('ftp').addEventListener('input', update);
+document.querySelectorAll('.mode').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('.mode').forEach(x=>x.classList.remove('on')); b.classList.add('on'); mode = b.dataset.mode; update(); }));
+document.querySelectorAll('.chip').forEach(b => b.addEventListener('click', () => { $('name').value = b.textContent; update(); }));
+$('dlZwo').addEventListener('click', () => download(`ride-your-name-${current.name.toLowerCase().replace(/ /g,'-')}.zwo`, toZwo(current), 'application/xml'));
+$('dlMrc').addEventListener('click', () => download(`ride-your-name-${current.name.toLowerCase().replace(/ /g,'-')}.mrc`, toMrc(current), 'text/plain'));
+$('dlCard').addEventListener('click', () => shareCard(current));
+$('copyLink').addEventListener('click', () => copy(`I rode my name in Morse code. Think you can ride ${current.name}? ${location.href}`, 'Challenge link copied'));
+$('copyTitle').addEventListener('click', () => copy(`Rode my name in Morse code: ${current.name} (${[...current.name].map(ch=>ch===' '?'/':pretty(MORSE[ch]||'')).join(' ')}) 🚴 draftcycling.com/tools/ride-your-name`, 'Strava title copied'));
+
+// URL params
+const q = new URLSearchParams(location.search);
+if(q.get('n')) $('name').value = clean(q.get('n'));
+if(MODES[q.get('m')]){ mode = q.get('m'); document.querySelectorAll('.mode').forEach(x=>x.classList.toggle('on', x.dataset.mode===mode)); }
+update();
+</script>
+</body>
+</html>
