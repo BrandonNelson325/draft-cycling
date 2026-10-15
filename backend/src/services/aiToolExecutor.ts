@@ -17,6 +17,7 @@ import { mapWithConcurrency } from '../utils/concurrency';
 import { aiPlanDesignerService } from './aiPlanDesignerService';
 import { stravaService } from './stravaService';
 import { crossTrainingService } from './crossTrainingService';
+import { FTP_TEST_NOTE_PREFIX } from './ftpTestService';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -1365,6 +1366,21 @@ export const aiToolExecutor = {
       }
     }
 
+    // If this ride was a scheduled FTP test, surface the outcome HERE — the coach
+    // debriefing the ride otherwise misses that FTP was set / held (it only lived
+    // in a long system prompt and a calendar note).
+    let ftpTestResult: string | null = null;
+    if (activity.strava_activity_id) {
+      const { data: entry } = await supabaseAdmin
+        .from('calendar_entries')
+        .select('notes')
+        .eq('athlete_id', athleteId)
+        .eq('strava_activity_id', activity.strava_activity_id)
+        .limit(1)
+        .maybeSingle();
+      if (entry?.notes?.startsWith(FTP_TEST_NOTE_PREFIX)) ftpTestResult = entry.notes;
+    }
+
     return {
       id: activity.id,
       name: activity.name,
@@ -1383,8 +1399,16 @@ export const aiToolExecutor = {
       indoor: raw.trainer || false,
       perceived_effort: activity.perceived_effort,
       notes: activity.post_activity_notes,
+      ftp_test_result: ftpTestResult,
       power_curve: powerCurve,
-      intervals,
+      intervals: intervals?.hasIntervals
+        ? {
+            ...intervals,
+            // Lap averages hide a stop inside a lap (a 20-min lap with two 1-min
+            // breaks still averages "steady"). The athlete's notes win.
+            caveat: 'Per-lap AVERAGES — short stops or surges inside a lap do not show. If the athlete\'s notes say they stopped or fell apart, believe them over these numbers.',
+          }
+        : intervals,
     };
   },
 

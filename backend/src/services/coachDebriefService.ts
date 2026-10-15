@@ -65,7 +65,7 @@ export function buildDebriefPrompt(ride: {
       ? `- Explain the FTP result plainly: what their FTP is now and why. If it went up, name the new targets. If it was held, say why and offer a retest (suggest a sensible day from their calendar).`
       : `- Connect the ride to their plan and recovery.`,
     `- End with ONE concrete next step or question. If you'd change the calendar, OFFER it — do not claim it's done.`,
-    `- Short: 2–5 sentences (fewer in simple display mode). No greeting fluff, no headers.`,
+    `- Short: up to 6 sentences even in simple display mode — spend them on what they reported, not a list of stats. No greeting fluff, no headers.`,
   );
   return lines.join('\n');
 }
