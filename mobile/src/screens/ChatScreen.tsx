@@ -59,6 +59,9 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
   const activeMessages = (activeConversationId ? messages[activeConversationId] || [] : [])
     .slice()
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  // The list is INVERTED (newest first, drawn bottom-up) so a chat always opens
+  // at the latest message instantly — no matter how long it is.
+  const invertedMessages = activeMessages.slice().reverse();
 
   // Refetch on focus so a plan that finished building in the background (its
   // result message + any server-side recovery message) shows up when the user
@@ -143,49 +146,25 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
     handleSend(initialMessage);
   }, [route.params?.initialMessage, loading]);
 
-  // Whether we should keep the list pinned to the bottom. True on open and while
-  // the user is already near the bottom; set false when they scroll up to read
-  // history so we don't yank them back down mid-read.
-  const shouldAutoScrollRef = useRef(true);
-  // Latest known content height, from onContentSizeChange — used to jump to the
-  // TRUE bottom (scrollToOffset(contentHeight)) which can't land short the way
-  // scrollToEnd can while rows are still being measured.
-  const contentHeightRef = useRef(0);
-
-  // All programmatic scrolls are NON-animated on purpose: an animated scroll
-  // fires onMomentumScrollEnd when it finishes, and if the content grew during
-  // the animation that handler measured a position short of the bottom and
-  // wrongly flipped auto-scroll OFF — the "scrolls then stops short" bug. A
-  // non-animated jump produces no momentum events, so only real user flings can
-  // ever disable auto-scroll.
+  // The list is inverted, so the bottom (newest message) is offset 0. Opening a
+  // chat lands there natively — the old top-down list had to chase the bottom
+  // with repeated scroll jumps while rows laid out, which on a long chat looked
+  // like it "scrolled and scrolled forever". In an inverted list, streaming
+  // tokens and new replies stay pinned to the bottom on their own.
   const scrollToBottom = () => {
-    if (!shouldAutoScrollRef.current) return;
-    if (contentHeightRef.current > 0) {
-      flatListRef.current?.scrollToOffset({ offset: contentHeightRef.current, animated: false });
-    } else {
-      flatListRef.current?.scrollToEnd({ animated: false });
-    }
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
   };
 
-  // Fire several scrolls over a short window — rows lay out asynchronously, so
-  // one attempt often lands short; retry until the content settles.
-  const scrollToBottomSoon = () => {
-    [0, 60, 150, 350, 700].forEach((d) => setTimeout(scrollToBottom, d));
-  };
-
-  // Scroll to bottom on new messages, streaming tokens, and tool-progress updates
+  // A new message (sent or received) brings you back to the bottom, even if you
+  // had scrolled up to read history.
   useEffect(() => {
-    if (activeMessages.length > 0) {
-      scrollToBottomSoon();
-    }
-  }, [activeMessages.length, loading, streamingContent, toolStatus]);
+    if (activeMessages.length > 0) scrollToBottom();
+  }, [activeMessages.length]);
 
-  // Re-pin to the bottom whenever the chat regains focus (opened from a tab tap
-  // or navigated in from a prompt), so we never land the user mid-history.
+  // Re-pin to the bottom whenever the chat regains focus.
   useFocusEffect(
     React.useCallback(() => {
-      shouldAutoScrollRef.current = true;
-      scrollToBottomSoon();
+      scrollToBottom();
     }, [])
   );
 
@@ -324,12 +303,15 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
         ) : (
           <FlatList
             ref={flatListRef}
-            data={activeMessages}
+            data={invertedMessages}
+            inverted
             keyExtractor={m => m.id}
             renderItem={({ item }) => (
               <MessageBubble role={item.role} content={item.content} />
             )}
-            ListFooterComponent={
+            // Inverted list: the HEADER renders at the visual bottom, under the
+            // newest message — where the typing / streaming bubble belongs.
+            ListHeaderComponent={
               loading ? (
                 <View style={{ paddingHorizontal: 12, paddingBottom: 8 }}>
                   {toolStatus ? (
@@ -348,7 +330,8 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             ListEmptyComponent={
               !hasActivePlan && !loading ? (
                 <TouchableOpacity
-                  style={{ alignSelf: 'center', marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#334155' }}
+                  // Inverted lists flip the empty component too — flip it back.
+                  style={{ transform: [{ scaleY: -1 }], alignSelf: 'center', marginTop: 16, paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: '#334155' }}
                   onPress={() => handleSend('Help me pick a training plan')}
                 >
                   <Text style={{ color: '#94a3b8', fontSize: 14 }}>Help me pick a training plan</Text>
@@ -357,32 +340,6 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             }
             contentContainerStyle={styles.messages}
             showsVerticalScrollIndicator={false}
-            // Fires whenever total content height changes (rows finishing async
-            // layout, streaming tokens, etc.). We record the exact height and
-            // jump straight to it — scrollToOffset(contentHeight) lands on the
-            // TRUE bottom, unlike scrollToEnd which can stop short mid-layout.
-            onContentSizeChange={(_w, h) => {
-              contentHeightRef.current = h;
-              if (shouldAutoScrollRef.current) {
-                flatListRef.current?.scrollToOffset({ offset: h, animated: false });
-              }
-            }}
-            // Only a USER-initiated drag/fling that ENDS away from the bottom
-            // disables auto-scroll. Programmatic scrolls are non-animated (above)
-            // so they never fire momentum events — these handlers are therefore
-            // purely user-driven and can't strand the user mid-load.
-            onScrollEndDrag={e => {
-              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-              const distanceFromBottom =
-                contentSize.height - (contentOffset.y + layoutMeasurement.height);
-              shouldAutoScrollRef.current = distanceFromBottom < 120;
-            }}
-            onMomentumScrollEnd={e => {
-              const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-              const distanceFromBottom =
-                contentSize.height - (contentOffset.y + layoutMeasurement.height);
-              shouldAutoScrollRef.current = distanceFromBottom < 120;
-            }}
           />
         )}
 
@@ -414,12 +371,8 @@ export default function ChatScreen({ route, navigation }: MainTabScreenProps<'Ch
             maxLength={2000}
             returnKeyType="default"
             onFocus={() => {
-              // When the keyboard opens, the FlatList shrinks but doesn't
-              // auto-scroll — so the latest message ends up hidden behind the
-              // keyboard. Re-pin to the bottom (non-animated, same reason as the
-              // other programmatic scrolls) once the keyboard starts animating.
-              shouldAutoScrollRef.current = true;
-              scrollToBottomSoon();
+              // Keep the latest message visible above the keyboard.
+              scrollToBottom();
             }}
           />
           <TouchableOpacity
@@ -530,9 +483,10 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  // Inverted list: paddingTop renders at the visual BOTTOM (above the input).
   messages: {
-    paddingTop: 12,
-    paddingBottom: 24,
+    paddingTop: 24,
+    paddingBottom: 12,
     flexGrow: 1,
   },
   inputRow: {
