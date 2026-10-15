@@ -45,12 +45,16 @@ async function registerForPushNotificationsAsync(): Promise<string | null> {
 // Track push token registration per app session to avoid redundant API calls
 let pushTokenRegistered = false;
 
-export function usePushNotifications(onRideNotificationTap?: () => void, onMorningCheckInTap?: () => void) {
+export function usePushNotifications(
+  onRideNotificationTap?: () => void,
+  onMorningCheckInTap?: () => void,
+  onCoachMessageTap?: () => void,
+) {
   const { user } = useAuthStore();
   const notificationListener = useRef<Notifications.EventSubscription | undefined>(undefined);
   const responseListener = useRef<Notifications.EventSubscription | undefined>(undefined);
-  const callbacksRef = useRef({ onRideNotificationTap, onMorningCheckInTap });
-  callbacksRef.current = { onRideNotificationTap, onMorningCheckInTap };
+  const callbacksRef = useRef({ onRideNotificationTap, onMorningCheckInTap, onCoachMessageTap });
+  callbacksRef.current = { onRideNotificationTap, onMorningCheckInTap, onCoachMessageTap };
 
   // Register push token once per session (separate from notification handling)
   useEffect(() => {
@@ -81,6 +85,9 @@ export function usePushNotifications(onRideNotificationTap?: () => void, onMorni
           callbacksRef.current.onRideNotificationTap();
         } else if (screen === 'Home' && callbacksRef.current.onMorningCheckInTap) {
           callbacksRef.current.onMorningCheckInTap();
+        } else if (screen === 'Chat' && callbacksRef.current.onCoachMessageTap) {
+          // Coach reached out (ride debrief / FTP result) — Chat refetches on focus.
+          callbacksRef.current.onCoachMessageTap();
         }
       }, 500);
     };

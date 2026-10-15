@@ -51,7 +51,13 @@ function AppModalsInner() {
   const { user } = useAuthStore();
   const dailyMorning = useDailyMorning();
   const newActivities = useNewActivities();
-  usePushNotifications(newActivities.refetch, dailyMorning.forceShow);
+  // Coach reached out (ride debrief / FTP result) → open Chat; it refetches on focus.
+  const openChat = useCallback(() => {
+    if (navigationRef.isReady()) {
+      (navigationRef as any).navigate('Main', { screen: 'Chat' });
+    }
+  }, []);
+  usePushNotifications(newActivities.refetch, dailyMorning.forceShow, openChat);
   const [showWelcome, setShowWelcome] = useState(false);
 
   useEffect(() => {

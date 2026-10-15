@@ -10,6 +10,8 @@ import Badge from '../ui/Badge';
 interface ActivityDetailSheetProps {
   activity: StravaActivity | null;
   onFeedbackSaved?: (activityId: string, effort: number) => void;
+  /** Open a coach debrief for this ride in chat (the screen owns navigation). */
+  onDebrief?: (message: string) => void;
 }
 
 const TYPE_COLORS: Record<string, string> = {
@@ -32,7 +34,7 @@ const RPE_DISPLAY: Record<number, { emoji: string; label: string }> = {
   5: { emoji: '🔥', label: 'Max' },
 };
 
-export default function ActivityDetailSheet({ activity, onFeedbackSaved }: ActivityDetailSheetProps) {
+export default function ActivityDetailSheet({ activity, onFeedbackSaved, onDebrief }: ActivityDetailSheetProps) {
   const { user } = useAuthStore();
   const units = getConversionUtils(user);
   const [selectedRpe, setSelectedRpe] = useState<number | null>(null);
@@ -217,8 +219,23 @@ export default function ActivityDetailSheet({ activity, onFeedbackSaved }: Activ
           <Text style={styles.notesText}>{activity.post_activity_notes}</Text>
         </View>
       ) : null}
+
+      {onDebrief && (
+        <Pressable style={styles.debriefBtn} onPress={() => onDebrief(debriefMessage(activity))}>
+          <Text style={styles.debriefBtnText}>Debrief with coach →</Text>
+        </Pressable>
+      )}
     </BottomSheetScrollView>
   );
+}
+
+function debriefMessage(activity: StravaActivity): string {
+  // start_date is UTC — show the rider's local day (an evening ride is still "today").
+  const date = activity.start_date
+    ? new Date(activity.start_date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+    : null;
+  const notes = activity.post_activity_notes?.trim();
+  return `Debrief my ride "${activity.name || 'Ride'}"${date ? ` on ${date}` : ''}${notes ? ` — my notes: "${notes}"` : ''}. How did it go, and what does it mean for the next few days?`;
 }
 
 function StatItem({ label, value }: { label: string; value: string }) {
@@ -343,4 +360,13 @@ const styles = StyleSheet.create({
   },
   notesLabel: { fontSize: 11, color: '#64748b' },
   notesText: { fontSize: 14, color: '#f1f5f9', lineHeight: 20 },
+  debriefBtn: {
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#3b82f6',
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  debriefBtnText: { color: '#60a5fa', fontWeight: '600', fontSize: 14 },
 });

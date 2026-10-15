@@ -11,7 +11,9 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { MainTabParamList } from '../navigation/types';
 import { Ionicons } from '@expo/vector-icons';
 import { BottomSheetModal, BottomSheetScrollView, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { calendarService, type CalendarData, type CalendarEntry, type StravaActivity } from '../services/calendarService';
@@ -378,6 +380,7 @@ const planStyles = StyleSheet.create({
 });
 
 export default function CalendarScreen() {
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calData, setCalData] = useState<CalendarData>({ scheduledWorkouts: [], stravaActivities: [] });
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -395,6 +398,10 @@ export default function CalendarScreen() {
   const pickerSheetRef = useRef<BottomSheetModal>(null);
   const workoutSheetRef = useRef<BottomSheetModal>(null);
   const activitySheetRef = useRef<BottomSheetModal>(null);
+  const openDebrief = useCallback((message: string) => {
+    activitySheetRef.current?.dismiss();
+    navigation.navigate('Chat', { initialMessage: message });
+  }, [navigation]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
@@ -809,6 +816,7 @@ export default function CalendarScreen() {
       >
         <ActivityDetailSheet
           activity={selectedActivity}
+          onDebrief={openDebrief}
           onFeedbackSaved={(activityId, effort) => {
             setSelectedActivity((prev) =>
               prev && prev.id === activityId ? { ...prev, perceived_effort: effort } : prev

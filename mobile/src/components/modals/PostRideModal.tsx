@@ -86,6 +86,7 @@ export default function PostRideModal({ activity, remainingCount, onAcknowledge,
         notes: notes.trim() || undefined,
         was_planned_workout: planned ? effectiveWasPlanned ?? undefined : undefined,
         calendar_entry_id: planned?.calendarEntryId,
+        debrief_in_chat: true,
       });
       onNavigateToChat?.(message);
     } finally {

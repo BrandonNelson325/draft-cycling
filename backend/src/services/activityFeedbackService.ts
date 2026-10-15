@@ -2,6 +2,9 @@ import { supabaseAdmin } from '../utils/supabase';
 import { activityMatchingService, type PlannedWorkoutInfo } from './activityMatchingService';
 import { powerAnalysisService } from './powerAnalysisService';
 import type { IntervalAnalysis } from './intervalAnalysisService';
+import { ftpTestService } from './ftpTestService';
+import { coachDebriefService } from './coachDebriefService';
+import { logger } from '../utils/logger';
 
 export interface UnacknowledgedActivity {
   id: string;
@@ -28,6 +31,7 @@ export interface ActivityFeedback {
   notes?: string;
   was_planned_workout?: boolean; // true = confirm match, false = reject match
   calendar_entry_id?: string; // the matched calendar entry
+  debrief_in_chat?: boolean; // athlete tapped "Debrief with coach" — they're debriefing live, don't reach out
 }
 
 export const activityFeedbackService = {
@@ -172,6 +176,15 @@ export const activityFeedbackService = {
           feedback.calendar_entry_id
         );
       }
+    }
+
+    // Read an FTP test this ride completes now, so the debrief (or a chat
+    // debrief the athlete starts) already knows the result.
+    await ftpTestService.applyPendingFtpTests(athleteId).catch((err) =>
+      logger.warn('[FTP test] processing on acknowledge failed:', err)
+    );
+    if (!feedback.debrief_in_chat) {
+      coachDebriefService.schedule(athleteId, existing.strava_activity_id);
     }
   },
 };

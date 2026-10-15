@@ -53,6 +53,8 @@ export interface ActivityFeedback {
   notes?: string;
   was_planned_workout?: boolean;
   calendar_entry_id?: string;
+  /** Athlete is debriefing in chat right now — the backend skips its own outreach. */
+  debrief_in_chat?: boolean;
 }
 
 /**

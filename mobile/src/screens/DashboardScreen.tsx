@@ -1,7 +1,9 @@
 import React, { useState, useRef, useCallback } from 'react';
 import { ScrollView, StyleSheet, View, Text, AppState, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import type { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
+import type { MainTabParamList } from '../navigation/types';
 import { BottomSheetModal, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import type { StravaActivity } from '../services/calendarService';
 import { workoutService } from '../services/workoutService';
@@ -41,8 +43,13 @@ function DashboardGreeting() {
 }
 
 export default function DashboardScreen() {
+  const navigation = useNavigation<BottomTabNavigationProp<MainTabParamList>>();
   const [selectedActivity, setSelectedActivity] = useState<StravaActivity | null>(null);
   const activitySheetRef = useRef<BottomSheetModal>(null);
+  const openDebrief = useCallback((message: string) => {
+    activitySheetRef.current?.dismiss();
+    navigation.navigate('Chat', { initialMessage: message });
+  }, [navigation]);
   const [selectedWorkout, setSelectedWorkout] = useState<Workout | null>(null);
   const workoutSheetRef = useRef<BottomSheetModal>(null);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -128,7 +135,7 @@ export default function DashboardScreen() {
         backgroundStyle={styles.sheetBg}
         handleIndicatorStyle={styles.sheetHandle}
       >
-        <ActivityDetailSheet activity={selectedActivity} onFeedbackSaved={handleFeedbackSaved} />
+        <ActivityDetailSheet activity={selectedActivity} onFeedbackSaved={handleFeedbackSaved} onDebrief={openDebrief} />
       </BottomSheetModal>
 
       <BottomSheetModal

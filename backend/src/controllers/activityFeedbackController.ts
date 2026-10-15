@@ -26,7 +26,7 @@ export const acknowledge = async (req: AuthRequest, res: Response): Promise<void
     }
 
     const id = req.params.id as string;
-    const { perceived_effort, notes, was_planned_workout, calendar_entry_id } = req.body;
+    const { perceived_effort, notes, was_planned_workout, calendar_entry_id, debrief_in_chat } = req.body;
 
     if (perceived_effort !== undefined) {
       const effort = Number(perceived_effort);
@@ -41,6 +41,7 @@ export const acknowledge = async (req: AuthRequest, res: Response): Promise<void
       notes,
       was_planned_workout,
       calendar_entry_id,
+      debrief_in_chat: debrief_in_chat === true,
     });
 
     res.json({ success: true });

@@ -86,7 +86,7 @@ export const ftpTestService = {
     // Rides with a computed power curve in the window, grouped by local day.
     const { data: activities } = await supabaseAdmin
       .from('strava_activities')
-      .select('strava_activity_id, start_date')
+      .select('strava_activity_id, start_date, acknowledged_at')
       .eq('athlete_id', athleteId)
       .gte('start_date', from.toISOString());
     if (!activities?.length) return null;
@@ -103,7 +103,7 @@ export const ftpTestService = {
     for (const entry of pending as any[]) {
       const sameDay = activities
         .filter((a: any) => utcToLocalDate(a.start_date, tz) === entry.scheduled_date)
-        .map((a: any) => ({ id: a.strava_activity_id, p: p20.get(String(a.strava_activity_id)) || 0 }))
+        .map((a: any) => ({ id: a.strava_activity_id, acked: !!a.acknowledged_at, p: p20.get(String(a.strava_activity_id)) || 0 }))
         .sort((a, b) => b.p - a.p);
       const best = sameDay[0];
       if (!best || best.p <= 0) continue; // not ridden yet / curve not computed yet
@@ -136,6 +136,14 @@ export const ftpTestService = {
         .eq('athlete_id', athleteId);
 
       logger.info(`[FTP test] ${athleteId}: 20-min ${best.p}W → ${decision.testFtp}W (${decision.reason})`);
+      // Feedback already in (it usually comes first) → the coach tells them the
+      // result now. Otherwise acknowledging the ride triggers the debrief.
+      // Dynamic import: coachDebriefService → aiCoachService → ftpEstimationService → here.
+      if (best.acked) {
+        import('./coachDebriefService')
+          .then((m) => m.coachDebriefService.schedule(athleteId, best.id))
+          .catch((err) => logger.warn('[FTP test] debrief scheduling failed:', err));
+      }
       if (decision.commit) currentFtp = decision.testFtp;
       result = { committed: decision.commit, ftp: currentFtp, reason: decision.reason };
     }
