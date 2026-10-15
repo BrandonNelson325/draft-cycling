@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1089233607966",
+    "project_id": "draft-cycling-app",
+    "storage_bucket": "draft-cycling-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1089233607966:android:09566c0cf524fad1fc3d0f",
+        "android_client_info": {
+          "package_name": "com.draftcycling.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDawa3U073pRWCmF7d7wISKCNvKB6AulfU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
