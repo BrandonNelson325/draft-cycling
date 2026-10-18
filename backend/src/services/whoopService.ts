@@ -175,7 +175,7 @@ export const whoopService = {
    * written without claiming wellness_source when there's no recovery/sleep.
    * Returns the dates written.
    */
-  async syncDays(athleteId: string, days = 2, origin: 'webhook' | 'pull' | 'manual' | 'backfill' = 'pull'): Promise<string[]> {
+  async syncDays(athleteId: string, days = 2, origin: 'webhook' | 'poll' | 'pull' | 'manual' | 'backfill' = 'pull'): Promise<string[]> {
     const end = new Date();
     const start = new Date(end.getTime() - (days + 1) * 86_400_000);
     const [s, e] = [start.toISOString(), end.toISOString()];
