@@ -5,11 +5,12 @@ import { logger } from '../utils/logger';
 import { todayInTimezone } from '../utils/timezone';
 
 /**
- * WHOOP morning poll — the server-side backup to webhooks.
+ * WHOOP morning poll — the server-side backup to webhooks (webhooks are the
+ * primary path; this only catches what they miss, so 15 min is plenty).
  *
  * Without it, today's recovery was only pulled when the athlete opened the app
  * (ensureFresh), so the recovery push + coach call arrived AFTER they opened
- * Draft instead of when WHOOP scored their sleep. Every 5 minutes during the
+ * Draft instead of when WHOOP scored their sleep. Every 15 minutes during the
  * morning window, any WHOOP athlete still missing today's recovery is synced;
  * syncDays fires notifyRecovery the moment it first lands. Once today is
  * stored the athlete is skipped, so this costs nothing for the rest of the day.
@@ -33,7 +34,7 @@ export function shouldPollWhoop(hour: number, haveTodayRecovery: boolean): boole
 let running = false;
 
 export function startWhoopPollCron() {
-  cron.schedule('*/5 * * * *', async () => {
+  cron.schedule('*/15 * * * *', async () => {
     if (running) return; // a slow WHOOP API must never stack runs
     running = true;
     try {
@@ -61,5 +62,5 @@ export function startWhoopPollCron() {
       running = false;
     }
   });
-  logger.info('[WhoopPoll] WHOOP morning poll started (every 5 min, 3am–1pm local)');
+  logger.info('[WhoopPoll] WHOOP morning poll started (every 15 min, 3am–1pm local)');
 }
