@@ -632,9 +632,15 @@ export const whoopWebhook = async (req: AuthRequest, res: Response): Promise<voi
     raw,
     req.header('X-WHOOP-Signature-Timestamp') ?? undefined,
     req.header('X-WHOOP-Signature') ?? undefined,
-    process.env.WHOOP_CLIENT_SECRET || ''
+    // .trim() like whoopService.config(): a pasted secret with trailing
+    // whitespace would silently fail EVERY webhook signature.
+    (process.env.WHOOP_CLIENT_SECRET || '').trim()
   );
-  if (!ok) { res.status(401).json({ error: 'Invalid signature' }); return; }
+  if (!ok) {
+    logger.warn(`[Whoop] webhook rejected: bad signature (raw body: ${!!raw}, timestamp: ${!!req.header('X-WHOOP-Signature-Timestamp')}, signature: ${!!req.header('X-WHOOP-Signature')})`);
+    res.status(401).json({ error: 'Invalid signature' });
+    return;
+  }
   res.status(204).end();
   let event: any = null;
   try { event = JSON.parse(raw!.toString('utf8')); } catch { return; }
