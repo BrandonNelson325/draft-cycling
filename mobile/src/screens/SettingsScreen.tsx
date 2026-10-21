@@ -1170,7 +1170,8 @@ export default function SettingsScreen({ navigation }: any) {
               </Text>
             </View>
           )}
-          {(user?.subscription_status === 'active' || user?.subscription_status === 'trialing') && (
+          {/* Stripe portal is a payment link-out — not allowed on Android (Play policy). */}
+          {Platform.OS !== 'android' && (user?.subscription_status === 'active' || user?.subscription_status === 'trialing') && (
             <TouchableOpacity
               style={styles.guideBtn}
               onPress={async () => {

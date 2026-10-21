@@ -7,6 +7,7 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
+  Platform,
 } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { subscriptionService } from '../services/subscriptionService';
@@ -15,7 +16,42 @@ import { useAuthStore } from '../stores/useAuthStore';
 
 export default function BetaAccessScreen() {
   const [checkoutLoading, setCheckoutLoading] = useState<'monthly' | 'yearly' | null>(null);
+  const [checking, setChecking] = useState(false);
   const { logout } = useAuthStore();
+
+  // Android: no in-app purchase for now (Play payments policy disallows linking
+  // out to Stripe). Access is granted per account — testers are invited by email.
+  if (Platform.OS === 'android') {
+    const checkAgain = async () => {
+      setChecking(true);
+      try {
+        await authService.getProfile(); // refreshes the user → nav updates if access was granted
+      } catch {
+        Alert.alert('Error', 'Could not check your access. Try again in a moment.');
+      } finally {
+        setChecking(false);
+      }
+    };
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <Text style={styles.title}>You're almost in</Text>
+        <Text style={styles.subtitle}>
+          Draft on Android is invite-only while we test. Your account doesn't have access yet.
+        </Text>
+        <Text style={styles.trialCta}>
+          If you were invited, make sure you signed up with the same email address your invite went to.
+        </Text>
+        <TouchableOpacity style={[styles.planCard, styles.yearlyCard, styles.checkBtn]} onPress={checkAgain} disabled={checking}>
+          {checking
+            ? <ActivityIndicator color="#3b82f6" />
+            : <Text style={styles.planName}>Check again</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.logoutLink} onPress={logout}>
+          <Text style={styles.logoutText}>Sign out</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    );
+  }
 
   const handleSubscribe = async (plan: 'monthly' | 'yearly') => {
     setCheckoutLoading(plan);
@@ -186,6 +222,7 @@ const styles = StyleSheet.create({
     marginTop: 16,
     lineHeight: 18,
   },
+  checkBtn: { justifyContent: 'center', marginTop: 16 },
   logoutLink: { alignItems: 'center', marginTop: 32 },
   logoutText: { color: '#64748b', fontSize: 14 },
 });
