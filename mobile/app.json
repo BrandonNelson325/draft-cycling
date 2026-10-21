@@ -15,7 +15,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.draftcycling.app",
-      "buildNumber": "152",
+      "buildNumber": "153",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
         "NSHealthShareUsageDescription": "Draft reads your sleep, heart rate, and HRV data from Apple Health to give your coach a more accurate picture of your recovery.",
@@ -82,8 +82,7 @@
         }
       ],
       "@react-native-community/datetimepicker",
-      "./plugins/withFmtConstevalFix",
-      "./plugins/withMinPodDeploymentTarget"
+      "./plugins/withFmtConstevalFix"
     ],
     "extra": {
       "eas": {
