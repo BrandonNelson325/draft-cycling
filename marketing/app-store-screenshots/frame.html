@@ -1,0 +1,83 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>App Store frame</title>
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 1320px; height: 2868px; overflow: hidden; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+    background:
+      radial-gradient(1100px 900px at 50% 78%, rgba(37, 99, 235, 0.35), transparent 70%),
+      radial-gradient(900px 600px at 10% 0%, rgba(34, 211, 238, 0.12), transparent 70%),
+      #070b16;
+    color: #fff;
+  }
+  .cap { position: absolute; top: 150px; left: 80px; right: 80px; text-align: center; }
+  .cap h1 { font-size: 104px; line-height: 1.04; font-weight: 800; letter-spacing: -2.5px; }
+  .cap h1 .accent { background: linear-gradient(90deg, #60a5fa, #22d3ee); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .cap p { margin-top: 30px; font-size: 44px; color: #94a3b8; font-weight: 500; }
+
+  /* Phone: the screenshot is laid out in its own raw pixels (1206x2622) and scaled down,
+     so every overlay below is positioned in raw screenshot coordinates. */
+  .phone { position: absolute; left: 50%; top: 560px; transform: translateX(-50%); width: 1036px; height: 2234px;
+           border-radius: 128px; background: #1f2937; padding: 18px; box-shadow: 0 60px 140px rgba(0,0,0,0.6); }
+  .screen { width: 1000px; height: 2174px; border-radius: 110px; overflow: hidden; position: relative; }
+  .raw { position: absolute; top: 0; left: 0; width: 1206px; height: 2622px; transform: scale(0.82919); transform-origin: 0 0; }
+  .raw img { position: absolute; inset: 0; width: 1206px; height: 2622px; }
+  .patch { position: absolute; background: rgb(17, 23, 41); }
+
+  /* Clean status bar (raw coords: original glyphs sit at y 77–119) */
+  .status { position: absolute; left: 0; top: 52px; width: 1206px; height: 96px; background: rgb(17, 23, 41); }
+  .status .time { position: absolute; left: 142px; top: 18px; font-size: 52px; font-weight: 600; letter-spacing: -0.5px; font-family: -apple-system, "SF Pro Text", system-ui; }
+  .status svg { position: absolute; top: 25px; }
+
+  .greet { position: absolute; left: 63px; top: 246px; font-size: 80px; font-weight: 700; letter-spacing: -1px; line-height: 1; white-space: nowrap; color: #f1f5f9; }
+</style></head>
+<body>
+  <div class="cap"><h1 id="h"></h1><p id="sub"></p></div>
+  <div class="phone"><div class="screen"><div class="raw" id="raw">
+    <img id="shot" alt="">
+    <div class="status">
+      <span class="time">9:41</span>
+      <!-- signal -->
+      <svg style="left:866px" width="64" height="42" viewBox="0 0 64 42" fill="#fff">
+        <rect x="0" y="28" width="11" height="14" rx="3"/><rect x="17" y="20" width="11" height="22" rx="3"/>
+        <rect x="34" y="11" width="11" height="31" rx="3"/><rect x="51" y="2" width="11" height="40" rx="3"/>
+      </svg>
+      <!-- wifi -->
+      <svg style="left:950px" width="58" height="42" viewBox="0 0 58 42" fill="#fff">
+        <path d="M29 42l9-10.5a13 13 0 0 0-18 0z"/>
+        <path d="M29 9c8.5 0 16.2 3.3 22 8.7l5-5.8C48.5 4.7 39.2 1 29 1S9.5 4.7 2 11.9l5 5.8C12.8 12.3 20.5 9 29 9z" opacity="1"/>
+        <path d="M29 20.5c5.3 0 10.1 2 13.8 5.3l5-5.8C42.9 15.7 36.3 13 29 13s-13.9 2.7-18.8 7l5 5.8c3.7-3.3 8.5-5.3 13.8-5.3z"/>
+      </svg>
+      <!-- battery (full) -->
+      <svg style="left:1024px" width="80" height="40" viewBox="0 0 80 40">
+        <rect x="1.5" y="1.5" width="68" height="37" rx="11" fill="none" stroke="#fff" stroke-opacity="0.45" stroke-width="3"/>
+        <rect x="6" y="6" width="59" height="28" rx="7" fill="#fff"/>
+        <path d="M74 13v14c3.5-1 5.5-3.8 5.5-7s-2-6-5.5-7z" fill="#fff" fill-opacity="0.45"/>
+      </svg>
+    </div>
+  </div></div></div>
+
+<script>
+  // n → screenshot + caption. Captions: first line white, second line gradient.
+  const SHOTS = {
+    1: { img: 'raw/01-dashboard.png', h: ['Training that adapts', 'to how you feel'], sub: 'Recovery, load and today’s ride — at a glance', greet: 'Good morning, Alex' },
+    2: { img: 'raw/05-chat.png',      h: ['Ask your coach', 'anything, anytime'], sub: 'It knows your rides, recovery and plan' },
+    3: { img: 'raw/04-calendar.png',  h: ['A plan built', 'for your goal'], sub: 'Periodized around the time you actually have' },
+    4: { img: 'raw/02-fitness.png',   h: ['Know where your', 'fitness stands'], sub: 'Fitness, fatigue and form, tracked daily' },
+    5: { img: 'raw/03-power.png',     h: ['Every ride,', 'analyzed'], sub: 'Power curve, volume and FTP from Strava' },
+    6: { img: 'raw/06-plans.png',     h: ['Pick a plan — or', 'let your coach build one'], sub: 'From first century to stage race' },
+  };
+  const n = new URLSearchParams(location.search).get('n') || '1';
+  const s = SHOTS[n];
+  document.getElementById('shot').src = s.img;
+  document.getElementById('h').innerHTML = `${s.h[0]}<br><span class="accent">${s.h[1]}</span>`;
+  document.getElementById('sub').textContent = s.sub;
+  if (s.greet) {
+    const raw = document.getElementById('raw');
+    // Cover the real name (glyphs at x 63–877, y 263–334) and redraw the greeting.
+    raw.insertAdjacentHTML('beforeend', `<div class="patch" style="left:40px;top:240px;width:1120px;height:110px"></div><div class="greet">${s.greet}</div>`);
+  }
+</script>
+</body></html>
