@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { supabaseAdmin } from '../utils/supabase';
 import { workoutService } from './workoutService';
 import { calendarService } from './calendarService';
+import { integrationSyncService } from './integrationSyncService';
 import { athletePreferencesService } from './athletePreferencesService';
 import { logger } from '../utils/logger';
 import { mapWithConcurrency } from '../utils/concurrency';
@@ -2112,14 +2113,16 @@ export const trainingPlanService = {
     const todayIso = new Date().toISOString().split('T')[0];
     const retired: string[] = [];
     for (const p of active || []) {
-      await supabaseAdmin.from('calendar_entries').delete()
+      const { data: future } = await supabaseAdmin.from('calendar_entries').select('id')
         .eq('athlete_id', athleteId).eq('training_plan_id', p.id)
         .gte('scheduled_date', todayIso).eq('completed', false);
+      await integrationSyncService.deleteEntries(athleteId, (future || []).map((e: any) => e.id));
       const end = p.end_date || p.event_date;
       if (end) {
-        await supabaseAdmin.from('calendar_entries').delete()
+        const { data: rests } = await supabaseAdmin.from('calendar_entries').select('id')
           .eq('athlete_id', athleteId).eq('entry_type', 'rest').is('workout_id', null)
           .eq('ai_rationale', 'Planned rest day').gte('scheduled_date', todayIso).lte('scheduled_date', end);
+        await integrationSyncService.deleteEntries(athleteId, (rests || []).map((e: any) => e.id));
       }
       await supabaseAdmin.from('training_plans').update({ status: 'cancelled' }).eq('id', p.id).eq('athlete_id', athleteId);
       retired.push(p.goal_event);
@@ -2133,13 +2136,12 @@ export const trainingPlanService = {
 
     if (removeWorkouts) {
       // Delete calendar entries linked to this plan first (FK constraint)
-      const { data: deletedEntries } = await supabaseAdmin
+      const { data: planEntries } = await supabaseAdmin
         .from('calendar_entries')
-        .delete()
+        .select('id')
         .eq('training_plan_id', planId)
-        .select('id');
-
-      removedCount = deletedEntries?.length || 0;
+        .eq('athlete_id', athleteId);
+      removedCount = await integrationSyncService.deleteEntries(athleteId, (planEntries || []).map((e: any) => e.id));
 
       // Plan-generated rest markers ("Planned rest day") are inserted without a
       // training_plan_id by the template path, so the delete above misses them —
@@ -2152,17 +2154,16 @@ export const trainingPlanService = {
       const rangeStart = planRow?.start_date && planRow.start_date > todayIso ? planRow.start_date : todayIso;
       const rangeEnd = planRow?.end_date || planRow?.event_date;
       if (rangeEnd) {
-        const { data: restRemoved } = await supabaseAdmin
+        const { data: rests } = await supabaseAdmin
           .from('calendar_entries')
-          .delete()
+          .select('id')
           .eq('athlete_id', athleteId)
           .eq('entry_type', 'rest')
           .is('workout_id', null)
           .eq('ai_rationale', 'Planned rest day')
           .gte('scheduled_date', rangeStart)
-          .lte('scheduled_date', rangeEnd)
-          .select('id');
-        removedCount += restRemoved?.length || 0;
+          .lte('scheduled_date', rangeEnd);
+        removedCount += await integrationSyncService.deleteEntries(athleteId, (rests || []).map((e: any) => e.id));
       }
 
       // Delete workouts linked to this plan

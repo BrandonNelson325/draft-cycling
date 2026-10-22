@@ -9,6 +9,7 @@ import { powerAnalysisService } from './powerAnalysisService';
 import { zwoGenerator } from './fileGenerators/zwoGenerator';
 import { fitGenerator } from './fileGenerators/fitGenerator';
 import { supabaseAdmin } from '../utils/supabase';
+import { integrationSyncService } from './integrationSyncService';
 import { CreateWorkoutDTO } from '../types/workout';
 import { logger } from '../utils/logger';
 import { clearSuggestionCache } from './dailyAnalysisService';
@@ -508,17 +509,8 @@ export const aiToolExecutor = {
       return { success: true, deleted_count: 0, message: 'No entries found in that date range' };
     }
 
-    // Delete all entries in one query
-    const entryIds = entries.map(e => e.id);
-    const { error: deleteError } = await supabaseAdmin
-      .from('calendar_entries')
-      .delete()
-      .in('id', entryIds)
-      .eq('athlete_id', athleteId);
-
-    if (deleteError) {
-      throw new Error(`Failed to delete calendar entries: ${deleteError.message}`);
-    }
+    // Delete all entries (and their Wahoo / intervals.icu copies) in one go
+    await integrationSyncService.deleteEntries(athleteId, entries.map(e => e.id));
 
     return {
       success: true,
@@ -913,11 +905,7 @@ export const aiToolExecutor = {
 
     if (existingEntries && existingEntries.length > 0) {
       logger.debug(`Clearing ${existingEntries.length} existing entries on plan dates`);
-      await supabaseAdmin
-        .from('calendar_entries')
-        .delete()
-        .in('id', existingEntries.map(e => e.id))
-        .eq('athlete_id', athleteId);
+      await integrationSyncService.deleteEntries(athleteId, existingEntries.map(e => e.id));
     }
 
     // Create athlete workouts with capped concurrency (no ZWO/FIT generation —

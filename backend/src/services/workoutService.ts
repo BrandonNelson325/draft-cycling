@@ -1,4 +1,6 @@
 import { supabaseAdmin } from '../utils/supabase';
+import { logger } from '../utils/logger';
+import { integrationSyncService } from './integrationSyncService';
 import {
   Workout,
   CreateWorkoutDTO,
@@ -156,6 +158,15 @@ export const workoutService = {
       throw new Error(`Failed to update workout: ${error.message}`);
     }
 
+    // Content changed → re-push every upcoming scheduled copy to Wahoo / intervals.icu.
+    // (File-URL bookkeeping updates don't change what the athlete rides.)
+    const CONTENT_FIELDS = ['name', 'description', 'intervals', 'duration_minutes', 'workout_type'];
+    if (CONTENT_FIELDS.some((k) => k in (data as any))) {
+      integrationSyncService
+        .resyncWorkout(athleteId, id)
+        .catch((err) => logger.warn(`[Sync] Workout edit resync failed for ${id}: ${err.message}`));
+    }
+
     return workout as Workout;
   },
 
@@ -163,6 +174,10 @@ export const workoutService = {
    * Delete a workout
    */
   async deleteWorkout(id: string, athleteId: string): Promise<void> {
+    // workout_syncs rows cascade with the workout — remove remote copies first.
+    await integrationSyncService.removeWorkoutRemotes(athleteId, id).catch((err) =>
+      logger.warn(`[Sync] Remote cleanup failed for workout ${id}: ${err.message}`)
+    );
     const { error } = await supabaseAdmin
       .from('workouts')
       .delete()

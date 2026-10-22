@@ -21,6 +21,12 @@ import { logger } from '../utils/logger';
  *
  * Adding a new integration (Garmin, Zwift, …) = one entry in each registry
  * below; every calendar path then mirrors to it automatically.
+ *
+ * RULE: every change to a calendar entry or a scheduled workout must go
+ * through this service (deleteEntries / mirrorUpload / mirrorMove /
+ * resyncWorkout / removeWorkoutRemotes). Raw deletes/updates on
+ * calendar_entries elsewhere orphan or stale the athlete's head unit.
+ * `npm run test:sync-coverage` enforces it.
  */
 
 export type IntegrationKey = 'intervals_icu' | 'wahoo';
@@ -117,6 +123,62 @@ export const integrationSyncService = {
       logger.warn(`[Sync] captureRefs failed: ${err.message}`);
       return [];
     }
+  },
+
+  /**
+   * THE way to delete calendar entries. Captures every remote ref first, deletes
+   * locally, then removes the remote copies — so no integration is left holding
+   * a workout that's gone from Draft. Returns the number deleted.
+   */
+  async deleteEntries(athleteId: string, entryIds: string[]): Promise<number> {
+    if (!entryIds.length) return 0;
+    const refs = await this.captureForDeletion(athleteId, entryIds);
+    const { data, error } = await supabaseAdmin
+      .from('calendar_entries')
+      .delete()
+      .in('id', entryIds)
+      .eq('athlete_id', athleteId)
+      .select('id');
+    if (error) throw new Error(`Failed to delete calendar entries: ${error.message}`);
+    this.deleteRemotes(athleteId, refs);
+    return data?.length || 0;
+  },
+
+  /**
+   * A workout's CONTENT changed (intervals, name, duration): re-push every
+   * upcoming, uncompleted calendar entry that uses it, to every integration.
+   */
+  async resyncWorkout(athleteId: string, workoutId: string): Promise<void> {
+    const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const { data: entries } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id, scheduled_date')
+      .eq('athlete_id', athleteId)
+      .eq('workout_id', workoutId)
+      .eq('completed', false)
+      .gte('scheduled_date', yesterday);
+    for (const e of entries || []) {
+      const [y, m, d] = String(e.scheduled_date).split('-').map(Number);
+      await this.mirrorMove(athleteId, e.id, workoutId, new Date(y, m - 1, d));
+    }
+  },
+
+  /**
+   * A workout is about to be DELETED: workout_syncs rows cascade with it, so
+   * capture + remove the remote copies first.
+   */
+  async removeWorkoutRemotes(athleteId: string, workoutId: string): Promise<void> {
+    const { data } = await supabaseAdmin
+      .from('workout_syncs')
+      .select('integration, external_id')
+      .eq('athlete_id', athleteId)
+      .eq('workout_id', workoutId)
+      .eq('sync_status', 'synced')
+      .not('external_id', 'is', null);
+    const refs = (data || [])
+      .filter((r: any) => r.external_id && r.integration in deleters)
+      .map((r: any) => ({ integration: r.integration as IntegrationKey, externalId: r.external_id }));
+    this.deleteRemotes(athleteId, refs);
   },
 
   /** Mirror a newly scheduled workout to every active integration. */

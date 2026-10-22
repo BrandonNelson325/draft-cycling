@@ -333,8 +333,16 @@ export const calendarService = {
       throw new Error(`Failed to bulk schedule workouts: ${error.message}`);
     }
 
-    // These entries never hit the per-entry sync path — reconcile intervals.icu.
+    // These entries never hit the per-entry sync path: one intervals.icu
+    // reconcile, plus a per-entry upload to every OTHER integration (Wahoo…).
     void this.reconcileIntervalsIcu(athleteId);
+    for (const e of (data || []) as any[]) {
+      if (!e.workout_id) continue;
+      const [y, m, d] = String(e.scheduled_date).split('-').map(Number);
+      integrationSyncService
+        .mirrorUpload(athleteId, e.workout_id, new Date(y, m - 1, d), e.id, ['intervals_icu'])
+        .catch((err) => logger.warn(`[Sync] Bulk schedule upload failed: ${err.message}`));
+    }
 
     return (data as CalendarEntry[]) || [];
   },
@@ -364,27 +372,19 @@ export const calendarService = {
    * Clear all calendar entries for an athlete
    */
   async clearCalendar(athleteId: string): Promise<{ deletedCount: number }> {
-    // First, count how many entries will be deleted
-    const { count } = await supabaseAdmin
+    const { data: all } = await supabaseAdmin
       .from('calendar_entries')
-      .select('*', { count: 'exact', head: true })
+      .select('id')
       .eq('athlete_id', athleteId);
 
-    // Delete all entries for this athlete
-    const { error } = await supabaseAdmin
-      .from('calendar_entries')
-      .delete()
-      .eq('athlete_id', athleteId);
+    // Removes the entries AND their Wahoo / intervals.icu copies.
+    const deletedCount = await integrationSyncService.deleteEntries(athleteId, (all || []).map((e: any) => e.id));
 
-    if (error) {
-      throw new Error(`Failed to clear calendar: ${error.message}`);
-    }
-
-    // Clearing locally orphans the intervals.icu events (their sync rows
-    // cascade-deleted). Reconcile wipes the now-stale future "Draft -" events.
+    // Belt and braces for intervals.icu: reconcile wipes any stale future
+    // "Draft -" events whose sync rows were already gone.
     void this.reconcileIntervalsIcu(athleteId);
 
-    return { deletedCount: count || 0 };
+    return { deletedCount };
   },
 
   /**
