@@ -3,7 +3,7 @@ import { AuthRequest } from '../middleware/auth';
 import { dailyAnalysisService, clearSuggestionCache, resolveEasierReplacement } from '../services/dailyAnalysisService';
 import { buildWorkoutFromSpec } from '../services/trainingPlanService';
 import { workoutService } from '../services/workoutService';
-import { calendarService } from '../services/calendarService';
+import { integrationSyncService } from '../services/integrationSyncService';
 import { supabaseAdmin } from '../utils/supabase';
 import { todayInTimezone } from '../utils/timezone';
 import { logger } from '../utils/logger';
@@ -156,8 +156,24 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
     }
 
     clearSuggestionCache(req.user.id);
-    // Keep intervals.icu (→ head unit / Zwift) in step with the swapped calendar.
-    void calendarService.reconcileIntervalsIcu(req.user.id);
+    // Mirror to every connected service (Wahoo, intervals.icu): the old workout
+    // must come off the head unit, and the easier one go on.
+    if (kind === 'easier' && update.workout_id) {
+      integrationSyncService
+        .mirrorMove(req.user.id, entry.id, update.workout_id, new Date(todayStr + 'T12:00:00'))
+        .catch((err) => logger.warn(`[Sync] Accept-easier resync failed: ${err.message}`));
+    } else {
+      // Rest day: delete the remote copies of the planned workout.
+      const refs = await integrationSyncService.captureForDeletion(req.user.id, [entry.id]);
+      integrationSyncService.deleteRemotes(req.user.id, refs);
+      if (refs.length) {
+        await supabaseAdmin
+          .from('workout_syncs')
+          .update({ sync_status: 'deleted', last_synced_at: new Date().toISOString() })
+          .eq('athlete_id', req.user.id)
+          .eq('calendar_entry_id', entry.id);
+      }
+    }
     res.json({ success: true });
   } catch (error: any) {
     logger.error('Error accepting adjustment:', error);
