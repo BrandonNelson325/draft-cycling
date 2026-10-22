@@ -177,7 +177,7 @@ export function TodaySuggestionCard() {
                 disabled={adjustmentBusy}
                 className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
-                Keep planned
+                Keep my workout
               </button>
             </div>
           </div>

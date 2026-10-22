@@ -216,7 +216,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
                   disabled={adjustmentBusy}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.adjustmentDismissText}>Keep planned</Text>
+                  <Text style={styles.adjustmentDismissText}>Keep my workout</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -226,7 +226,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
             <WorkoutRow
               tone="plan"
               dimmed={!!s.adjustment && s.adjustment.kind !== 'none'}
-              label={s.adjustment && s.adjustment.kind !== 'none' ? 'Was planned' : 'Today'}
+              label={s.adjustment && s.adjustment.kind !== 'none' ? 'On your calendar' : 'Today'}
               name={s.todaysWorkout.name}
               meta={`${s.todaysWorkout.duration}min · Load ${s.todaysWorkout.tss}`}
               onPress={s.todaysWorkout.workoutId ? () => onWorkoutPress?.(s.todaysWorkout!.workoutId!) : undefined}

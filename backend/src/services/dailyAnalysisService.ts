@@ -190,22 +190,60 @@ IMPORTANT: This status reflects CHRONIC load (ACWR over weeks). Keep your descri
 
 /**
  * Acute readiness signals for TODAY: subjective morning check-in + objective
- * wellness (sleep, HRV, resting HR). These are the fast-moving signals ACWR
- * misses — the reason the coach previously always defaulted to "proceed."
+ * wellness (sleep, HRV, resting HR, WHOOP recovery). These are the fast-moving
+ * signals ACWR misses — the reason the coach previously always defaulted to "proceed."
+ *
+ * HRV and resting HR mean nothing without the athlete's own baseline. The model
+ * used to get bare numbers ("HRV: 57 ms") and guessed — it called an HRV ABOVE
+ * baseline "suppressed" and overrode a green WHOOP day. So the comparison is
+ * computed here and handed over as a verdict, not left to the model.
  */
-function buildReadinessBlock(metrics: any): string {
+export function buildReadinessBlock(metrics: any, history: any[] = []): string {
   if (!metrics) {
     return 'ACUTE READINESS (today): No morning check-in or wellness data available today — weigh recent ride RPE and load instead.';
   }
+  const avg = (k: string) => {
+    const v = history.map((h) => h?.[k]).filter((n): n is number => typeof n === 'number' && n > 0);
+    return v.length >= 3 ? v.reduce((a, b) => a + b, 0) / v.length : null;
+  };
   const lines: string[] = [];
+  const isWhoop = metrics.wellness_source === 'whoop' && typeof metrics.readiness_score === 'number';
+  if (isWhoop) {
+    const r = metrics.readiness_score;
+    const band = r >= 67 ? 'GREEN — recovered; intensity is appropriate' : r >= 34 ? 'YELLOW — partly recovered; quality work is OK if it feels right, keep the volume sensible' : 'RED — not recovered; go easy or rest';
+    lines.push(`- WHOOP recovery: ${r}% (${band}). This already weighs HRV, resting HR and sleep against the athlete's own baseline — treat it as the primary readiness signal.`);
+  }
   if (metrics.sleep_quality) lines.push(`- Sleep quality (subjective): ${metrics.sleep_quality}`);
-  if (metrics.sleep_seconds) lines.push(`- Sleep duration: ${(metrics.sleep_seconds / 3600).toFixed(1)}h`);
+  if (metrics.sleep_seconds) {
+    const h = metrics.sleep_seconds / 3600;
+    const base = avg('sleep_seconds');
+    lines.push(`- Sleep duration: ${h.toFixed(1)}h${base ? ` (usual ${(base / 3600).toFixed(1)}h)` : ''}${h < 6 ? ' — SHORT' : ''}`);
+  }
   if (metrics.feeling) lines.push(`- Feeling: ${metrics.feeling}`);
-  if (metrics.hrv != null) lines.push(`- HRV: ${Math.round(metrics.hrv)} ms (lower than the athlete's norm = more fatigue)`);
-  if (metrics.rhr != null) lines.push(`- Resting HR: ${Math.round(metrics.rhr)} bpm (elevated = incomplete recovery)`);
+  if (metrics.hrv != null) {
+    const base = avg('hrv');
+    if (base) {
+      const pct = ((metrics.hrv - base) / base) * 100;
+      const verdict = pct <= -10 ? 'SUPPRESSED (fatigue signal)' : pct >= 5 ? 'ABOVE baseline (good)' : 'normal';
+      lines.push(`- HRV: ${Math.round(metrics.hrv)} ms vs ${Math.round(base)} ms baseline (${pct >= 0 ? '+' : ''}${Math.round(pct)}%) → ${verdict}`);
+    } else {
+      lines.push(`- HRV: ${Math.round(metrics.hrv)} ms (no baseline yet — do NOT call it high or low)`);
+    }
+  }
+  if (metrics.rhr != null) {
+    const base = avg('rhr');
+    if (base) {
+      const d = metrics.rhr - base;
+      const verdict = d >= 5 ? 'ELEVATED (incomplete recovery / possible illness)' : d >= 3 ? 'slightly up (minor on its own)' : 'normal';
+      lines.push(`- Resting HR: ${Math.round(metrics.rhr)} bpm vs ${Math.round(base)} baseline (${d >= 0 ? '+' : ''}${Math.round(d)}) → ${verdict}`);
+    } else {
+      lines.push(`- Resting HR: ${Math.round(metrics.rhr)} bpm (no baseline yet — do NOT call it elevated)`);
+    }
+  }
   if (lines.length === 0) {
     return 'ACUTE READINESS (today): No morning check-in or wellness data available today — weigh recent ride RPE and load instead.';
   }
+  lines.push(`Use the verdicts above exactly — never describe HRV as suppressed or resting HR as elevated unless the line says so.${isWhoop ? ' On a GREEN WHOOP day, keep the planned session unless several other signals (verdicts above, high recent RPE, heavy recent load) clearly point the other way; one short night alone is a note, not a reason to swap.' : ''}`);
   return 'ACUTE READINESS (today):\n' + lines.join('\n');
 }
 
@@ -613,11 +651,19 @@ Format as JSON:
         .limit(1),
       supabaseAdmin
         .from('daily_metrics')
-        .select('sleep_quality, sleep_score, sleep_seconds, feeling, feeling_score, hrv, rhr, check_in_completed')
+        .select('sleep_quality, sleep_score, sleep_seconds, feeling, feeling_score, hrv, rhr, check_in_completed, readiness_score, wellness_source')
         .eq('athlete_id', athleteId)
         .eq('date', todayStr)
         .maybeSingle(),
     ]);
+    // Personal baseline for HRV / resting HR / sleep: the 14 days before today.
+    const baselineFrom = new Date(Date.parse(todayStr + 'T12:00:00Z') - 14 * 86_400_000).toISOString().slice(0, 10);
+    const { data: wellnessHistory } = await supabaseAdmin
+      .from('daily_metrics')
+      .select('hrv, rhr, sleep_seconds')
+      .eq('athlete_id', athleteId)
+      .gte('date', baselineFrom)
+      .lt('date', todayStr);
 
     const yesterdayActivities = yesterdayResult.data || [];
     const recentActivities = recentResult.data || [];
@@ -671,7 +717,7 @@ Format as JSON:
     ];
 
     // Acute readiness signals for today (subjective check-in + wellness).
-    const readinessBlock = buildReadinessBlock(todayMetricsResult.data);
+    const readinessBlock = buildReadinessBlock(todayMetricsResult.data, wellnessHistory || []);
 
     // Build AI context — use post-ride prompt if ridden today
     let context: string;

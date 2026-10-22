@@ -147,7 +147,7 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
               disabled={adjustmentBusy}
               activeOpacity={0.7}
             >
-              <Text style={styles.adjustmentDismissText}>Keep planned</Text>
+              <Text style={styles.adjustmentDismissText}>Keep my workout</Text>
             </TouchableOpacity>
           </View>
         </View>
