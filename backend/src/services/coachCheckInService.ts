@@ -21,34 +21,46 @@ import { isFtpTestWorkout, isFixedSession } from '../utils/ftpTest';
 import { FTP_TEST_NOTE_PREFIX } from './ftpTestService';
 
 export type CheckInKind =
+  | 'race_week'
+  | 'race_debrief'
   | 'gone_quiet'
   | 'too_hard'
   | 'missed_workouts'
   | 'cut_short'
   | 'too_easy'
   | 'easy_days_too_hard'
+  | 'recovery_slump'
+  | 'fatigue_creep'
+  | 'goal_check'
   | 'great_block';
 
 /** Local hour the daily check runs (early evening — after most rides, before bed). */
 export const CHECKIN_HOUR = 18;
-/** Days of planned sessions considered. */
-const WINDOW_DAYS = 21;
+/** Days of planned sessions loaded (35 so effort TRENDS have enough sessions). */
+const WINDOW_DAYS = 35;
 /** No check-in within this many days of the previous one, of any kind. */
 const MIN_DAYS_BETWEEN = 3;
 
 const COOLDOWN_DAYS: Record<CheckInKind, number> = {
+  race_week: 10,
+  race_debrief: 7,
   gone_quiet: 10,
   too_hard: 7,
   missed_workouts: 10,
   cut_short: 14,
   too_easy: 14,
   easy_days_too_hard: 14,
+  recovery_slump: 7,
+  fatigue_creep: 14,
+  goal_check: 35,
   great_block: 28,
 };
 
 /** Highest priority first: wellbeing and overload before progression and praise. */
 const PRIORITY: CheckInKind[] = [
-  'gone_quiet', 'too_hard', 'missed_workouts', 'cut_short', 'too_easy', 'easy_days_too_hard', 'great_block',
+  'race_week', 'race_debrief',
+  'gone_quiet', 'too_hard', 'recovery_slump', 'missed_workouts', 'fatigue_creep',
+  'cut_short', 'too_easy', 'easy_days_too_hard', 'goal_check', 'great_block',
 ];
 
 const EASY_TYPES = new Set(['endurance', 'recovery']);
@@ -71,6 +83,22 @@ export interface Session {
   notes: string | null;
 }
 
+/** One morning's recovery data (WHOOP / intervals.icu / manual check-in). */
+export interface WellnessDay {
+  date: string;
+  readiness: number | null; // 0–100 (WHOOP red < 34)
+  sleepHours: number | null;
+  sleepQuality: string | null; // terrible | poor | okay | good | great
+  feeling: string | null; // exhausted | tired | normal | good | energized
+}
+
+export interface EventInfo {
+  name: string;
+  date: string;
+  /** The ride on the event day, if synced. */
+  ride?: { minutes: number | null; IF: number | null; rpe: number | null; notes: string | null; debriefed: boolean } | null;
+}
+
 export interface CheckInFacts {
   today: string;
   /** Newest first. */
@@ -79,6 +107,15 @@ export interface CheckInFacts {
   daysSinceFtpTest: number | null;
   experienceLevel: string | null;
   ftp: number | null;
+  /** Newest first, last 7 days. */
+  wellness?: WellnessDay[];
+  /** Target events (active plans + saved goal). */
+  events?: EventInfo[];
+  /** Active plan, for the periodic goal check. */
+  plan?: { goal: string; startDate: string; eventDate: string | null } | null;
+  /** Fitness (CTL) now and ~5 weeks ago. */
+  ctlNow?: number | null;
+  ctl5wAgo?: number | null;
 }
 
 export interface CheckIn {
@@ -142,6 +179,26 @@ function isEasyDayRiddenHard(s: Session): boolean {
 export function detectCheckIns(f: CheckInFacts): CheckIn[] {
   const out: CheckIn[] = [];
   const last = (days: number) => f.sessions.filter((s) => daysBetween(s.date, f.today) <= days);
+
+  // Race week: 5–8 days out — taper, openers, fueling, pacing, logistics.
+  // Race debrief: 1–3 days after — how it went and what's next.
+  for (const e of f.events || []) {
+    const until = daysBetween(f.today, e.date);
+    if (until >= 5 && until <= 8) {
+      out.push({ kind: 'race_week', evidence: [e.date], summary: [`TARGET EVENT: "${e.name}" on ${e.date} (${weekday(e.date)}) — ${until} days away.`] });
+    }
+    if (until <= -1 && until >= -3 && !e.ride?.debriefed) {
+      const r = e.ride;
+      out.push({
+        kind: 'race_debrief',
+        evidence: [e.date],
+        summary: [
+          `TARGET EVENT: "${e.name}" was ${-until} day${until === -1 ? '' : 's'} ago (${e.date}).`,
+          r ? `Event-day ride: ${r.minutes ?? '?'} min${r.IF != null ? `, IF ${r.IF.toFixed(2)}` : ''}${r.rpe != null ? `, RPE ${r.rpe}/5` : ''}${r.notes ? `, notes: "${r.notes.slice(0, 200)}"` : ''}.` : 'No ride synced for the event day (may not have raced, or not uploaded yet).',
+        ],
+      });
+    }
+  }
   const recent14 = last(14);
   const missed14 = recent14.filter((s) => !s.done && !s.special);
   const missed7 = last(7).filter((s) => !s.done && !s.special);
@@ -168,6 +225,25 @@ export function detectCheckIns(f: CheckInFacts): CheckIn[] {
     });
   }
 
+  // Recovery slump: 3 of the last 4 mornings poor (WHOOP red, <6h sleep, or
+  // feeling exhausted/tired with poor sleep). The daily suggestion adapts each
+  // day; a coach also asks what's behind a STREAK — stress, illness, life.
+  const well = (f.wellness || []).filter((w) => daysBetween(w.date, f.today) <= 3);
+  const poor = well.filter((w) =>
+    (w.readiness != null && w.readiness < 34) ||
+    (w.sleepHours != null && w.sleepHours < 6) ||
+    ((w.feeling === 'exhausted' || w.feeling === 'tired') && (w.sleepQuality === 'terrible' || w.sleepQuality === 'poor')));
+  if (well.length >= 3 && poor.length >= 3) {
+    out.push({
+      kind: 'recovery_slump',
+      evidence: poor.map((w) => w.date),
+      summary: [
+        `${poor.length} of the last ${well.length} mornings showed poor recovery:`,
+        ...poor.map((w) => `- ${w.date}: ${[w.readiness != null ? `recovery ${w.readiness}%` : '', w.sleepHours != null ? `${w.sleepHours.toFixed(1)}h sleep` : '', w.sleepQuality ? `sleep ${w.sleepQuality}` : '', w.feeling ? `feeling ${w.feeling}` : ''].filter(Boolean).join(', ')}`),
+      ],
+    });
+  }
+
   // Missed workouts: 3+ in two weeks and at least 30% of the plan. Find out WHY
   // (time, fatigue, motivation, the day itself) — the fix depends on the reason.
   const planned14 = recent14.filter((s) => !s.special).length;
@@ -181,6 +257,30 @@ export function detectCheckIns(f: CheckInFacts): CheckIn[] {
         ...missed14.map(line),
       ],
     });
+  }
+
+  // Fatigue creep: the same kind of work keeps feeling harder (RPE up ≥1 over the
+  // last 3 quality sessions vs the 3 before) while output hasn't risen. Early
+  // sign of accumulated fatigue or burnout — before it shows up as 5/5 days.
+  const qRated = f.sessions.filter((s) => s.done && !s.special && s.rpe != null && !EASY_TYPES.has(s.type)).slice(0, 6);
+  if (qRated.length === 6) {
+    const avg = (xs: Session[], k: 'rpe' | 'rideIF') => {
+      const v = xs.map((x) => x[k]).filter((n): n is number => n != null);
+      return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+    };
+    const [newer, older] = [qRated.slice(0, 3), qRated.slice(3)];
+    const rNew = avg(newer, 'rpe') as number, rOld = avg(older, 'rpe') as number;
+    const iNew = avg(newer, 'rideIF'), iOld = avg(older, 'rideIF');
+    if (rNew - rOld >= 1 && (iNew == null || iOld == null || iNew <= iOld + 0.02) && !out.some((c) => c.kind === 'too_hard')) {
+      out.push({
+        kind: 'fatigue_creep',
+        evidence: newer.map((s) => s.date),
+        summary: [
+          `Quality sessions are feeling harder for the same output: avg RPE ${rOld.toFixed(1)} → ${rNew.toFixed(1)}/5${iNew != null && iOld != null ? `, avg IF ${iOld.toFixed(2)} → ${iNew.toFixed(2)}` : ''}.`,
+          ...qRated.map(line),
+        ],
+      });
+    }
   }
 
   // Cut short: rides keep ending well before the planned duration — the plan
@@ -228,11 +328,29 @@ export function detectCheckIns(f: CheckInFacts): CheckIn[] {
     });
   }
 
+  // Goal check: every ~5 weeks into an active plan — is the goal still right,
+  // too ambitious, not ambitious enough? (Cooldown makes it periodic.)
+  if (f.plan && daysBetween(f.plan.startDate, f.today) >= 35 && (!f.plan.eventDate || daysBetween(f.today, f.plan.eventDate) >= 21)) {
+    const planned = last(35).filter((s) => !s.special);
+    const done = planned.filter((s) => s.done);
+    const qr = done.filter((s) => !EASY_TYPES.has(s.type) && s.rpe != null);
+    out.push({
+      kind: 'goal_check',
+      evidence: [f.today],
+      summary: [
+        `PLAN: "${f.plan.goal}", started ${f.plan.startDate}${f.plan.eventDate ? `, event ${f.plan.eventDate} (${Math.round(daysBetween(f.today, f.plan.eventDate) / 7)} weeks away)` : ''}.`,
+        `Last 5 weeks: ${done.length} of ${planned.length} planned sessions done${qr.length ? `, quality RPE avg ${(qr.reduce((a, s) => a + (s.rpe as number), 0) / qr.length).toFixed(1)}/5` : ''}.`,
+        f.ctlNow != null && f.ctl5wAgo != null ? `Fitness (CTL) ${Math.round(f.ctl5wAgo)} → ${Math.round(f.ctlNow)} over 5 weeks.` : 'Fitness trend unavailable.',
+        `FTP ${f.ftp ?? 'unknown'}W, last test ${f.daysSinceFtpTest == null ? 'none on record' : `${f.daysSinceFtpTest} days ago`}.`,
+      ],
+    });
+  }
+
   // Great block: 8+ planned sessions in 3 weeks, 90%+ done, nothing missed in the
   // last 2 weeks and nothing else to raise. Coaches notice the good stuff too.
-  const planned21 = f.sessions.filter((s) => !s.special);
+  const planned21 = last(21).filter((s) => !s.special);
   const done21 = planned21.filter((s) => s.done);
-  if (!out.length && planned21.length >= 8 && done21.length / planned21.length >= 0.9 && !missed14.length) {
+  if (!out.some((c) => c.kind !== 'goal_check') && planned21.length >= 8 && done21.length / planned21.length >= 0.9 && !missed14.length) {
     out.push({
       kind: 'great_block',
       evidence: done21.map((s) => s.date),
@@ -262,6 +380,10 @@ export function pickCheckIn(found: CheckIn[], sent: SentCheckIn[], today: string
 }
 
 const ASK: Record<CheckInKind, string> = {
+  race_week:
+    `Their target event is a week out. Prep them like a coach would: check the calendar for a proper taper (volume down, a little intensity kept, short openers the day or two before) and offer to fix it if it isn't there; give a concrete fueling plan (carbs per hour for the expected duration, what to eat the day before and morning of); pacing guidance in watts from their FTP and anything you know about the course. Ask ONE question that sharpens the plan (course, start time, or what they're most worried about).`,
+  race_debrief:
+    `Their target event just happened. Ask how it went — result AND how it felt — and react to the ride data if it synced. Then look forward briefly: the next few days should be easy/rest, and ask what's next (another event, a new goal, or an off-season break) so you can set up the next block.`,
   gone_quiet:
     `They haven't ridden in days while the plan kept going. Check on THEM first — sick, injured, travelling, work/life? Don't guilt them. Say you'll adjust the plan around whatever is going on (pause it, push it back, or ease back in), and ask what happened.`,
   too_hard:
@@ -274,6 +396,12 @@ const ASK: Record<CheckInKind, string> = {
     `Their quality workouts keep feeling easy. That's good news — they've likely outgrown the plan's targets. Before assuming, glance at the ride data: if they hit the targets and it still felt easy, the targets are too low. Lead with the single suggestion below and ask if they want it.`,
   easy_days_too_hard:
     `Their easy days are being ridden hard (tempo or harder). Explain in one or two sentences why that hurts: tired for the sessions that matter, little extra fitness. Ask what's happening — group rides, Zwift races, just feeling good, or the easy pace feels too slow? If it's a regular group ride or race, offer to build the week around it as a fixed session instead of fighting it.`,
+  recovery_slump:
+    `Their recovery has been poor several mornings running. The daily plan already eases off day by day — your job is to ask what's behind the streak (work/life stress, getting sick, travel, poor sleep habits, under-eating, alcohol) without lecturing. Offer to make the next 2–3 days easy or rest, and ONE concrete sleep/recovery tip if relevant.`,
+  fatigue_creep:
+    `The same work is feeling harder while output hasn't gone up — early fatigue or burnout, before it becomes a bad day. Point to the trend specifically. Ask how they're feeling about training: tired, stressed, bored, or unmotivated? Offer a down week (or a few easy days) now, and if it's boredom, more variety or riding outside.`,
+  goal_check:
+    `Periodic goal check, ~5 weeks into the plan. Give an honest read on whether they're on track for the goal using the numbers (completion, fitness trend, effort). Then ask whether the goal is still right: still the target, too ambitious, or not ambitious enough? If the data says to adjust (e.g. great progress → more ambitious target; lots missed → rethink the date or goal), say so plainly.`,
   great_block:
     `They've been very consistent. Say so specifically (what they've done and what it's building), briefly. Then one forward-looking line: what's next in the plan or a question about how the body feels. No generic hype.`,
 };
@@ -285,6 +413,11 @@ const SUGGESTION_TEXT: Record<NonNullable<CheckIn['suggestion']>, string> = {
 };
 
 const PUSH_TITLE: Record<CheckInKind, string> = {
+  race_week: 'Race week is coming',
+  race_debrief: 'How did the race go?',
+  recovery_slump: 'Checking in on your recovery',
+  fatigue_creep: 'How are you feeling about training?',
+  goal_check: 'Checking in on your goal',
   gone_quiet: 'Checking in',
   too_hard: 'Should we back off?',
   missed_workouts: 'Quick check-in on your plan',
@@ -323,7 +456,9 @@ export async function loadFacts(athlete: any): Promise<CheckInFacts> {
   const today = todayInTimezone(tz);
   const from = new Date(Date.parse(today + 'T12:00:00Z') - WINDOW_DAYS * 86_400_000).toISOString().slice(0, 10);
 
-  const [{ data: entries }, { data: rides }, { data: lastRide }, { data: tests }] = await Promise.all([
+  const weekAgo = new Date(Date.parse(today + 'T12:00:00Z') - 7 * 86_400_000).toISOString().slice(0, 10);
+  const fiveWeeksAgo = new Date(Date.parse(today + 'T12:00:00Z') - 35 * 86_400_000).toISOString().slice(0, 10);
+  const [{ data: entries }, { data: rides }, { data: lastRide }, { data: tests }, { data: wellnessRows }, { data: plans }, { data: ctlRows }] = await Promise.all([
     supabaseAdmin
       .from('calendar_entries')
       .select('scheduled_date, completed, strava_activity_id, entry_type, notes, workouts(name, workout_type, duration_minutes, intervals)')
@@ -333,7 +468,7 @@ export async function loadFacts(athlete: any): Promise<CheckInFacts> {
       .order('scheduled_date', { ascending: false }),
     supabaseAdmin
       .from('strava_activities')
-      .select('strava_activity_id, start_date, moving_time_seconds, tss, perceived_effort, post_activity_notes')
+      .select('strava_activity_id, start_date, moving_time_seconds, tss, perceived_effort, post_activity_notes, coach_debrief_at')
       .eq('athlete_id', athlete.id)
       .gte('start_date', from + 'T00:00:00Z'),
     supabaseAdmin
@@ -349,6 +484,25 @@ export async function loadFacts(athlete: any): Promise<CheckInFacts> {
       .like('notes', `${FTP_TEST_NOTE_PREFIX}%`)
       .order('scheduled_date', { ascending: false })
       .limit(1),
+    supabaseAdmin
+      .from('daily_metrics')
+      .select('date, readiness_score, sleep_seconds, sleep_quality, feeling')
+      .eq('athlete_id', athlete.id)
+      .gte('date', weekAgo)
+      .lte('date', today)
+      .order('date', { ascending: false }),
+    supabaseAdmin
+      .from('training_plans')
+      .select('goal_event, event_date, start_date')
+      .eq('athlete_id', athlete.id)
+      .eq('status', 'active')
+      .order('start_date', { ascending: true }),
+    supabaseAdmin
+      .from('athlete_metrics')
+      .select('date, ctl')
+      .eq('athlete_id', athlete.id)
+      .gte('date', fiveWeeksAgo)
+      .order('date', { ascending: true }),
   ]);
 
   const rideList = (rides || []).map((r: any) => ({ ...r, localDate: utcToLocalDate(r.start_date, tz) }));
@@ -375,6 +529,33 @@ export async function loadFacts(athlete: any): Promise<CheckInFacts> {
     });
   }
 
+  const rideFacts = (r: any) => {
+    const h = r.moving_time_seconds ? r.moving_time_seconds / 3600 : null;
+    return {
+      minutes: h ? Math.round(h * 60) : null,
+      IF: h && r.tss ? Math.sqrt(r.tss / (h * 100)) : null,
+      rpe: r.perceived_effort ?? null,
+      notes: r.post_activity_notes ?? null,
+      debriefed: !!r.coach_debrief_at,
+    };
+  };
+
+  // Target events: active plans' event dates, plus a saved goal date. Dedup by date.
+  const events = new Map<string, EventInfo>();
+  for (const p of (plans || []) as any[]) {
+    if (p.event_date) events.set(p.event_date, { name: p.goal_event || 'Target event', date: p.event_date });
+  }
+  const prefs = athlete.preferences || {};
+  if (typeof prefs.event_date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(prefs.event_date) && !events.has(prefs.event_date)) {
+    events.set(prefs.event_date, { name: prefs.training_goal || 'Target event', date: prefs.event_date });
+  }
+  for (const e of events.values()) {
+    // Biggest ride that day = the event.
+    const r = rideList.filter((x) => x.localDate === e.date).sort((a, b) => (b.moving_time_seconds || 0) - (a.moving_time_seconds || 0))[0];
+    e.ride = r ? rideFacts(r) : null;
+  }
+
+  const plan = (plans || [])[0] as any;
   const lastRideDate = lastRide?.[0]?.start_date ? utcToLocalDate(lastRide[0].start_date, tz) : null;
   const lastTest = tests?.[0]?.scheduled_date || null;
   return {
@@ -384,17 +565,28 @@ export async function loadFacts(athlete: any): Promise<CheckInFacts> {
     daysSinceFtpTest: lastTest ? daysBetween(lastTest, today) : null,
     experienceLevel: athlete.experience_level ?? null,
     ftp: athlete.ftp ?? null,
+    wellness: ((wellnessRows || []) as any[]).map((w) => ({
+      date: w.date,
+      readiness: w.readiness_score ?? null,
+      sleepHours: w.sleep_seconds ? w.sleep_seconds / 3600 : null,
+      sleepQuality: w.sleep_quality ?? null,
+      feeling: w.feeling ?? null,
+    })),
+    events: [...events.values()],
+    plan: plan ? { goal: plan.goal_event || 'Training plan', startDate: plan.start_date, eventDate: plan.event_date || null } : null,
+    ctlNow: ctlRows?.length ? (ctlRows[ctlRows.length - 1] as any).ctl : null,
+    ctl5wAgo: ctlRows?.length ? (ctlRows[0] as any).ctl : null,
   };
 }
 
 /** Pure: compact "how is the plan landing" lines for the plan designer. */
 export function summarizeForPlanning(f: CheckInFacts): string | null {
-  const planned = f.sessions.filter((s) => !s.special);
+  const planned = f.sessions.filter((s) => !s.special && daysBetween(s.date, f.today) <= 21);
   if (planned.length < 4) return null;
   const done = planned.filter((s) => s.done);
   const quality = done.filter((s) => !EASY_TYPES.has(s.type) && s.rpe != null);
   const avgQ = quality.length ? quality.reduce((a, s) => a + (s.rpe as number), 0) / quality.length : null;
-  const lines = [`- Completed ${done.length} of ${planned.length} planned workouts in the last ${WINDOW_DAYS} days.`];
+  const lines = [`- Completed ${done.length} of ${planned.length} planned workouts in the last 21 days.`];
   const missed = planned.filter((s) => !s.done);
   if (missed.length) lines.push(`- Missed days: ${dayPattern(missed.map((s) => s.date))}.`);
   if (avgQ != null) lines.push(`- Quality sessions averaged RPE ${avgQ.toFixed(1)}/5 over ${quality.length} rated (≤2 = too easy, 5 = too hard).`);
@@ -407,7 +599,7 @@ export function summarizeForPlanning(f: CheckInFacts): string | null {
 
 export async function recentPlanFeedback(athleteId: string): Promise<string | null> {
   const { data: athlete } = await supabaseAdmin
-    .from('athletes').select('id, timezone, experience_level, ftp').eq('id', athleteId).single();
+    .from('athletes').select('id, timezone, experience_level, ftp, preferences').eq('id', athleteId).single();
   if (!athlete) return null;
   return summarizeForPlanning(await loadFacts(athlete));
 }
@@ -541,7 +733,7 @@ export function startCoachCheckInCron() {
       if (!ids.length) return;
       const { data: athletes } = await supabaseAdmin
         .from('athletes')
-        .select('id, timezone, experience_level, ftp, push_token, push_notifications_enabled')
+        .select('id, timezone, experience_level, ftp, preferences, push_token, push_notifications_enabled')
         .in('id', ids);
       for (const a of athletes || []) {
         if (localHour(a.timezone || 'America/Los_Angeles') !== CHECKIN_HOUR) continue;

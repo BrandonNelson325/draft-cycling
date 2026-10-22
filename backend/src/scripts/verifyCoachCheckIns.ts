@@ -78,6 +78,40 @@ check('Endurance/recovery ridden at tempo+ → easy_days_too_hard', kinds(hot).i
 const great = facts(Array.from({ length: 10 }, (_, i) => s(i * 2 + 1, i % 2 ? 'endurance' : 'threshold')));
 check('10/10 sessions done in 3 weeks → great_block', kinds(great).join() === 'great_block');
 
+// ---- Race week / race debrief ----
+const raceIn = (d: number, ride: any = null) => facts([s(1, 'threshold'), s(3, 'endurance')], { events: [{ name: 'Gravel Worlds', date: ago(-d), ride }] });
+check('Event 7 days out → race_week first', kinds(raceIn(7))[0] === 'race_week');
+check('Event 3 or 10 days out → no race_week', !kinds(raceIn(3)).includes('race_week') && !kinds(raceIn(10)).includes('race_week'));
+const deb = detectCheckIns(raceIn(-1, { minutes: 240, IF: 0.78, rpe: 4, notes: 'cramped at 3h', debriefed: false }));
+check('Day after the event → race_debrief with the ride', deb[0]?.kind === 'race_debrief' && /cramped at 3h/.test(deb[0].summary.join(' ')));
+check('Event ride already debriefed → no second race message', !kinds(raceIn(-1, { minutes: 240, IF: 0.78, rpe: 4, notes: 'x', debriefed: true })).includes('race_debrief'));
+check('Race week outranks everything', kinds({ ...hard, events: [{ name: 'Crit', date: ago(-6) }] })[0] === 'race_week');
+
+// ---- Recovery slump ----
+const w = (d: number, o: any) => ({ date: ago(d), readiness: null, sleepHours: null, sleepQuality: null, feeling: null, ...o });
+const slump = facts([s(1, 'endurance')], { wellness: [w(0, { readiness: 22 }), w(1, { sleepHours: 5.2 }), w(2, { readiness: 60 }), w(3, { feeling: 'exhausted', sleepQuality: 'poor' })] });
+check('3 of 4 poor mornings → recovery_slump', kinds(slump).includes('recovery_slump'));
+check('One bad night is not a slump', !kinds(facts([s(1, 'endurance')], { wellness: [w(0, { readiness: 22 }), w(1, { readiness: 70 }), w(2, { readiness: 65 })] })).includes('recovery_slump'));
+check('Tired but slept well is not a slump', !kinds(facts([], { wellness: [0, 1, 2].map((d) => w(d, { feeling: 'tired', sleepQuality: 'good' })) })).includes('recovery_slump'));
+
+// ---- Fatigue creep ----
+const creep = facts([
+  s(1, 'threshold', { rpe: 4, rideIF: 0.86 }), s(4, 'vo2max', { rpe: 4, rideIF: 0.85 }), s(8, 'sweet_spot', { rpe: 4, rideIF: 0.84 }),
+  s(12, 'threshold', { rpe: 3, rideIF: 0.86 }), s(15, 'vo2max', { rpe: 3, rideIF: 0.86 }), s(19, 'sweet_spot', { rpe: 2, rideIF: 0.85 }),
+]);
+check('Same output, RPE up ≥1 → fatigue_creep', kinds(creep).includes('fatigue_creep'));
+const stronger = facts(creep.sessions.map((x, i) => (i < 3 ? { ...x, rideIF: 0.95 } : x)));
+check('RPE up because they rode HARDER → not fatigue', !kinds(stronger).includes('fatigue_creep'));
+
+// ---- Goal check ----
+const planFacts = (startAgo: number, eventIn: number | null) => facts(Array.from({ length: 10 }, (_, i) => s(i * 2 + 1, i % 2 ? 'endurance' : 'threshold')),
+  { plan: { goal: 'Unbound 200', startDate: ago(startAgo), eventDate: eventIn == null ? null : ago(-eventIn) }, ctlNow: 62, ctl5wAgo: 51 });
+const gc = detectCheckIns(planFacts(40, 60)).find((c) => c.kind === 'goal_check');
+check('5+ weeks into a plan → goal_check with fitness trend', !!gc && /51 → 62/.test(gc.summary.join(' ')));
+check('Plan only 3 weeks old → no goal check', !kinds(planFacts(21, 60)).includes('goal_check'));
+check('Event under 3 weeks away → no goal check (too late to change)', !kinds(planFacts(60, 14)).includes('goal_check'));
+check('Goal check does not suppress the great-block praise', kinds(planFacts(40, 60)).includes('great_block'));
+
 // ---- pickCheckIn: never nag ----
 const found = detectCheckIns(facts([...easyQ], { daysSinceFtpTest: 60 }));
 check('First time → sends', pickCheckIn(found, [], TODAY)?.kind === 'too_easy');
