@@ -1416,15 +1416,27 @@ export const aiToolExecutor = {
    * Update athlete preferences
    */
   async updateAthletePreferences(athleteId: string, input: any): Promise<any> {
-    const updated = await athletePreferencesService.updatePreferences(
-      athleteId,
-      input.preferences
-    );
+    const updated = input.preferences && Object.keys(input.preferences).length
+      ? await athletePreferencesService.updatePreferences(athleteId, input.preferences)
+      : undefined;
+
+    let experienceLevel: string | undefined;
+    if (['beginner', 'intermediate', 'advanced'].includes(input.experience_level)) {
+      const { error } = await supabaseAdmin
+        .from('athletes')
+        .update({ experience_level: input.experience_level })
+        .eq('id', athleteId);
+      if (error) throw new Error(`Could not update experience level: ${error.message}`);
+      experienceLevel = input.experience_level;
+    }
 
     return {
       success: true,
-      message: 'Preferences saved successfully',
+      message: experienceLevel
+        ? `Saved. Experience level is now ${experienceLevel} — it applies to plans built from now on; offer to rebuild the current plan if they want it now.`
+        : 'Preferences saved successfully',
       preferences: updated,
+      experience_level: experienceLevel,
     };
   },
 };

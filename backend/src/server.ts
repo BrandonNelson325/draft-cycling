@@ -31,6 +31,7 @@ import { startMorningCheckInCron } from './services/morningCheckInCronService';
 import { startActivityReminderCron } from './services/activityReminderCronService';
 import { startWellnessSyncCron } from './services/wellnessSyncCronService';
 import { startWhoopPollCron } from './services/whoopPollCronService';
+import { startCoachCheckInCron } from './services/coachCheckInService';
 
 // Catch unhandled errors so background tasks (crons, fire-and-forget) don't crash the server
 process.on('uncaughtException', (err) => {
@@ -286,6 +287,7 @@ app.listen(config.port, async () => {
   // WHOOP morning poll — backup to webhooks so the recovery push fires when
   // WHOOP scores sleep, not when the athlete next opens the app.
   startWhoopPollCron();
+  startCoachCheckInCron();
 
   // Intervals.icu wellness sync disabled — the data wasn't coming through
   // reliably from athlete accounts and the feature is paused until we revisit.

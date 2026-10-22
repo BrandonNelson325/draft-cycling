@@ -548,8 +548,14 @@ export const AI_TOOLS: Tool[] = [
             },
           },
         },
+        experience_level: {
+          type: 'string',
+          enum: ['beginner', 'intermediate', 'advanced'],
+          description:
+            'Change the athlete\'s experience level (controls riding days, quality sessions per week and rep counts in new plans). ONLY after the athlete agrees — e.g. they keep rating workouts easy and accept moving up a level.',
+        },
       },
-      required: ['preferences'],
+      required: [],
     },
   },
 ];

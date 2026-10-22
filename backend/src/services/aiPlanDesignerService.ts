@@ -14,6 +14,7 @@ import {
 } from './trainingPlanService';
 import { TrainingPlan } from '../types/trainingPlan';
 import { ageFromDob, mastersGuidance } from '../utils/age';
+import { recentPlanFeedback } from './coachCheckInService';
 import { resolveLevel, levelGuidance, capacityGuidance, powerProfileGuidance } from '../utils/coachingLevels';
 import { trainingLoadService } from './trainingLoadService';
 
@@ -166,6 +167,13 @@ export const aiPlanDesignerService = {
       const load = await trainingLoadService.calculateTrainingLoad(athleteId);
       ctl = load?.ctl ?? null;
     } catch { /* optional */ }
+    // How the CURRENT plan is landing (completion, RPE, cut-short days). A plan
+    // rebuilt after "these are too easy" / "I keep missing Thursdays" must reflect it.
+    let feedbackBlock = '';
+    try {
+      const fb = await recentPlanFeedback(athleteId);
+      if (fb) feedbackBlock = `HOW RECENT TRAINING HAS LANDED (adjust for it — e.g. quality RPE ≤2 → more reps/time-in-zone; RPE near 5 or many misses → less load; rides cut short → shorter sessions on those days):\n${fb}\n`;
+    } catch { /* optional */ }
     const weeklyHours = Math.round(availableDays.reduce((s, d) => s + d.cap, 0) * 10) / 10;
     const levelBlock = levelGuidance(level, prefs.intensity_preference);
     const capacityBlock = capacityGuidance({
@@ -187,7 +195,7 @@ ATHLETE:
 ${age ? `- Age: ${age}\n` : ''}${athlete.max_hr ? `- Max HR: ${athlete.max_hr} bpm\n` : ''}- ${powerLine || 'Limited power-record data.'}
 ${prefLines ? `${prefLines}\n` : ''}
 ${levelBlock}
-${capacityBlock ? `\n${capacityBlock}\n` : ''}${profileBlock ? `\n${profileBlock}\n` : ''}${mastersBlock ? `\n${mastersBlock}` : ''}
+${capacityBlock ? `\n${capacityBlock}\n` : ''}${profileBlock ? `\n${profileBlock}\n` : ''}${mastersBlock ? `\n${mastersBlock}` : ''}${feedbackBlock ? `\n${feedbackBlock}` : ''}
 
 PLAN WINDOW: starts ${startIso} (a Monday), event ${eventIso}, ${weeksUntil} weeks.
 
