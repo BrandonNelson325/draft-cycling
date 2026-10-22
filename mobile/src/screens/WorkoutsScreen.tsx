@@ -97,7 +97,6 @@ export default function WorkoutsScreen() {
       <Text style={styles.cardMeta}>
         {item.duration_minutes}min
         {item.tss ? ` · TSS ${item.tss}` : ''}
-        {item.generated_by_ai ? ' · AI' : ''}
       </Text>
       {item.description ? (
         <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>

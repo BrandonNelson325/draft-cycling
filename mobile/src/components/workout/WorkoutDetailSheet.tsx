@@ -94,7 +94,6 @@ export default function WorkoutDetailSheet({ workout, onClose, onScheduled, show
       <View style={styles.stats}>
         <StatItem label="Duration" value={`${workout.duration_minutes}min`} />
         {workout.tss && <StatItem label="TSS" value={String(workout.tss)} />}
-        {workout.generated_by_ai && <StatItem label="Source" value="AI Generated" />}
       </View>
 
       {workout.description && (

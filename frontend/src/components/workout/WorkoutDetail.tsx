@@ -55,11 +55,6 @@ export function WorkoutDetail({
                 >
                   {workout.workout_type}
                 </span>
-                {workout.generated_by_ai && (
-                  <span className="px-3 py-1 text-sm rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                    AI Generated
-                  </span>
-                )}
               </div>
             </div>
             {onClose && (
@@ -144,14 +139,6 @@ export function WorkoutDetail({
               </Button>
             )}
           </div>
-
-          {/* AI Generation Info */}
-          {workout.ai_prompt && (
-            <div className="bg-muted/50 p-4 rounded-lg">
-              <h4 className="font-medium mb-2 text-sm">AI Generation Prompt</h4>
-              <p className="text-sm text-muted-foreground">{workout.ai_prompt}</p>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

@@ -39,7 +39,6 @@ export function WorkoutLibrary({
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<WorkoutFilters>({});
   const [selectedType, setSelectedType] = useState<WorkoutType | 'all'>('all');
-  const [showAiOnly, setShowAiOnly] = useState(false);
 
   useEffect(() => {
     loadWorkouts();
@@ -63,15 +62,6 @@ export function WorkoutLibrary({
     setFilters({
       ...filters,
       type: type === 'all' ? undefined : type,
-    });
-  };
-
-  const handleAiFilterToggle = () => {
-    const newValue = !showAiOnly;
-    setShowAiOnly(newValue);
-    setFilters({
-      ...filters,
-      ai_generated: newValue ? true : undefined,
     });
   };
 
@@ -150,28 +140,6 @@ export function WorkoutLibrary({
                 {type.label}
               </Button>
             ))}
-            <div className="ml-auto">
-              <Button
-                variant={showAiOnly ? 'default' : 'outline'}
-                size="sm"
-                onClick={handleAiFilterToggle}
-              >
-                <svg
-                  className="w-4 h-4 mr-1"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
-                AI Generated Only
-              </Button>
-            </div>
           </div>
         </CardContent>
       </Card>
@@ -190,7 +158,7 @@ export function WorkoutLibrary({
         <EmptyState
           title="No workouts found"
           description={
-            filters.type || filters.ai_generated
+            filters.type
               ? 'Try adjusting your filters'
               : 'Create your first workout to get started'
           }

@@ -45,11 +45,6 @@ export function WorkoutCard({
               </CardDescription>
             )}
           </div>
-          {workout.generated_by_ai && (
-            <span className="ml-2 px-2 py-1 text-xs rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-              AI
-            </span>
-          )}
         </div>
       </CardHeader>
 

@@ -202,12 +202,6 @@ export function CalendarDayDetail({
                             </span>
                           )}
 
-                          {entry.ai_rationale && (
-                            <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200">
-                              AI Scheduled
-                            </span>
-                          )}
-
                           <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 capitalize">
                             {entry.workouts.workout_type}
                           </span>
