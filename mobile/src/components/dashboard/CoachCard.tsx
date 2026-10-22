@@ -55,7 +55,10 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
     try {
       await dailyAnalysisService.acceptAdjustment(
         suggestion.suggestion.adjustment.kind as 'rest' | 'easier',
-        suggestion.suggestion.adjustment.reason
+        suggestion.suggestion.adjustment.reason,
+        suggestion.suggestion.adjustment.alternativeWorkout
+          ? { type: suggestion.suggestion.adjustment.alternativeWorkout.type, duration: suggestion.suggestion.adjustment.alternativeWorkout.duration }
+          : undefined
       );
       const fresh = await dailyAnalysisService.getTodaySuggestion();
       setSuggestion(fresh);
@@ -200,14 +203,14 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
               <Text style={styles.workoutName}>{s.adjustment.headline}</Text>
               <Text style={styles.workoutMeta}>{s.adjustment.reason}</Text>
               <View style={styles.adjustmentButtons}>
-                {s.adjustment.kind === 'rest' && (
+                {(s.adjustment.kind === 'rest' || (s.adjustment.kind === 'easier' && !!s.adjustment.alternativeWorkout)) && (
                   <TouchableOpacity
                     style={[styles.adjustmentButton, styles.adjustmentAccept, adjustmentBusy && styles.adjustmentDisabled]}
                     onPress={handleAcceptAdjustment}
                     disabled={adjustmentBusy}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.adjustmentAcceptText}>Take rest day</Text>
+                    <Text style={styles.adjustmentAcceptText}>Accept suggestion</Text>
                   </TouchableOpacity>
                 )}
                 <TouchableOpacity
@@ -216,7 +219,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
                   disabled={adjustmentBusy}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.adjustmentDismissText}>Keep my workout</Text>
+                  <Text style={styles.adjustmentDismissText}>Continue with plan</Text>
                 </TouchableOpacity>
               </View>
             </View>

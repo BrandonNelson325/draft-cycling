@@ -37,7 +37,10 @@ export function TodaySuggestionCard() {
     try {
       await dailyAnalysisService.acceptAdjustment(
         data.suggestion.adjustment.kind as 'rest' | 'easier',
-        data.suggestion.adjustment.reason
+        data.suggestion.adjustment.reason,
+        data.suggestion.adjustment.alternativeWorkout
+          ? { type: data.suggestion.adjustment.alternativeWorkout.type, duration: data.suggestion.adjustment.alternativeWorkout.duration }
+          : undefined
       );
       const fresh = await dailyAnalysisService.getTodaySuggestion();
       setData(fresh);
@@ -163,13 +166,13 @@ export function TodaySuggestionCard() {
             <p className="text-sm font-medium text-gray-800">{suggestion.adjustment.headline}</p>
             <p className="text-xs text-gray-600 mt-1">{suggestion.adjustment.reason}</p>
             <div className="flex gap-2 mt-3">
-              {suggestion.adjustment.kind === 'rest' && (
+              {(suggestion.adjustment.kind === 'rest' || (suggestion.adjustment.kind === 'easier' && !!suggestion.adjustment.alternativeWorkout)) && (
                 <button
                   onClick={handleAcceptAdjustment}
                   disabled={adjustmentBusy}
                   className="flex-1 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
                 >
-                  Take rest day
+                  Accept suggestion
                 </button>
               )}
               <button
@@ -177,7 +180,7 @@ export function TodaySuggestionCard() {
                 disabled={adjustmentBusy}
                 className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
               >
-                Keep my workout
+                Continue with plan
               </button>
             </div>
           </div>

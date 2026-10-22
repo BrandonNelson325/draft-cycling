@@ -4,6 +4,7 @@ import { trainingLoadService } from './trainingLoadService';
 import { fatigueProfileService, type FatigueProfile } from './fatigueProfileService';
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { logger } from '../utils/logger';
+import { buildWorkoutFromSpec } from './trainingPlanService';
 
 interface DailyAnalysisResult {
   date: string;
@@ -245,6 +246,34 @@ export function buildReadinessBlock(metrics: any, history: any[] = []): string {
   }
   lines.push(`Use the verdicts above exactly — never describe HRV as suppressed or resting HR as elevated unless the line says so.${isWhoop ? ' On a GREEN WHOOP day, keep the planned session unless several other signals (verdicts above, high recent RPE, heavy recent load) clearly point the other way; one short night alone is a note, not a reason to swap.' : ''}`);
   return 'ACUTE READINESS (today):\n' + lines.join('\n');
+}
+
+const EASIER_TYPES = new Set(['recovery', 'endurance', 'tempo']);
+/** Rough TSS per hour at each easier type's typical intensity factor. */
+const TSS_PER_HOUR: Record<string, number> = { recovery: 30, endurance: 46, tempo: 64 };
+
+/**
+ * The concrete easier session behind an "easier" suggestion — what "Accept
+ * suggestion" puts on the calendar. Validated here (never trust the model):
+ * allowed types only, 20 min to the planned duration. Falls back to the
+ * headline ("Swap for Z2 endurance ride (~60 min…") and then to endurance.
+ */
+export function resolveEasierReplacement(
+  raw: any,
+  plannedMinutes: number | null | undefined,
+  headline = ''
+): { type: string; duration: number; tss: number } {
+  const h = headline.toLowerCase();
+  let type = EASIER_TYPES.has(raw?.type) ? raw.type : /recovery|z1/.test(h) ? 'recovery' : /tempo/.test(h) ? 'tempo' : 'endurance';
+  let duration = Number(raw?.duration_minutes);
+  if (!Number.isFinite(duration) || duration <= 0) {
+    const m = h.match(/(\d{2,3})\s*min/);
+    duration = m ? Number(m[1]) : 60;
+  }
+  const cap = plannedMinutes && plannedMinutes > 0 ? plannedMinutes : 90;
+  duration = Math.round(Math.max(20, Math.min(duration, cap)) / 5) * 5;
+  if (!EASIER_TYPES.has(type)) type = 'endurance';
+  return { type, duration, tss: Math.round((TSS_PER_HOUR[type] * duration) / 60) };
 }
 
 /**
@@ -813,7 +842,9 @@ Format as JSON:
     // Adjustments only apply pre-ride when there's a plan to override.
     // If the AI flagged an override, suppress it when the user has already dismissed today.
     let adjustment: AdjustmentSuggestion | null = null;
-    if (hasPlannedWorkout && !riddenToday && aiResult.adjustment && aiResult.adjustment.kind !== 'none') {
+    // Already accepted a suggestion today → the calendar IS the adjusted plan; don't re-suggest.
+    const alreadyAdjusted = !!todayEntry.data?.adjusted_at;
+    if (hasPlannedWorkout && !riddenToday && !alreadyAdjusted && aiResult.adjustment && aiResult.adjustment.kind !== 'none') {
       const { data: dismissal } = await supabaseAdmin
         .from('adjustment_dismissals')
         .select('id')
@@ -828,6 +859,19 @@ Format as JSON:
           reason: aiResult.adjustment.reason,
           generatedAt: new Date().toISOString(),
         };
+        if (aiResult.adjustment.kind === 'easier') {
+          const r = resolveEasierReplacement(
+            aiResult.adjustment.replacement,
+            todayEntry.data.workouts?.duration_minutes,
+            aiResult.adjustment.headline
+          );
+          adjustment.alternativeWorkout = {
+            name: buildWorkoutFromSpec({ workout_type: r.type, duration_minutes: r.duration, day_of_week: 0 }).name,
+            type: r.type,
+            duration: r.duration,
+            tss: r.tss,
+          };
+        }
       }
     }
 
@@ -980,7 +1024,8 @@ Format as JSON:
   "adjustment": {
     "kind": "rest|easier|none",
     "headline": "short imperative if kind != none (e.g. 'Take today as a rest day' or 'Swap for a Z2 endurance ride'). Empty string if kind = none.",
-    "reason": "1 short sentence with the load/readiness data that justifies the override. Empty string if kind = none."
+    "reason": "1 short sentence with the load/readiness data that justifies the override. Empty string if kind = none.",
+    "replacement": "ONLY when kind = easier: the session to ride instead, e.g. {\"type\": \"endurance\", \"duration_minutes\": 60}. type is recovery|endurance|tempo; duration no longer than the planned workout. Omit otherwise."
   }
 }`;
     }
@@ -1178,7 +1223,7 @@ Format as JSON:
     recommendation: string;
     suggestedAction: TodaySuggestion['suggestion'] extends null ? never : NonNullable<TodaySuggestion['suggestion']>['suggestedAction'];
     suggestedWorkout?: { workoutId?: string; name: string; type: string; duration: number; description: string };
-    adjustment?: { kind: 'rest' | 'easier' | 'none'; headline: string; reason: string };
+    adjustment?: { kind: 'rest' | 'easier' | 'none'; headline: string; reason: string; replacement?: { type?: string; duration_minutes?: number } };
     keyPoints?: string[];
   }> {
     try {

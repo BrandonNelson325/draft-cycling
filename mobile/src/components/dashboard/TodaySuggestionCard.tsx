@@ -49,7 +49,10 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
     try {
       await dailyAnalysisService.acceptAdjustment(
         data.suggestion.adjustment.kind as 'rest' | 'easier',
-        data.suggestion.adjustment.reason
+        data.suggestion.adjustment.reason,
+        data.suggestion.adjustment.alternativeWorkout
+          ? { type: data.suggestion.adjustment.alternativeWorkout.type, duration: data.suggestion.adjustment.alternativeWorkout.duration }
+          : undefined
       );
       const fresh = await dailyAnalysisService.getTodaySuggestion();
       setData(fresh);
@@ -131,14 +134,14 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
           <Text style={styles.workoutName}>{suggestion.adjustment.headline}</Text>
           <Text style={styles.workoutDesc}>{suggestion.adjustment.reason}</Text>
           <View style={styles.adjustmentButtons}>
-            {suggestion.adjustment.kind === 'rest' && (
+            {(suggestion.adjustment.kind === 'rest' || (suggestion.adjustment.kind === 'easier' && !!suggestion.adjustment.alternativeWorkout)) && (
               <TouchableOpacity
                 style={[styles.adjustmentButton, styles.adjustmentAccept, adjustmentBusy && styles.adjustmentDisabled]}
                 onPress={handleAcceptAdjustment}
                 disabled={adjustmentBusy}
                 activeOpacity={0.7}
               >
-                <Text style={styles.adjustmentAcceptText}>Take rest day</Text>
+                <Text style={styles.adjustmentAcceptText}>Accept suggestion</Text>
               </TouchableOpacity>
             )}
             <TouchableOpacity
@@ -147,7 +150,7 @@ export default function TodaySuggestionCard({ onWorkoutPress }: TodaySuggestionC
               disabled={adjustmentBusy}
               activeOpacity={0.7}
             >
-              <Text style={styles.adjustmentDismissText}>Keep my workout</Text>
+              <Text style={styles.adjustmentDismissText}>Continue with plan</Text>
             </TouchableOpacity>
           </View>
         </View>

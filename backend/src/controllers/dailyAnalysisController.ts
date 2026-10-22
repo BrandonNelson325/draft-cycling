@@ -1,6 +1,9 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { dailyAnalysisService, clearSuggestionCache } from '../services/dailyAnalysisService';
+import { dailyAnalysisService, clearSuggestionCache, resolveEasierReplacement } from '../services/dailyAnalysisService';
+import { buildWorkoutFromSpec } from '../services/trainingPlanService';
+import { workoutService } from '../services/workoutService';
+import { calendarService } from '../services/calendarService';
 import { supabaseAdmin } from '../utils/supabase';
 import { todayInTimezone } from '../utils/timezone';
 import { logger } from '../utils/logger';
@@ -76,9 +79,13 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
-    const { kind, reason } = req.body as { kind: 'rest' | 'easier'; reason?: string };
-    if (kind !== 'rest') {
-      res.status(400).json({ error: 'Only kind="rest" can be accepted in v1' });
+    const { kind, reason, replacement } = req.body as {
+      kind: 'rest' | 'easier';
+      reason?: string;
+      replacement?: { type?: string; duration?: number };
+    };
+    if (kind !== 'rest' && kind !== 'easier') {
+      res.status(400).json({ error: 'kind must be "rest" or "easier"' });
       return;
     }
 
@@ -91,7 +98,7 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
 
     const { data: entry, error: fetchErr } = await supabaseAdmin
       .from('calendar_entries')
-      .select('id, workout_id, entry_type')
+      .select('id, workout_id, entry_type, workouts(duration_minutes)')
       .eq('athlete_id', req.user.id)
       .eq('scheduled_date', todayStr)
       .eq('completed', false)
@@ -102,18 +109,44 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    // Snapshot the original so the plan can be shown/restored; then swap in
+    // either a rest day or the easier session the card showed.
+    const snapshot = {
+      original_workout_id: entry.workout_id,
+      original_entry_type: entry.entry_type,
+      adjusted_at: new Date().toISOString(),
+      adjustment_kind: kind,
+      adjustment_reason: reason || null,
+    };
+    let update: Record<string, any>;
+    if (kind === 'rest') {
+      update = { ...snapshot, workout_id: null, entry_type: 'rest', ai_rationale: reason || 'Coach-suggested rest day' };
+    } else {
+      const r = resolveEasierReplacement(
+        { type: replacement?.type, duration_minutes: replacement?.duration },
+        (entry as any).workouts?.duration_minutes
+      );
+      const spec = buildWorkoutFromSpec({
+        workout_type: r.type,
+        duration_minutes: r.duration,
+        day_of_week: 0,
+        rationale: reason || 'Coach-suggested easier session for today',
+      });
+      const workout = await workoutService.createWorkout(req.user.id, {
+        name: spec.name,
+        description: spec.description,
+        workout_type: spec.workout_type as any,
+        duration_minutes: spec.duration_minutes,
+        intervals: spec.intervals,
+        generated_by_ai: true,
+        ai_prompt: 'Accepted daily suggestion (easier)',
+      });
+      update = { ...snapshot, workout_id: workout.id, entry_type: 'workout', ai_rationale: reason || 'Coach-suggested easier session' };
+    }
+
     const { error: updateErr } = await supabaseAdmin
       .from('calendar_entries')
-      .update({
-        original_workout_id: entry.workout_id,
-        original_entry_type: entry.entry_type,
-        adjusted_at: new Date().toISOString(),
-        adjustment_kind: 'rest',
-        adjustment_reason: reason || null,
-        workout_id: null,
-        entry_type: 'rest',
-        ai_rationale: reason || 'Coach-suggested rest day',
-      })
+      .update(update)
       .eq('id', entry.id);
 
     if (updateErr) {
@@ -123,6 +156,8 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
     }
 
     clearSuggestionCache(req.user.id);
+    // Keep intervals.icu (→ head unit / Zwift) in step with the swapped calendar.
+    void calendarService.reconcileIntervalsIcu(req.user.id);
     res.json({ success: true });
   } catch (error: any) {
     logger.error('Error accepting adjustment:', error);

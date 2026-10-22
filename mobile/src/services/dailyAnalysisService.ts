@@ -87,8 +87,12 @@ export const dailyAnalysisService = {
     return data;
   },
 
-  async acceptAdjustment(kind: 'rest' | 'easier', reason?: string): Promise<void> {
-    await apiClient.post('/api/daily-analysis/adjustment/accept', { kind, reason });
+  async acceptAdjustment(
+    kind: 'rest' | 'easier',
+    reason?: string,
+    replacement?: { type: string; duration: number }
+  ): Promise<void> {
+    await apiClient.post('/api/daily-analysis/adjustment/accept', { kind, reason, replacement });
   },
 
   async dismissAdjustment(): Promise<void> {

@@ -6,7 +6,7 @@
  *
  * Run: npm run test:readiness
  */
-import { buildReadinessBlock } from '../services/dailyAnalysisService';
+import { buildReadinessBlock, resolveEasierReplacement } from '../services/dailyAnalysisService';
 
 let failures = 0;
 function check(label: string, cond: boolean, detail?: string) {
@@ -33,6 +33,16 @@ check('Resting HR +7 → ELEVATED', /→ ELEVATED/.test(low));
 check('Red WHOOP → go easy', /RED — not recovered/.test(buildReadinessBlock({ wellness_source: 'whoop', readiness_score: 25 }, history)));
 check('No baseline → told not to judge', /no baseline yet — do NOT call it high or low/.test(buildReadinessBlock({ hrv: 57 }, [])));
 check('No data → fallback line', /No morning check-in/.test(buildReadinessBlock(null)));
+
+// ---- "Accept suggestion" for an easier day puts a real, bounded workout on the calendar ----
+const r1 = resolveEasierReplacement({ type: 'endurance', duration_minutes: 60 }, 90);
+check('Model replacement used as given', r1.type === 'endurance' && r1.duration === 60 && r1.tss > 0);
+check('Never longer than the planned workout', resolveEasierReplacement({ type: 'endurance', duration_minutes: 150 }, 90).duration === 90);
+check('Hard types rejected → endurance', resolveEasierReplacement({ type: 'vo2max', duration_minutes: 60 }, 90).type === 'endurance');
+const r2 = resolveEasierReplacement(undefined, 90, 'Swap for Z2 endurance ride (~60 min, 40 TSS).');
+check('No replacement → read from the headline (Oct 22 card)', r2.type === 'endurance' && r2.duration === 60);
+check('Recovery headline → recovery ride', resolveEasierReplacement(null, 75, 'Spin an easy Z1 recovery ride, 40 min').type === 'recovery');
+check('Nothing usable → 60 min endurance, capped by plan', resolveEasierReplacement(null, 45).duration === 45);
 
 console.log(failures ? `\n${failures} FAILED` : '\nAll readiness tests passed');
 process.exit(failures ? 1 : 0);

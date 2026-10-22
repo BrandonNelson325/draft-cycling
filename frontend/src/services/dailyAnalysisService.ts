@@ -100,8 +100,12 @@ export const dailyAnalysisService = {
     return data!;
   },
 
-  async acceptAdjustment(kind: 'rest' | 'easier', reason?: string): Promise<void> {
-    const { error } = await api.post('/api/daily-analysis/adjustment/accept', { kind, reason }, true);
+  async acceptAdjustment(
+    kind: 'rest' | 'easier',
+    reason?: string,
+    replacement?: { type: string; duration: number }
+  ): Promise<void> {
+    const { error } = await api.post('/api/daily-analysis/adjustment/accept', { kind, reason, replacement }, true);
     if (error) {
       throw new Error(error.error || 'Failed to accept adjustment');
     }
