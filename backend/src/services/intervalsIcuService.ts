@@ -2,6 +2,15 @@ import axios from 'axios';
 import { supabaseAdmin } from '../utils/supabase';
 import { zwoGenerator } from './fileGenerators/zwoGenerator';
 import { logger } from '../utils/logger';
+
+// One row per (workout, calendar entry, integration) — without onConflict the
+// upsert INSERTs, hits that unique key, and the error was silently dropped, so
+// a re-push never recorded its new remote id (Oct 27 2026: moves left the old
+// remote id behind → duplicates on the device/calendar).
+const SYNC_ROW_KEY = { onConflict: 'workout_id,calendar_entry_id,integration' };
+const logSyncRowError = ({ error }: { error: any }) => {
+  if (error) logger.error(`[Sync] could not record workout_syncs row: ${error.message}`);
+};
 import { canWriteWellness } from '../utils/wellnessSource';
 
 const INTERVALS_ICU_BASE_URL = 'https://intervals.icu/api/v1';
@@ -259,8 +268,10 @@ class IntervalsIcuService {
         external_id: eventId?.toString(),
         external_url: `https://intervals.icu/athlete/${athlete.intervals_icu_athlete_id}/calendar?date=${scheduledDate.toISOString().split('T')[0]}`,
         sync_status: 'synced',
+        sync_error: null,
         last_synced_at: new Date().toISOString(),
-      });
+        updated_at: new Date().toISOString(),
+      }, SYNC_ROW_KEY).then(logSyncRowError);
 
       logger.debug(`✅ Workout synced to Intervals.icu: ${workout.name}`);
       return eventId;
@@ -276,7 +287,8 @@ class IntervalsIcuService {
         sync_status: 'failed',
         sync_error: error.message,
         last_synced_at: new Date().toISOString(),
-      });
+        updated_at: new Date().toISOString(),
+      }, SYNC_ROW_KEY).then(logSyncRowError);
 
       throw new Error('Failed to sync workout to Intervals.icu');
     }

@@ -1,6 +1,15 @@
 import axios from 'axios';
 import { supabaseAdmin } from '../utils/supabase';
 import { generateWahooPlan } from './wahooPlanGenerator';
+
+// One row per (workout, calendar entry, integration) — without onConflict the
+// upsert INSERTs, hits that unique key, and the error was silently dropped, so
+// a re-push never recorded its new remote id (Oct 27 2026: moves left the old
+// remote id behind → duplicates on the device/calendar).
+const SYNC_ROW_KEY = { onConflict: 'workout_id,calendar_entry_id,integration' };
+const logSyncRowError = ({ error }: { error: any }) => {
+  if (error) logger.error(`[Sync] could not record workout_syncs row: ${error.message}`);
+};
 import { logger } from '../utils/logger';
 
 const WAHOO_API_URL = 'https://api.wahooligan.com/v1';
@@ -207,8 +216,10 @@ class WahooService {
         integration: 'wahoo',
         external_id: wahooWorkoutId?.toString() || planId?.toString(),
         sync_status: 'synced',
+        sync_error: null,
         last_synced_at: new Date().toISOString(),
-      });
+        updated_at: new Date().toISOString(),
+      }, SYNC_ROW_KEY).then(logSyncRowError);
 
       logger.info(`Workout synced to Wahoo: ${workout.name}`);
       return wahooWorkoutId || planId;
@@ -222,7 +233,8 @@ class WahooService {
         sync_status: 'failed',
         sync_error: describeWahooError(error),
         last_synced_at: new Date().toISOString(),
-      });
+        updated_at: new Date().toISOString(),
+      }, SYNC_ROW_KEY).then(logSyncRowError);
       throw new Error('Failed to sync workout to Wahoo');
     }
   }

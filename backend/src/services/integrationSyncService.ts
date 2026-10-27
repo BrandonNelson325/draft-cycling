@@ -61,6 +61,8 @@ const enabledChecks: Record<IntegrationKey, (athlete: any) => boolean> = {
 const ATHLETE_SYNC_COLUMNS =
   'intervals_icu_auto_sync, intervals_icu_access_token, wahoo_auto_sync, wahoo_access_token';
 
+const backfillsRunning = new Set<string>();
+
 export const integrationSyncService = {
   /** Integrations this athlete has connected AND enabled auto-sync for. */
   async activeIntegrations(athleteId: string): Promise<IntegrationKey[]> {
@@ -187,6 +189,19 @@ export const integrationSyncService = {
    * otherwise nothing appears until something on the calendar changes.
    */
   async backfill(athleteId: string, key: IntegrationKey, days = 14): Promise<number> {
+    // Connect + the auto-sync toggle both trigger this within seconds; two
+    // overlapping runs each pushed every workout (Oct 27 2026: duplicates).
+    const lock = `${athleteId}:${key}`;
+    if (backfillsRunning.has(lock)) return 0;
+    backfillsRunning.add(lock);
+    try {
+      return await this.runBackfill(athleteId, key, days);
+    } finally {
+      backfillsRunning.delete(lock);
+    }
+  },
+
+  async runBackfill(athleteId: string, key: IntegrationKey, days: number): Promise<number> {
     const { data: athlete } = await supabaseAdmin
       .from('athletes').select(ATHLETE_SYNC_COLUMNS).eq('id', athleteId).single();
     if (!enabledChecks[key](athlete)) return 0;
