@@ -5,6 +5,17 @@ import { logger } from '../utils/logger';
 
 const WAHOO_API_URL = 'https://api.wahooligan.com/v1';
 const WAHOO_OAUTH_URL = 'https://api.wahooligan.com/oauth';
+/** Wahoo workout_type_id 0 = BIKING (generic; works indoor + outdoor). */
+const WAHOO_BIKING = '0';
+
+/** Wahoo's actual complaint (body), not axios's "Request failed with status code 4xx". */
+export function describeWahooError(error: any): string {
+  const data = error?.response?.data;
+  if (!data) return error?.message || 'Unknown Wahoo error';
+  if (typeof data === 'string') return data.slice(0, 300);
+  const msg = data.error_description || data.error || data.message || data.errors || data;
+  return (typeof msg === 'string' ? msg : JSON.stringify(msg)).slice(0, 300);
+}
 
 interface WahooConfig {
   clientId: string;
@@ -86,8 +97,9 @@ class WahooService {
       if (error) throw new Error(`Failed to store Wahoo tokens: ${error.message}`);
       logger.info(`Wahoo connected for athlete ${athleteId}`);
     } catch (error: any) {
-      logger.error('Wahoo OAuth callback error:', error.response?.data || error.message);
-      throw new Error('Failed to connect Wahoo account');
+      const reason = describeWahooError(error);
+      logger.error(`[Wahoo] OAuth callback error: ${reason}`);
+      throw new Error(reason);
     }
   }
 
@@ -164,33 +176,17 @@ class WahooService {
       if (!workout) throw new Error('Workout not found');
 
       const planContent = generateWahooPlan(workout, athlete.ftp);
-      const base64Plan = Buffer.from(planContent).toString('base64');
       const accessToken = await this.getAccessToken(athleteId);
-
-      // Step 1: Create plan
-      const planResponse = await axios.post(
-        `${WAHOO_API_URL}/plans`,
-        new URLSearchParams({
-          'plan[file]': `data:application/json;base64,${base64Plan}`,
-          'plan[filename]': `${workout.name.replace(/\s+/g, '_')}.plan`,
-          'plan[external_id]': workoutId,
-          'plan[provider_updated_at]': new Date().toISOString(),
-        }).toString(),
-        {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/x-www-form-urlencoded',
-          },
-        }
-      );
-      const planId = planResponse.data?.id;
+      const planId = await this.upsertPlan(accessToken, workout, planContent);
 
       // Step 2: Create workout (scheduled instance)
       const workoutResponse = await axios.post(
         `${WAHOO_API_URL}/workouts`,
         new URLSearchParams({
           'workout[name]': workout.name,
-          'workout[workout_type_id]': '40',
+          // Required by Wahoo; lets us recognise our own workouts later.
+          'workout[workout_token]': calendarEntryId || workoutId,
+          'workout[workout_type_id]': WAHOO_BIKING, // was '40' = KITEBOARDING
           'workout[starts]': scheduledDate.toISOString(),
           'workout[minutes]': workout.duration_minutes.toString(),
           'workout[plan_id]': planId?.toString() || '',
@@ -224,7 +220,7 @@ class WahooService {
         calendar_entry_id: calendarEntryId || null,
         integration: 'wahoo',
         sync_status: 'failed',
-        sync_error: error.response?.data?.error || error.message,
+        sync_error: describeWahooError(error),
         last_synced_at: new Date().toISOString(),
       });
       throw new Error('Failed to sync workout to Wahoo');
@@ -251,6 +247,22 @@ class WahooService {
   }
 
   async disconnect(athleteId: string): Promise<void> {
+    // Revoke at Wahoo first. Wahoo caps each user at 10 UNREVOKED tokens per
+    // app (since Jan 2026) — just forgetting ours locally leaks one per
+    // connect, and after enough reconnects the token exchange is refused.
+    // Revoking also triggers the portal's "delete upcoming workouts / owned
+    // plans" cleanup.
+    try {
+      const { data: athlete } = await supabaseAdmin
+        .from('athletes').select('wahoo_access_token').eq('id', athleteId).single();
+      if (athlete?.wahoo_access_token) {
+        const token = await this.getAccessToken(athleteId).catch(() => athlete.wahoo_access_token);
+        await axios.delete(`${WAHOO_API_URL}/permissions`, { headers: { Authorization: `Bearer ${token}` } });
+      }
+    } catch (err: any) {
+      logger.warn(`[Wahoo] revoke on disconnect failed: ${describeWahooError(err)}`);
+    }
+
     const { error } = await supabaseAdmin
       .from('athletes')
       .update({
@@ -262,6 +274,62 @@ class WahooService {
       })
       .eq('id', athleteId);
     if (error) throw new Error(`Failed to disconnect Wahoo: ${error.message}`);
+  }
+
+  /**
+   * Create the plan (library item) for a Draft workout, or UPDATE it if we
+   * already pushed one — plan external_id must be unique per app, so a move or
+   * re-push of the same workout would otherwise be rejected as a duplicate.
+   */
+  private async upsertPlan(accessToken: string, workout: any, planContent: string): Promise<number> {
+    const headers = {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    };
+    const file = `data:application/json;base64,${Buffer.from(planContent).toString('base64')}`;
+    const filename = `${String(workout.name).replace(/[^\w-]+/g, '_')}.json`;
+    const now = new Date().toISOString();
+
+    try {
+      const res = await axios.post(
+        `${WAHOO_API_URL}/plans`,
+        new URLSearchParams({
+          'plan[file]': file,
+          'plan[filename]': filename,
+          'plan[external_id]': workout.id,
+          'plan[provider_updated_at]': now,
+        }).toString(),
+        { headers }
+      );
+      return res.data?.id;
+    } catch (err: any) {
+      const existing = err.response?.status === 422 ? await this.findPlanId(accessToken, workout.id) : null;
+      if (!existing) throw err;
+      await axios.put(
+        `${WAHOO_API_URL}/plans/${existing}`,
+        new URLSearchParams({
+          'plan[file]': file,
+          'plan[filename]': filename,
+          'plan[provider_updated_at]': now,
+        }).toString(),
+        { headers }
+      );
+      return existing;
+    }
+  }
+
+  private async findPlanId(accessToken: string, externalId: string): Promise<number | null> {
+    for (let page = 1; page <= 10; page++) {
+      const res = await axios.get(`${WAHOO_API_URL}/plans`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        params: { page, per_page: 100, external_id: externalId },
+      });
+      const plans: any[] = Array.isArray(res.data) ? res.data : res.data?.plans || [];
+      const hit = plans.find((p) => String(p.external_id) === String(externalId));
+      if (hit) return hit.id;
+      if (plans.length < 100) break;
+    }
+    return null;
   }
 
   async isConnected(athleteId: string): Promise<boolean> {

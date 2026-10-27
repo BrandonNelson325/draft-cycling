@@ -39,7 +39,8 @@ function check(label: string, cond: boolean, detail?: string) {
   fitGenerator.writeWorkoutStep({ writeMessage: (_: string, r: any) => steps.push(r) } as any, 0, block as any, 300);
   check('FIT: test block has an open target', steps[0]?.target_type === 'open');
   const wahoo = generateWahooPlan(asWorkout(adv), 300);
-  check('Wahoo: test block band is wide (not ±2%)', /PERCENT_FTP_LO=95\nPERCENT_FTP_HI=200/.test(wahoo));
+  const wahooFirst = JSON.parse(wahoo).intervals.find((i: any) => i.exit_trigger_value === 1200)?.targets?.[0];
+  check('Wahoo: test block band is wide (not ±2%)', wahooFirst?.low === 0.95 && wahooFirst?.high === 2, JSON.stringify(wahooFirst));
 
   // ---- Result decisions ----
   check('No FTP yet → test sets it', decideFtpFromTest(null, 280).commit && decideFtpFromTest(null, 280).testFtp === 266);

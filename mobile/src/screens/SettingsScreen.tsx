@@ -388,7 +388,10 @@ export default function SettingsScreen({ navigation }: any) {
         const status = params.get('status');
         if (status === 'connected') {
           setWahooConnected(true);
-          Alert.alert('Connected', 'Wahoo connected successfully!');
+          setWahooAutoSync(true);
+          Alert.alert('Connected', 'Wahoo connected! Your next 2 weeks of workouts are on their way to your ELEMNT.');
+        } else if (status === 'error') {
+          Alert.alert('Wahoo connection failed', params.get('reason') || 'Please try again.');
         }
       }
     } catch (err: any) {

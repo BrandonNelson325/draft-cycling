@@ -181,6 +181,47 @@ export const integrationSyncService = {
     this.deleteRemotes(athleteId, refs);
   },
 
+  /**
+   * An integration was just CONNECTED (or auto-sync turned on): push every
+   * upcoming, uncompleted workout so the device has the plan immediately —
+   * otherwise nothing appears until something on the calendar changes.
+   */
+  async backfill(athleteId: string, key: IntegrationKey, days = 14): Promise<number> {
+    const { data: athlete } = await supabaseAdmin
+      .from('athletes').select(ATHLETE_SYNC_COLUMNS).eq('id', athleteId).single();
+    if (!enabledChecks[key](athlete)) return 0;
+
+    const today = new Date().toISOString().slice(0, 10);
+    const until = new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+    const { data: entries } = await supabaseAdmin
+      .from('calendar_entries')
+      .select('id, workout_id, scheduled_date')
+      .eq('athlete_id', athleteId)
+      .eq('completed', false)
+      .not('workout_id', 'is', null)
+      .gte('scheduled_date', today)
+      .lte('scheduled_date', until)
+      .order('scheduled_date');
+
+    let pushed = 0;
+    for (const e of entries || []) {
+      const [y, m, d] = String(e.scheduled_date).split('-').map(Number);
+      try {
+        // mirrorMove semantics for one integration: drop any stale remote first.
+        const refs = (await this.captureRefs(athleteId, [e.id])).filter((r) => r.integration === key);
+        for (const r of refs) {
+          await deleters[key](athleteId, r.externalId).catch(() => undefined);
+        }
+        await uploaders[key](athleteId, e.workout_id, new Date(y, m - 1, d, 12), e.id);
+        pushed++;
+      } catch (err: any) {
+        logger.warn(`[Sync] ${key}: backfill failed for entry ${e.id}: ${err.message}`);
+      }
+    }
+    logger.info(`[Sync] ${key}: backfilled ${pushed}/${entries?.length || 0} upcoming workouts for ${athleteId}`);
+    return pushed;
+  },
+
   /** Mirror a newly scheduled workout to every active integration. */
   async mirrorUpload(
     athleteId: string,

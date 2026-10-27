@@ -22,11 +22,12 @@ export function WahooConnect() {
     const params = new URLSearchParams(window.location.search);
     const result = params.get('wahoo');
     if (result === 'error') {
-      setError('Wahoo connection failed. Please try again.');
+      setError(`Wahoo connection failed${params.get('reason') ? `: ${params.get('reason')}` : '. Please try again.'}`);
     }
     if (result) {
       const url = new URL(window.location.href);
       url.searchParams.delete('wahoo');
+      url.searchParams.delete('reason');
       window.history.replaceState({}, '', url.toString());
     }
     loadStatus();

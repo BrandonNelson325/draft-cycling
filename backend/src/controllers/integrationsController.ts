@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { intervalsIcuService } from '../services/intervalsIcuService';
 import { wahooService } from '../services/wahooService';
+import { integrationSyncService } from '../services/integrationSyncService';
 import { supabaseAdmin } from '../utils/supabase';
 import { whoopService } from '../services/whoopService';
 import { verifyWhoopSignature } from '../utils/whoopMapping';
@@ -293,18 +294,24 @@ export const handleWahooCallback = async (req: AuthRequest, res: Response): Prom
     const isMobile = state.includes(':mobile');
     const athleteId = state.replace(':mobile', '');
     await wahooService.handleCallback(code, athleteId);
+    // Put the upcoming plan on the device right away (background).
+    integrationSyncService.backfill(athleteId, 'wahoo').catch((err) =>
+      console.error('Wahoo backfill error:', err.message)
+    );
     if (isMobile) {
       res.redirect(`cyclingcoach://wahoo/callback?status=connected`);
     } else {
       res.redirect(`${process.env.FRONTEND_URL}/settings?wahoo=connected`);
     }
   } catch (error: any) {
-    console.error('Wahoo callback error:', error);
+    console.error('Wahoo callback error:', error.message);
     const isMobile = (req.query.state as string)?.includes(':mobile');
+    // Wahoo can also bounce here with ?error=access_denied (user hit Deny).
+    const reason = encodeURIComponent(String(req.query.error_description || req.query.error || error.message || '').slice(0, 200));
     if (isMobile) {
-      res.redirect(`cyclingcoach://wahoo/callback?status=error`);
+      res.redirect(`cyclingcoach://wahoo/callback?status=error&reason=${reason}`);
     } else {
-      res.redirect(`${process.env.FRONTEND_URL}/settings?wahoo=error`);
+      res.redirect(`${process.env.FRONTEND_URL}/settings?wahoo=error&reason=${reason}`);
     }
   }
 };
@@ -363,6 +370,11 @@ export const updateWahooSettings = async (req: AuthRequest, res: Response): Prom
       .update({ wahoo_auto_sync: auto_sync })
       .eq('id', req.user.id);
     if (error) throw new Error(`Failed to update settings: ${error.message}`);
+    if (auto_sync) {
+      integrationSyncService.backfill(req.user.id, 'wahoo').catch((err) =>
+        console.error('Wahoo backfill error:', err.message)
+      );
+    }
     res.json({ success: true, auto_sync });
   } catch (error: any) {
     console.error('Error updating Wahoo settings:', error);
