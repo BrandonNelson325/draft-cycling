@@ -25,7 +25,8 @@
     "eval:awareness": "ts-node -r dotenv/config src/scripts/evalCoachAwareness.ts",
     "test:whoop": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyWhoop.ts",
     "test:cross-training": "SUPABASE_URL=https://x.supabase.co SUPABASE_ANON_KEY=anon-dummy SUPABASE_SERVICE_ROLE_KEY=service-dummy ANTHROPIC_API_KEY=sk-dummy ts-node src/scripts/verifyCrossTraining.ts",
-    "grant-access": "ts-node --transpile-only src/scripts/grantAccess.ts"
+    "grant-access": "ts-node --transpile-only src/scripts/grantAccess.ts",
+    "test:back-to-back": "ts-node src/scripts/verifyBackToBack.ts"
   },
   "keywords": [],
   "author": "",

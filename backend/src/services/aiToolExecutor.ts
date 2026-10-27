@@ -19,6 +19,7 @@ import { aiPlanDesignerService } from './aiPlanDesignerService';
 import { stravaService } from './stravaService';
 import { crossTrainingService } from './crossTrainingService';
 import { FTP_TEST_NOTE_PREFIX } from './ftpTestService';
+import { backToBackConflict, DayLoad } from '../utils/backToBack';
 
 /**
  * Format YYYY-MM-DD as "Monday Mar 30, 2026" so the AI doesn't need to compute day-of-week.
@@ -35,6 +36,62 @@ interface ToolResult {
   content: string;
   is_error?: boolean;
 }
+
+const shiftIso = (iso: string, days: number): string => {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + days));
+  return dt.toISOString().slice(0, 10);
+};
+
+/**
+ * Load the day before / after `dateIso` and return the coach-facing conflict
+ * if placing this workout there stacks hard days. `excludeEntryId` = the entry
+ * being moved (it may currently sit on a neighbouring day).
+ */
+async function checkBackToBack(
+  athleteId: string,
+  workout: { name?: string | null; workout_type?: string | null },
+  dateIso: string,
+  excludeEntryId?: string
+): Promise<string | null> {
+  const before = shiftIso(dateIso, -1);
+  const after = shiftIso(dateIso, 1);
+  const [{ data: athlete }, { data: entries }, { data: rides }] = await Promise.all([
+    supabaseAdmin.from('athletes').select('ftp').eq('id', athleteId).single(),
+    supabaseAdmin
+      .from('calendar_entries')
+      .select('id, scheduled_date, completed, workouts(name, workout_type)')
+      .eq('athlete_id', athleteId)
+      .in('scheduled_date', [before, after]),
+    supabaseAdmin
+      .from('strava_activities')
+      .select('name, start_date, perceived_effort, raw_data')
+      .eq('athlete_id', athleteId)
+      .gte('start_date', `${shiftIso(before, -1)}T00:00:00Z`)
+      .lte('start_date', `${shiftIso(after, 1)}T23:59:59Z`),
+  ]);
+
+  const day = (iso: string): DayLoad => ({
+    rides: (rides || [])
+      .filter((r: any) => String(r.raw_data?.start_date_local || r.start_date).slice(0, 10) === iso)
+      .map((r: any) => ({
+        name: r.name || '',
+        rpe: r.perceived_effort,
+        intensityFactor:
+          r.raw_data?.weighted_average_watts && athlete?.ftp ? r.raw_data.weighted_average_watts / athlete.ftp : null,
+      })),
+    planned: (entries || [])
+      .filter((e: any) => e.scheduled_date === iso && !e.completed && e.id !== excludeEntryId && e.workouts)
+      .map((e: any) => ({ name: e.workouts.name, workout_type: e.workouts.workout_type })),
+  });
+
+  return backToBackConflict(workout, day(before), day(after));
+}
+
+const BACK_TO_BACK_INSTRUCTIONS =
+  'NOT DONE YET. Tell the athlete plainly why this stacks hard days, recommend the better option (usually keep the easy day ' +
+  'after the hard one), and ask if they still want it. Do not describe their legs as fresh. Only if they confirm, call this ' +
+  'tool again with athlete_confirmed: true.';
 
 export const aiToolExecutor = {
   /**
@@ -351,6 +408,15 @@ export const aiToolExecutor = {
       );
     }
 
+    if (!input.athlete_confirmed) {
+      const { data: w } = await supabaseAdmin
+        .from('workouts').select('name, workout_type').eq('id', input.workout_id).single();
+      const conflict = w ? await checkBackToBack(athleteId, w, dateStr) : null;
+      if (conflict) {
+        return { success: false, needs_athlete_confirmation: true, conflict, instructions: BACK_TO_BACK_INSTRUCTIONS };
+      }
+    }
+
     const entry = await calendarService.scheduleWorkout(
       athleteId,
       input.workout_id,
@@ -399,6 +465,20 @@ export const aiToolExecutor = {
 
     if (!entryId) {
       return { success: false, error: 'Provide either entry_id or current_date to identify the workout' };
+    }
+
+    if (!input.athlete_confirmed) {
+      const { data: moving } = await supabaseAdmin
+        .from('calendar_entries')
+        .select('workouts(name, workout_type)')
+        .eq('id', entryId)
+        .eq('athlete_id', athleteId)
+        .single();
+      const w = (moving as any)?.workouts;
+      const conflict = w ? await checkBackToBack(athleteId, w, input.new_date, entryId) : null;
+      if (conflict) {
+        return { success: false, needs_athlete_confirmation: true, conflict, instructions: BACK_TO_BACK_INSTRUCTIONS };
+      }
     }
 
     const entry = await calendarService.moveWorkout(entryId, athleteId, newDate);

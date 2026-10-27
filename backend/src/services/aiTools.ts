@@ -84,6 +84,10 @@ export const AI_TOOLS: Tool[] = [
           type: 'string',
           description: 'Why this workout on this day (optional)',
         },
+        athlete_confirmed: {
+          type: 'boolean',
+          description: 'Set true ONLY after the athlete explicitly confirmed a back-to-back hard day you warned them about (the tool returns needs_athlete_confirmation first).',
+        },
       },
       required: ['workout_id', 'scheduled_date'],
     },
@@ -106,6 +110,10 @@ export const AI_TOOLS: Tool[] = [
         new_date: {
           type: 'string',
           description: 'New date in YYYY-MM-DD format',
+        },
+        athlete_confirmed: {
+          type: 'boolean',
+          description: 'Set true ONLY after the athlete explicitly confirmed a back-to-back hard day you warned them about (the tool returns needs_athlete_confirmation first).',
         },
       },
       required: ['new_date'],

@@ -15,6 +15,9 @@ import { localDayToUTCRange } from '../utils/timezone';
 import { summarizeWhoop, WHOOP_COACHING_RULES, WellnessDay } from '../utils/whoopCoaching';
 import { summarizeHrvTrend, HRV_TREND_RULES } from '../utils/wellnessTrend';
 import { crossTrainingService } from './crossTrainingService';
+
+/** The app's post-ride RPE scale (PostRideModal): 1–5, 5 = Max. */
+const RPE_LABELS: Record<number, string> = { 1: 'very easy', 2: 'easy', 3: 'moderate', 4: 'hard', 5: 'MAX effort' };
 import { describeCrossTraining, CROSS_TRAINING_RULES, CrossTrainingRow } from '../utils/crossTrainingCoaching';
 
 // Advisor tool: Opus provides strategic guidance to Sonnet for complex reasoning
@@ -678,7 +681,9 @@ USE THIS PROFILE TO:
           prompt += `, TSS:${ride.tss}`;
         }
         if (ride.perceived_effort) {
-          prompt += `, RPE:${ride.perceived_effort}`;
+          // Scale spelled out: a bare "RPE:5" read as a moderate 5/10, and the
+          // coach called a maximal race day "fresh legs" (Oct 27 2026).
+          prompt += `, RPE ${ride.perceived_effort}/5 (${RPE_LABELS[ride.perceived_effort] || '?'})`;
         }
         if (ride.post_activity_notes) {
           prompt += ` — "${ride.post_activity_notes}"`;
@@ -868,6 +873,7 @@ ${fatigueProfileService.formatCoachingGuidelines(fatigueProfile)}
 
 **REST DAYS ARE A REAL PRESCRIPTION:**
 - A rest day IS a training prescription. It is just as important as a hard workout.
+- ATHLETE-REQUESTED CALENDAR CHANGES: you are their coach, not a scheduler. If a move or swap puts a hard session (sprints, VO2, threshold, race, test) the day after — or before — a race or a hard ride, say so BEFORE doing it, recommend the better option, and ask if they still want it. move_workout / schedule_workout enforce this and return needs_athlete_confirmation; relay that honestly, and only re-call with athlete_confirmed: true once they say yes. Hard back-to-back is fine when deliberate — then make it deliberate ("legs will be heavy; treat the sprints as quality-over-quantity and cut it short if power is down"). Never call legs "fresh" the day after an RPE 4–5 ride or a race.
 - When the athlete is genuinely fatigued (ACWR > 1.3, high recent volume, multiple hard days in a row, high RPE trends), PRESCRIBE rest — don't suggest a recovery ride just to fill the day.
 - Signs you should prescribe rest instead of a ride:
   - Consecutive training days BEYOND what this athlete is built for — scale to experience: a beginner may need rest after 2–3 straight days; an intermediate after ~4–5; an ADVANCED rider routinely trains 5–6 days in a row and that alone is NOT a reason to rest. Consecutive days only matter combined with real fatigue signals (load, RPE, readiness), never by count alone.
