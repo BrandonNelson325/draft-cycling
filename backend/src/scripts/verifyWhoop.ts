@@ -1,6 +1,6 @@
 /**
  * WHOOP integration: mapping, webhook signatures, source priority, the coach's
- * Whoop summary, and readiness. Pure/offline — no Whoop or DB calls.
+ * WHOOP summary, and readiness. Pure/offline — no WHOOP or DB calls.
  *
  * Run: npm run test:whoop
  */
@@ -18,9 +18,9 @@ function check(label: string, cond: boolean, detail?: string) {
 }
 
 // ---- Day mapping ----
-check('Local date uses Whoop offset (late-UTC wake → previous local day)',
+check('Local date uses WHOOP offset (late-UTC wake → previous local day)',
   localDateTime('2026-10-09T03:30:00Z', '-06:00').date === '2026-10-08');
-check('Local date uses Whoop offset (positive offset rolls forward)',
+check('Local date uses WHOOP offset (positive offset rolls forward)',
   localDateTime('2026-10-08T22:30:00Z', '+02:00').date === '2026-10-09');
 
 const sleepMain = {
@@ -51,7 +51,7 @@ check('Naps never define the day', !days.some((d) => d.date === '2026-10-09' && 
 check('PENDING_SCORE recovery ignored', days.every((d) => d.fields.readiness_score !== undefined ? d.fields.readiness_score === 41 : true));
 check('Non-ride activity kept on its local day (soccer, evening of the 8th)',
   !!d8 && d8.fields.other_activities?.length === 1 && d8.fields.other_activities[0].sport === 'soccer' && d8.fields.other_activities[0].minutes === 75);
-check('Whoop-recorded rides ignored (Strava has them with power)', isCyclingSport('cycling') && isCyclingSport('Mountain Biking') && !isCyclingSport('soccer'));
+check('WHOOP-recorded rides ignored (Strava has them with power)', isCyclingSport('cycling') && isCyclingSport('Mountain Biking') && !isCyclingSport('soccer'));
 check('Strain/activity-only day does not claim the wellness source', d8?.hasWellness === false);
 
 // ---- Webhook signature ----
@@ -64,11 +64,11 @@ check('Signature: tampered body rejected', !verifyWhoopSignature(Buffer.from(bod
 check('Signature: missing headers rejected', !verifyWhoopSignature(Buffer.from(body), undefined, sig, secret) && !verifyWhoopSignature(Buffer.from(body), ts, undefined, secret));
 
 // ---- Source priority ----
-check('Priority: Apple Health cannot overwrite Whoop', !canWriteWellness('whoop', 'apple_health'));
-check('Priority: intervals.icu cannot overwrite Whoop either', !canWriteWellness('whoop', 'intervals_icu'));
-check('Non-Whoop athletes unchanged: intervals.icu and Apple Health still overwrite each other (their opt-in decides which is used)',
+check('Priority: Apple Health cannot overwrite WHOOP', !canWriteWellness('whoop', 'apple_health'));
+check('Priority: intervals.icu cannot overwrite WHOOP either', !canWriteWellness('whoop', 'intervals_icu'));
+check('Non-WHOOP athletes unchanged: intervals.icu and Apple Health still overwrite each other (their opt-in decides which is used)',
   canWriteWellness('apple_health', 'intervals_icu') && canWriteWellness('intervals_icu', 'apple_health'));
-check('Priority: Whoop overwrites Apple Health; anything fills an empty day', canWriteWellness('apple_health', 'whoop') && canWriteWellness(null, 'intervals_icu'));
+check('Priority: WHOOP overwrites Apple Health; anything fills an empty day', canWriteWellness('apple_health', 'whoop') && canWriteWellness(null, 'intervals_icu'));
 
 // ---- Coach summary ----
 check('Bands: 67 green, 66 yellow, 34 yellow, 33 red', bandFor(67) === 'green' && bandFor(66) === 'yellow' && bandFor(34) === 'yellow' && bandFor(33) === 'red');
@@ -106,7 +106,7 @@ check('Real red not flagged: red yesterday too', !summarizeWhoop('2026-10-09', a
 const afterSoccer = [looseStrap[0], { ...base[0], other_activities: [{ sport: 'soccer', minutes: 90, strain: 15 }] }, ...base.slice(1)];
 check('Real red not flagged: hard soccer yesterday', !summarizeWhoop('2026-10-09', afterSoccer as any).suspect);
 
-// ---- Recovery push (replaces the check-in nag for Whoop users) ----
+// ---- Recovery push (replaces the check-in nag for WHOOP users) ----
 const pGreen = buildRecoveryPush({ recovery: 82, summary: { hasToday: true, band: 'green', consecutiveReds: 0, suspect: false, line: '' },
   sleepSeconds: 7.5 * 3600, sleepNeedSeconds: 8 * 3600, workoutName: 'Draft - Threshold Intervals · 3 × 12 min @ 93%' });
 check('Push (green): title + sleep + go as planned', pGreen.title === '🟢 Recovery 82% · Green' && /^Slept 7h30 of 8h00 needed\. Green light — Threshold Intervals/.test(pGreen.body), `${pGreen.title} | ${pGreen.body}`);
@@ -117,7 +117,7 @@ check('Push (red that does not add up): asks how legs feel', /loose strap/.test(
 const pRest = buildRecoveryPush({ recovery: 50, summary: { hasToday: true, band: 'yellow', consecutiveReds: 0, suspect: false, line: '' } });
 check('Push (no workout scheduled): still useful', /Moderate day/.test(pRest.body));
 
-// ---- Provisional call before Whoop scores ----
+// ---- Provisional call before WHOOP scores ----
 const prGreen = buildProvisionalCall({ todayIso: '2026-10-10', latest: { date: '2026-10-09', readinessScore: 80 }, tsb: 4, workoutName: 'Draft - Tempo Ride' });
 check('Provisional (green yesterday, fresh): labeled + green light', /^Provisional \(yesterday 80% \(green\), form \(TSB\) \+4\): likely a green-light day — Tempo Ride as planned\. This updates when WHOOP scores/.test(prGreen), prGreen);
 const prDeep = buildProvisionalCall({ todayIso: '2026-10-10', latest: { date: '2026-10-09', readinessScore: 50 }, tsb: -20, workoutName: 'Draft - VO2max' });
@@ -125,14 +125,14 @@ check('Provisional (yellow + deep fatigue): conservative', /plan conservatively 
 const prNone = buildProvisionalCall({ todayIso: '2026-10-10', latest: null, tsb: null, workoutName: null });
 check('Provisional (no history): still sensible', /^Provisional: keep any riding steady/.test(prNone), prNone);
 
-// ---- Readiness uses Whoop recovery, skips subjective inputs ----
+// ---- Readiness uses WHOOP recovery, skips subjective inputs ----
 const light = { last7DaysTSS: 300, last7DaysRides: 4, yesterdayWorkout: null, lastRideDate: new Date().toISOString() };
 const r = dailyReadinessService.calculateReadiness(light, { wellness_source: 'whoop', readiness_score: 25, feeling_score: 10, sleep_score: 10 });
-check('Readiness: Whoop red drives it (great "feeling" ignored)', r.readinessScore < 5 && /Whoop recovery 25% \(red\)/.test(r.reasoning), `${r.readinessScore.toFixed(1)} — ${r.reasoning}`);
+check('Readiness: WHOOP red drives it (great "feeling" ignored)', r.readinessScore < 5 && /WHOOP recovery 25% \(red\)/.test(r.reasoning), `${r.readinessScore.toFixed(1)} — ${r.reasoning}`);
 const g = dailyReadinessService.calculateReadiness(light, { wellness_source: 'whoop', readiness_score: 90 });
-check('Readiness: Whoop green → high', g.readinessScore >= 8, g.readinessScore.toFixed(1));
+check('Readiness: WHOOP green → high', g.readinessScore >= 8, g.readinessScore.toFixed(1));
 
-// ---- HRV trend for non-Whoop watches (Apple Health / intervals.icu) ----
+// ---- HRV trend for non-WHOOP watches (Apple Health / intervals.icu) ----
 const ah = (date: string, hrv: number, rhr = 50, sleep = 7.5 * 3600) => ({ date, wellness_source: 'apple_health', hrv, rhr, sleep_seconds: sleep });
 const baseAh = [ah('2026-10-08', 60), ah('2026-10-07', 62), ah('2026-10-06', 58), ah('2026-10-05', 61)];
 const low = summarizeHrvTrend('2026-10-09', [ah('2026-10-09', 44, 56, 6 * 3600), ...baseAh]);

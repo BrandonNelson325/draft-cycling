@@ -19,7 +19,7 @@ export interface WellnessData {
 
 export interface WhoopReadinessStatus {
   connected: boolean;
-  /** Connected, but today's recovery isn't scored yet (Whoop scores after you wake). */
+  /** Connected, but today's recovery isn't scored yet (WHOOP scores after you wake). */
   awaitingToday: boolean;
   latest: { date: string; readinessScore: number; hrv: number | null; rhr: number | null; sleepSeconds: number | null; sleepNeedSeconds: number | null; dayStrain: number | null } | null;
   /** While awaiting today's score: a labeled provisional call. */
@@ -28,7 +28,7 @@ export interface WhoopReadinessStatus {
 
 export interface DailyReadiness {
   whoop?: WhoopReadinessStatus;
-  /** HRV vs baseline for non-Whoop watches. */
+  /** HRV vs baseline for non-WHOOP watches. */
   hrvTrend?: { status: 'normal' | 'slightly_low' | 'low' | 'high' | null; hrvPct: number | null; lowStreak: number; suspect: boolean } | null;
   date: string;
   hasCheckedInToday: boolean;
@@ -60,7 +60,7 @@ export interface DailyReadiness {
 
 export interface DailyCheckInData {
   sleepQuality?: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
-  /** Optional on WHOOP days — Whoop's recovery replaces the subjective questions. */
+  /** Optional on WHOOP days — WHOOP's recovery replaces the subjective questions. */
   feeling?: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
   notes?: string;
   /** WHOOP days: "anything off?" — things the strap can't see. */

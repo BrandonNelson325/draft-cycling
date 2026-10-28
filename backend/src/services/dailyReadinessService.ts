@@ -36,7 +36,7 @@ export interface WellnessData {
 /** WHOOP connection state for the morning card / dashboard. */
 export interface WhoopReadinessStatus {
   connected: boolean;
-  /** Connected, but today's recovery isn't scored yet (Whoop scores after you wake). */
+  /** Connected, but today's recovery isn't scored yet (WHOOP scores after you wake). */
   awaitingToday: boolean;
   /** Most recent scored day (today or earlier) — the dashboard never goes blank. */
   latest: { date: string; readinessScore: number; hrv: number | null; rhr: number | null; sleepSeconds: number | null; sleepNeedSeconds: number | null; dayStrain: number | null } | null;
@@ -60,7 +60,7 @@ export interface DailyReadiness {
   reasoning: string;
   wellness: WellnessData | null;
   whoop?: WhoopReadinessStatus;
-  /** HRV vs baseline for non-Whoop watches (Apple Health / intervals.icu). */
+  /** HRV vs baseline for non-WHOOP watches (Apple Health / intervals.icu). */
   hrvTrend?: { status: string | null; hrvPct: number | null; lowStreak: number; suspect: boolean } | null;
 }
 
@@ -93,7 +93,7 @@ export const dailyReadinessService = {
     const recentActivity = await this.getRecentActivity(athleteId);
 
     // HRV vs the athlete's own baseline (Apple Health / intervals.icu users —
-    // Whoop users use Whoop recovery instead).
+    // WHOOP users use WHOOP recovery instead).
     let hrvTrend = null;
     if (todayMetrics?.hrv != null && todayMetrics?.wellness_source !== 'whoop') {
       const since = new Date(new Date(today + 'T12:00:00Z').getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
@@ -307,17 +307,17 @@ export const dailyReadinessService = {
 
     // WHOOP: its recovery % is the physiological base (it already blends HRV,
     // RHR, sleep and strain against the athlete's own baseline). Draft's load
-    // factors below still apply — they're about the TRAINING context Whoop
-    // can't see. Subjective sleep/feeling are skipped (not asked for Whoop users).
+    // factors below still apply — they're about the TRAINING context WHOOP
+    // can't see. Subjective sleep/feeling are skipped (not asked for WHOOP users).
     const whoopRecovery = metrics?.wellness_source === 'whoop' && typeof metrics?.readiness_score === 'number'
       ? metrics.readiness_score as number : null;
     if (whoopRecovery != null) {
       readinessScore = 1 + (whoopRecovery / 100) * 9;
       const band = whoopRecovery >= 67 ? 'green' : whoopRecovery >= 34 ? 'yellow' : 'red';
-      reasoning += `Whoop recovery ${whoopRecovery}% (${band})${metrics.recovery_calibrating ? ' — still calibrating' : ''}. `;
+      reasoning += `WHOOP recovery ${whoopRecovery}% (${band})${metrics.recovery_calibrating ? ' — still calibrating' : ''}. `;
     }
 
-    // HRV vs baseline (non-Whoop watches): a suppressed HRV lowers readiness;
+    // HRV vs baseline (non-WHOOP watches): a suppressed HRV lowers readiness;
     // a reading nothing else supports (suspect) is not trusted.
     const hrvTrend = whoopRecovery == null ? metrics?.hrv_trend : null;
     if (hrvTrend && !hrvTrend.suspect) {
@@ -419,7 +419,7 @@ export const dailyReadinessService = {
       sleepQuality?: 'terrible' | 'poor' | 'okay' | 'good' | 'great';
       feeling?: 'exhausted' | 'tired' | 'normal' | 'good' | 'energized';
       notes?: string;
-      /** WHOOP users' one optional tap: what Whoop can't see. */
+      /** WHOOP users' one optional tap: what WHOOP can't see. */
       offFlags?: string[];
     },
     localDate?: string

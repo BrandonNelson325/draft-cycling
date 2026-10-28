@@ -1072,7 +1072,7 @@ export default function SettingsScreen({ navigation }: any) {
             <View style={styles.section}>
               <Text style={{ color: '#94a3b8', fontSize: 12, lineHeight: 17, marginBottom: 8 }}>
                 Read sleep, HRV, and resting heart rate from Apple Health (Apple Watch, Garmin,
-                Whoop, or any device that writes to Health).
+                WHOOP, or any device that writes to Health).
               </Text>
               <View style={styles.notifRow}>
                 <View style={{ flex: 1, paddingRight: 12 }}>

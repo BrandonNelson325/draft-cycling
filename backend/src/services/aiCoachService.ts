@@ -546,11 +546,11 @@ IMPORTANT: The training status above is what the athlete sees on their dashboard
       if (dailyCheckIn) {
         // Objective wellness data — prefer when present.
         if (dailyCheckIn.wellness_source === 'whoop') {
-          if (dailyCheckIn.readiness_score != null) prompt += `- Whoop recovery: ${dailyCheckIn.readiness_score}%${dailyCheckIn.recovery_calibrating ? ' (calibrating)' : ''}\n`;
-          if (dailyCheckIn.hrv) prompt += `- HRV: ${dailyCheckIn.hrv}ms [Whoop]\n`;
-          if (dailyCheckIn.rhr) prompt += `- Resting HR: ${dailyCheckIn.rhr} bpm [Whoop]\n`;
-          if (dailyCheckIn.sleep_seconds) prompt += `- Sleep: ${(dailyCheckIn.sleep_seconds / 3600).toFixed(1)}h${dailyCheckIn.sleep_need_seconds ? ` of ${(dailyCheckIn.sleep_need_seconds / 3600).toFixed(1)}h needed` : ''}${dailyCheckIn.wellness_sleep_score != null ? ` (performance ${dailyCheckIn.wellness_sleep_score}%)` : ''} [Whoop]\n`;
-          if (dailyCheckIn.respiratory_rate) prompt += `- Respiratory rate: ${dailyCheckIn.respiratory_rate} [Whoop]\n`;
+          if (dailyCheckIn.readiness_score != null) prompt += `- WHOOP recovery: ${dailyCheckIn.readiness_score}%${dailyCheckIn.recovery_calibrating ? ' (calibrating)' : ''}\n`;
+          if (dailyCheckIn.hrv) prompt += `- HRV: ${dailyCheckIn.hrv}ms [WHOOP]\n`;
+          if (dailyCheckIn.rhr) prompt += `- Resting HR: ${dailyCheckIn.rhr} bpm [WHOOP]\n`;
+          if (dailyCheckIn.sleep_seconds) prompt += `- Sleep: ${(dailyCheckIn.sleep_seconds / 3600).toFixed(1)}h${dailyCheckIn.sleep_need_seconds ? ` of ${(dailyCheckIn.sleep_need_seconds / 3600).toFixed(1)}h needed` : ''}${dailyCheckIn.wellness_sleep_score != null ? ` (performance ${dailyCheckIn.wellness_sleep_score}%)` : ''} [WHOOP]\n`;
+          if (dailyCheckIn.respiratory_rate) prompt += `- Respiratory rate: ${dailyCheckIn.respiratory_rate} [WHOOP]\n`;
         } else if (dailyCheckIn.wellness_source === 'apple_health') {
           if (dailyCheckIn.sleep_seconds) {
             const hours = (dailyCheckIn.sleep_seconds / 3600).toFixed(1);

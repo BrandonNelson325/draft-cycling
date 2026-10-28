@@ -1,12 +1,12 @@
 /**
  * Turn stored WHOOP days into what the COACH needs: the band, the trend, sleep
- * vs need, and non-ride load. Whoop measures the body; Draft decides the
+ * vs need, and non-ride load. WHOOP measures the body; Draft decides the
  * training — this is the bridge. Pure + exported for tests.
  */
 export interface WellnessDay {
   date: string;
   wellness_source?: string | null;
-  readiness_score?: number | null; // Whoop recovery %
+  readiness_score?: number | null; // WHOOP recovery %
   hrv?: number | null;
   rhr?: number | null;
   sleep_seconds?: number | null;
@@ -43,7 +43,7 @@ export function summarizeWhoop(todayIso: string, history: WellnessDay[], stravaO
 
   const yIso = new Date(new Date(todayIso + 'T12:00:00Z').getTime() - 86_400_000).toISOString().slice(0, 10);
   const yesterday = byDate.get(yIso);
-  // Strava's copy (with HR, distance and a load rating) wins over Whoop's.
+  // Strava's copy (with HR, distance and a load rating) wins over WHOOP's.
   const yOther = (yesterday?.other_activities || []).filter((a: any) => a && !seenOnStrava(a.start));
   const otherTxt = yOther.length
     ? ` Yesterday off the bike: ${yOther.map((a) => `${a.sport} ${a.minutes}min${a.strain != null ? ` (strain ${a.strain})` : ''}`).join(', ')}.`
@@ -57,7 +57,7 @@ export function summarizeWhoop(todayIso: string, history: WellnessDay[], stravaO
       : '';
     return {
       hasToday: false, band: null, consecutiveReds: 0, suspect: false,
-      line: `- Whoop: today's recovery isn't scored yet (WHOOP scores shortly after waking — or strap off / not synced)${latestTxt}. Give a PROVISIONAL call from training load and the recent trend, say it's provisional and updates when WHOOP scores; never invent today's number.${otherTxt}`,
+      line: `- WHOOP: today's recovery isn't scored yet (WHOOP scores shortly after waking — or strap off / not synced)${latestTxt}. Give a PROVISIONAL call from training load and the recent trend, say it's provisional and updates when WHOOP scores; never invent today's number.${otherTxt}`,
     };
   }
 
@@ -104,26 +104,27 @@ export function summarizeWhoop(todayIso: string, history: WellnessDay[], stravaO
   const suspectTxt = suspect
     ? ' ⚠ This RED is not supported by the other signals (green yesterday, enough sleep, normal resting HR) — possibly a loose strap or bad read. CHECK with the athlete before recommending any change.'
     : '';
-  return { hasToday: true, band, consecutiveReds, suspect, line: `- Whoop: ${parts.join('; ')}.${otherTxt}${suspectTxt}` };
+  return { hasToday: true, band, consecutiveReds, suspect, line: `- WHOOP: ${parts.join('; ')}.${otherTxt}${suspectTxt}` };
 }
 
-/** System-prompt rules — only included when the athlete has Whoop connected. */
+/** System-prompt rules — only included when the athlete has WHOOP connected. */
 export const WHOOP_COACHING_RULES = `**WHOOP (the athlete's recovery source):**
-Whoop MEASURES the body (recovery, HRV, sleep, non-ride strain). YOU make the training decisions — combine Whoop with training load (CTL/ATL/TSB), the plan, and how important today's session is. Use Whoop's numbers as-is; never re-derive your own recovery score.
-- NEVER change the plan automatically because of Whoop. ALWAYS SUGGEST, with the reason, and respect the athlete's call — straps get loose or misplaced, and a rider who feels good can still do the work. Phrase Whoop-based calls as strong recommendations ("I'd skip the VO2 today — here's why"), not orders, and say they can override. A concrete alternative is great; propose it and wait for their OK. Offer a fallback: "start it, and if the first rep feels off, cut to Z2."
+WHOOP MEASURES the body (recovery, HRV, sleep, non-ride strain). YOU make the training decisions — combine WHOOP with training load (CTL/ATL/TSB), the plan, and how important today's session is. Use WHOOP's numbers as-is; never re-derive your own recovery score.
+- NEVER change the plan automatically because of WHOOP. ALWAYS SUGGEST, with the reason, and respect the athlete's call — straps get loose or misplaced, and a rider who feels good can still do the work. Phrase WHOOP-based calls as strong recommendations ("I'd skip the VO2 today — here's why"), not orders, and say they can override. A concrete alternative is great; propose it and wait for their OK. Offer a fallback: "start it, and if the first rep feels off, cut to Z2."
 - GREEN (67–100): go as planned; on a key day it's fine to push the top end.
 - YELLOW (34–66): do it, but suggest shortening or capping a hard session (e.g. drop a rep, hold the low end of the range). Mid-block on purpose (stage-race block)? Usually train through.
 - RED (0–33): make a STRONG recommendation (Z2 or rest on a non-key day; on a race or critical session keep it, warm up longer, set honest expectations). Two or more REDs in a row → strongly recommend backing off. Then ASK before changing anything: propose the change and wait for their yes — never assume it.
-- RED THAT DOESN'T ADD UP (flagged ⚠ in LIVE STATE: green yesterday, enough sleep, normal resting HR) → likely a loose strap or bad read. Don't assume a change is needed: ask ONE quick check first ("Whoop shows 24%, but your sleep and resting HR look normal — how do the legs feel?"), then make the call from their answer.
+- RED THAT DOESN'T ADD UP (flagged ⚠ in LIVE STATE: green yesterday, enough sleep, normal resting HR) → likely a loose strap or bad read. Don't assume a change is needed: ask ONE quick check first ("WHOOP shows 24%, but your sleep and resting HR look normal — how do the legs feel?"), then make the call from their answer.
 - Trend beats one day: a single red after a late night ≠ a falling HRV trend over several days. Mention which one it is.
 - Sleep debt / short sleep before a long or hard session → suggest trimming duration or intensity.
 - Non-ride activities (soccer, gym, runs) are real load the power data can't see — account for them when judging the next day.
-- Still calibrating (first days on Whoop) → low confidence; lean on how they feel.
-- No Whoop recovery today → say so plainly and coach from load + how they feel. Never invent a number.`;
+- Still calibrating (first days on WHOOP) → low confidence; lean on how they feel.
+- No WHOOP recovery today → say so plainly and coach from load + how they feel. Never invent a number.
+- Brand: always write "WHOOP" in capitals and use WHOOP's metric names as-is (Recovery, Strain, HRV) — never "Whoop" or "whoop".`;
 
 /**
  * The push sent the moment today's recovery is scored — replaces the "fill in
- * your morning check-in" reminder for Whoop users. Deterministic (no AI call)
+ * your morning check-in" reminder for WHOOP users. Deterministic (no AI call)
  * so it arrives instantly, and it follows the same rules as the coach:
  * suggestions only, ask before changing, check the athlete when a red doesn't
  * add up.

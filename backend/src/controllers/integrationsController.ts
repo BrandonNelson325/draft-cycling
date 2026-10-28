@@ -472,7 +472,7 @@ export const pushAppleHealthWellness = async (req: AuthRequest, res: Response): 
     }
 
     // Never overwrite a higher-priority source (WHOOP also writes to Apple
-    // Health — without this the same night would replace Whoop's recovery).
+    // Health — without this the same night would replace WHOOP's recovery).
     const { data: existingDay } = await supabaseAdmin
       .from('daily_metrics').select('wellness_source').eq('athlete_id', req.user.id).eq('date', date).maybeSingle();
     if (!canWriteWellness(existingDay?.wellness_source, 'apple_health')) {
@@ -570,7 +570,7 @@ export const getWhoopAuthUrl = async (req: AuthRequest, res: Response): Promise<
     const authUrl = await whoopService.getAuthUrl(req.user.id, req.query.mobile === 'true');
     res.json({ authUrl });
   } catch (error: any) {
-    logger.error('Error generating Whoop auth URL:', error);
+    logger.error('Error generating WHOOP auth URL:', error);
     res.status(500).json({ error: 'Failed to generate authorization URL' });
   }
 };
@@ -580,13 +580,13 @@ export const handleWhoopCallback = async (req: AuthRequest, res: Response): Prom
   let mobile = false;
   try {
     if (oauthError || typeof code !== 'string' || typeof state !== 'string') {
-      throw new Error(`Whoop authorization not completed: ${oauthError || 'missing code/state'}`);
+      throw new Error(`WHOOP authorization not completed: ${oauthError || 'missing code/state'}`);
     }
     ({ mobile } = await whoopService.handleCallback(code, state));
     if (mobile) res.redirect('cyclingcoach://whoop/callback?status=connected');
     else res.redirect(`${process.env.FRONTEND_URL}/settings?whoop=connected`);
   } catch (error: any) {
-    logger.error('Whoop callback error:', error.response?.data || error.message,
+    logger.error('WHOOP callback error:', error.response?.data || error.message,
       `(client id set: ${!!process.env.WHOOP_CLIENT_ID?.trim()}, secret set: ${!!process.env.WHOOP_CLIENT_SECRET?.trim()}, secret length: ${process.env.WHOOP_CLIENT_SECRET?.trim().length ?? 0})`);
     // The state lookup failed or never happened — fall back on the stored flag if we can.
     if (typeof state === 'string') {
@@ -605,7 +605,7 @@ export const getWhoopStatus = async (req: AuthRequest, res: Response): Promise<v
       .from('athletes').select('whoop_access_token, whoop_last_sync_at, whoop_user_id').eq('id', req.user.id).single();
     res.json({ connected: !!a?.whoop_access_token, last_sync_at: a?.whoop_last_sync_at ?? null, user_id: a?.whoop_user_id ?? null });
   } catch (error: any) {
-    logger.error('Error getting Whoop status:', error);
+    logger.error('Error getting WHOOP status:', error);
     res.status(500).json({ error: 'Failed to get integration status' });
   }
 };
@@ -617,8 +617,8 @@ export const syncWhoop = async (req: AuthRequest, res: Response): Promise<void> 
     const written = await whoopService.syncDays(req.user.id, days, 'manual');
     res.json({ success: true, days_written: written.length });
   } catch (error: any) {
-    logger.error('Error syncing Whoop:', error.response?.data || error.message);
-    res.status(500).json({ error: 'Failed to sync Whoop' });
+    logger.error('Error syncing WHOOP:', error.response?.data || error.message);
+    res.status(500).json({ error: 'Failed to sync WHOOP' });
   }
 };
 
@@ -626,16 +626,16 @@ export const disconnectWhoop = async (req: AuthRequest, res: Response): Promise<
   try {
     if (!req.user) { res.status(401).json({ error: 'Unauthorized' }); return; }
     await whoopService.disconnect(req.user.id);
-    res.json({ success: true, message: 'Whoop disconnected' });
+    res.json({ success: true, message: 'WHOOP disconnected' });
   } catch (error: any) {
-    logger.error('Error disconnecting Whoop:', error);
-    res.status(500).json({ error: 'Failed to disconnect Whoop' });
+    logger.error('Error disconnecting WHOOP:', error);
+    res.status(500).json({ error: 'Failed to disconnect WHOOP' });
   }
 };
 
 /**
- * Whoop webhook. Verifies X-WHOOP-Signature over the RAW body, answers within
- * Whoop's 1-second budget, then processes asynchronously (Whoop retries 5×
+ * WHOOP webhook. Verifies X-WHOOP-Signature over the RAW body, answers within
+ * WHOOP's 1-second budget, then processes asynchronously (WHOOP retries 5×
  * over ~1h on non-2xx, so a slow sync must never block the response).
  */
 export const whoopWebhook = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -649,7 +649,7 @@ export const whoopWebhook = async (req: AuthRequest, res: Response): Promise<voi
     (process.env.WHOOP_CLIENT_SECRET || '').trim()
   );
   if (!ok) {
-    logger.warn(`[Whoop] webhook rejected: bad signature (raw body: ${!!raw}, timestamp: ${!!req.header('X-WHOOP-Signature-Timestamp')}, signature: ${!!req.header('X-WHOOP-Signature')})`);
+    logger.warn(`[WHOOP] webhook rejected: bad signature (raw body: ${!!raw}, timestamp: ${!!req.header('X-WHOOP-Signature-Timestamp')}, signature: ${!!req.header('X-WHOOP-Signature')})`);
     res.status(401).json({ error: 'Invalid signature' });
     return;
   }
@@ -657,5 +657,5 @@ export const whoopWebhook = async (req: AuthRequest, res: Response): Promise<voi
   let event: any = null;
   try { event = JSON.parse(raw!.toString('utf8')); } catch { return; }
   void whoopService.handleWebhookEvent(event).catch((err) =>
-    logger.error('[Whoop] webhook processing failed:', err?.message || err));
+    logger.error('[WHOOP] webhook processing failed:', err?.message || err));
 };

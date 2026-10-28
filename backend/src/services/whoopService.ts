@@ -1,11 +1,11 @@
 /**
- * WHOOP integration — Whoop is the athlete's RECOVERY source when connected
+ * WHOOP integration — WHOOP is the athlete's RECOVERY source when connected
  * (recovery, HRV, RHR, sleep, strain, non-ride activities). Draft keeps owning
  * training decisions; this service only gets the data in, reliably.
  *
- * - OAuth 2.0 auth-code with the `offline` scope (refresh tokens). Whoop needs
+ * - OAuth 2.0 auth-code with the `offline` scope (refresh tokens). WHOOP needs
  *   an 8-char `state`, so a one-time random state is stored on the athlete.
- * - Whoop ROTATES refresh tokens and invalidates old access tokens on refresh,
+ * - WHOOP ROTATES refresh tokens and invalidates old access tokens on refresh,
  *   so refreshes are serialized per athlete (two concurrent refreshes would
  *   leave one holding a dead refresh token → athlete silently disconnected).
  * - Data arrives by webhook (recovery/sleep/workout scored) with an on-demand
@@ -39,7 +39,7 @@ function config() {
 }
 
 /**
- * POST to Whoop's token endpoint. Whoop's OAuth server (Ory Hydra) may be set
+ * POST to WHOOP's token endpoint. WHOOP's OAuth server (Ory Hydra) may be set
  * to client_secret_post (credentials in the form body — what the docs show) or
  * client_secret_basic (HTTP Basic header). Try post first; on invalid_client
  * retry with Basic so either app configuration works.
@@ -52,7 +52,7 @@ async function tokenRequest(params: Record<string, string>): Promise<any> {
     return resp.data;
   } catch (err: any) {
     if (err.response?.data?.error !== 'invalid_client') throw err;
-    logger.warn('[Whoop] token endpoint rejected client_secret_post — retrying with HTTP Basic auth');
+    logger.warn('[WHOOP] token endpoint rejected client_secret_post — retrying with HTTP Basic auth');
     const basic = Buffer.from(`${encodeURIComponent(c.clientId)}:${encodeURIComponent(c.clientSecret)}`).toString('base64');
     const resp = await axios.post(TOKEN_URL, new URLSearchParams(params).toString(), {
       headers: { ...headers, Authorization: `Basic ${basic}` },
@@ -69,7 +69,7 @@ export const whoopService = {
       .from('athletes')
       .update({ whoop_oauth_state: state, whoop_oauth_mobile: mobile })
       .eq('id', athleteId);
-    if (error) throw new Error(`Failed to start Whoop connect: ${error.message}`);
+    if (error) throw new Error(`Failed to start WHOOP connect: ${error.message}`);
     const c = config();
     const params = new URLSearchParams({
       client_id: c.clientId, response_type: 'code', redirect_uri: c.redirectUri, scope: SCOPES, state,
@@ -81,7 +81,7 @@ export const whoopService = {
   async handleCallback(code: string, state: string): Promise<{ athleteId: string; mobile: boolean }> {
     const { data: athlete } = await supabaseAdmin
       .from('athletes').select('id, whoop_oauth_mobile').eq('whoop_oauth_state', state).single();
-    if (!athlete) throw new Error('Unknown or expired Whoop connect request');
+    if (!athlete) throw new Error('Unknown or expired WHOOP connect request');
 
     if (!config().clientId || !config().clientSecret) throw new Error('WHOOP_CLIENT_ID / WHOOP_CLIENT_SECRET not set');
     const { access_token, refresh_token, expires_in } = await tokenRequest({
@@ -93,7 +93,7 @@ export const whoopService = {
       const p = await axios.get(`${API}/v2/user/profile/basic`, { headers: { Authorization: `Bearer ${access_token}` } });
       whoopUserId = p.data?.user_id != null ? String(p.data.user_id) : null;
     } catch (err: any) {
-      logger.warn('[Whoop] profile fetch failed (webhooks need user_id):', err.response?.data || err.message);
+      logger.warn('[WHOOP] profile fetch failed (webhooks need user_id):', err.response?.data || err.message);
     }
 
     const { error } = await supabaseAdmin.from('athletes').update({
@@ -103,11 +103,11 @@ export const whoopService = {
       whoop_user_id: whoopUserId,
       whoop_oauth_state: null, // one-time
     }).eq('id', athlete.id);
-    if (error) throw new Error(`Failed to store Whoop tokens: ${error.message}`);
+    if (error) throw new Error(`Failed to store WHOOP tokens: ${error.message}`);
 
-    logger.info(`[Whoop] connected athlete ${athlete.id} (whoop user ${whoopUserId})`);
+    logger.info(`[WHOOP] connected athlete ${athlete.id} (whoop user ${whoopUserId})`);
     // History for trends (HRV baseline etc.) — don't block the redirect.
-    void this.syncDays(athlete.id, WHOOP_BACKFILL_DAYS, 'backfill').catch((e) => logger.warn('[Whoop] backfill failed:', e?.message));
+    void this.syncDays(athlete.id, WHOOP_BACKFILL_DAYS, 'backfill').catch((e) => logger.warn('[WHOOP] backfill failed:', e?.message));
     return { athleteId: athlete.id, mobile: !!athlete.whoop_oauth_mobile };
   },
 
@@ -116,7 +116,7 @@ export const whoopService = {
     if (existing) return existing;
     const p = (async () => {
       const { data: a } = await supabaseAdmin.from('athletes').select('whoop_refresh_token').eq('id', athleteId).single();
-      if (!a?.whoop_refresh_token) throw new Error('Whoop not connected');
+      if (!a?.whoop_refresh_token) throw new Error('WHOOP not connected');
       try {
         const { access_token, refresh_token, expires_in } = await tokenRequest({
           grant_type: 'refresh_token', refresh_token: a.whoop_refresh_token, scope: 'offline',
@@ -128,8 +128,8 @@ export const whoopService = {
         }).eq('id', athleteId);
         return access_token as string;
       } catch (err: any) {
-        logger.error(`[Whoop] token refresh failed for ${athleteId}:`, err.response?.data || err.message);
-        throw new Error('Failed to refresh Whoop token');
+        logger.error(`[WHOOP] token refresh failed for ${athleteId}:`, err.response?.data || err.message);
+        throw new Error('Failed to refresh WHOOP token');
       }
     })().finally(() => refreshInFlight.delete(athleteId));
     refreshInFlight.set(athleteId, p);
@@ -170,7 +170,7 @@ export const whoopService = {
   },
 
   /**
-   * Pull the last `days` days and write daily_metrics. Whoop is the top-priority
+   * Pull the last `days` days and write daily_metrics. WHOOP is the top-priority
    * wellness source, so its fields always win; strain/other activities are
    * written without claiming wellness_source when there's no recovery/sleep.
    * Returns the dates written.
@@ -199,18 +199,18 @@ export const whoopService = {
       const row: Record<string, any> = { athlete_id: athleteId, date: d.date, ...d.fields };
       if (d.hasWellness) { row.wellness_source = 'whoop'; row.wellness_synced_at = now; }
       const { error } = await supabaseAdmin.from('daily_metrics').upsert(row, { onConflict: 'athlete_id,date' });
-      if (error) logger.warn(`[Whoop] upsert ${d.date} failed for ${athleteId}: ${error.message}`);
+      if (error) logger.warn(`[WHOOP] upsert ${d.date} failed for ${athleteId}: ${error.message}`);
       else written.push(d.date);
     }
     await supabaseAdmin.from('athletes').update({ whoop_last_sync_at: now }).eq('id', athleteId);
     // Observability (migration 042) — best-effort, never blocks the sync.
     await supabaseAdmin.from('athletes').update({ whoop_last_sync_origin: origin }).eq('id', athleteId);
-    logger.info(`[Whoop] synced ${written.length} day(s) for ${athleteId} via ${origin}`);
+    logger.info(`[WHOOP] synced ${written.length} day(s) for ${athleteId} via ${origin}`);
 
     const todayRow = daily.find((d) => d.date === today);
     if (!hadToday && todayRow?.fields.readiness_score != null && written.includes(today)) {
       await supabaseAdmin.from('athletes').update({ whoop_recovery_landed_at: now, whoop_recovery_landed_via: origin }).eq('id', athleteId);
-      void this.notifyRecovery(athleteId, today).catch((e) => logger.warn('[Whoop] recovery push failed:', e?.message));
+      void this.notifyRecovery(athleteId, today).catch((e) => logger.warn('[WHOOP] recovery push failed:', e?.message));
     }
     return written;
   },
@@ -242,8 +242,8 @@ export const whoopService = {
   },
 
   /**
-   * Pull today's data if Whoop is connected and hasn't synced recently (morning
-   * card / chat backup to webhooks). Whoop only scores recovery after it detects
+   * Pull today's data if WHOOP is connected and hasn't synced recently (morning
+   * card / chat backup to webhooks). WHOOP only scores recovery after it detects
    * you've woken, so while TODAY is still missing we re-check every 5 minutes
    * instead of 30 — otherwise an early riser waits half an hour for their score.
    */
@@ -257,20 +257,20 @@ export const whoopService = {
     const haveToday = row?.wellness_source === 'whoop' && row?.readiness_score != null;
     const maxAge = haveToday ? maxAgeMinutes : Math.min(maxAgeMinutes, 5);
     if (a.whoop_last_sync_at && Date.now() - new Date(a.whoop_last_sync_at).getTime() < maxAge * 60_000) return;
-    await this.syncDays(athleteId, 2).catch((e) => logger.warn('[Whoop] ensureFresh failed:', e?.message));
+    await this.syncDays(athleteId, 2).catch((e) => logger.warn('[WHOOP] ensureFresh failed:', e?.message));
   },
 
-  /** Webhook event → re-pull the last couple of days for that Whoop user. */
+  /** Webhook event → re-pull the last couple of days for that WHOOP user. */
   async handleWebhookEvent(event: { user_id?: number | string; type?: string; trace_id?: string }): Promise<void> {
     if (!event?.user_id || !event.type) return;
-    // Logged so we can confirm Whoop notifies us instantly (vs. the 5-min backup pull).
-    logger.info(`[Whoop] webhook ${event.type} for whoop user ${event.user_id} (trace ${event.trace_id || '-'})`);
+    // Logged so we can confirm WHOOP notifies us instantly (vs. the 5-min backup pull).
+    logger.info(`[WHOOP] webhook ${event.type} for whoop user ${event.user_id} (trace ${event.trace_id || '-'})`);
     if (event.type.endsWith('.deleted')) {
-      logger.info(`[Whoop] ${event.type} for user ${event.user_id} — resyncing recent days`);
+      logger.info(`[WHOOP] ${event.type} for user ${event.user_id} — resyncing recent days`);
     }
     const { data: a } = await supabaseAdmin
       .from('athletes').select('id').eq('whoop_user_id', String(event.user_id)).single();
-    if (!a) { logger.warn(`[Whoop] webhook for unknown user ${event.user_id}`); return; }
+    if (!a) { logger.warn(`[WHOOP] webhook for unknown user ${event.user_id}`); return; }
     await supabaseAdmin.from('athletes')
       .update({ whoop_last_webhook_at: new Date().toISOString(), whoop_last_webhook_type: event.type }).eq('id', a.id);
     await this.syncDays(a.id, 2, 'webhook');
@@ -281,13 +281,13 @@ export const whoopService = {
     return !!a?.whoop_access_token;
   },
 
-  /** Revoke at Whoop (stops webhooks for this user) and clear tokens. Daily data is kept. */
+  /** Revoke at WHOOP (stops webhooks for this user) and clear tokens. Daily data is kept. */
   async disconnect(athleteId: string): Promise<void> {
     try {
       const token = await this.getAccessToken(athleteId);
       if (token) await axios.delete(`${API}/v2/user/access`, { headers: { Authorization: `Bearer ${token}` } });
     } catch (err: any) {
-      logger.warn('[Whoop] revoke failed (clearing tokens anyway):', err.response?.data || err.message);
+      logger.warn('[WHOOP] revoke failed (clearing tokens anyway):', err.response?.data || err.message);
     }
     await supabaseAdmin.from('athletes').update({
       whoop_access_token: null, whoop_refresh_token: null, whoop_token_expires_at: null,
