@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import type { DailyAnalysis } from '../../services/dailyAnalysisService';
 import { dailyCheckInService, type DailyReadiness } from '../../services/dailyCheckInService';
 import { whoopService } from '../../services/whoopService';
+import { whoopRecoveryColor } from '../../utils/whoopBrand';
 import { Button } from '../ui/button';
 
 interface DailyMorningModalProps {
@@ -50,7 +51,6 @@ export function DailyMorningModal({ analysis, readiness: readinessProp, onClose 
   // WHOOP owns today's recovery → no sleep/feeling questions, just "anything off?".
   const isWhoop = wellness?.source === 'whoop' && wellness.readinessScore != null;
   const sleepPickerVisible = !isWhoop && !whoopAwaiting && (!wellness || wellness.sleepSeconds == null);
-  const recoveryColor = (r: number) => (r >= 67 ? 'text-green-600' : r >= 34 ? 'text-yellow-500' : 'text-red-600');
   const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
   const handleCheckInNext = async () => {
@@ -223,7 +223,7 @@ export function DailyMorningModal({ analysis, readiness: readinessProp, onClose 
                     <h3 className="font-semibold">Recovery</h3>
                     <span className="text-[10px] tracking-widest text-gray-400 font-bold">WHOOP</span>
                   </div>
-                  <div className={`text-5xl font-extrabold ${recoveryColor(wellness.readinessScore!)}`}>{wellness.readinessScore}%</div>
+                  <div className="text-5xl font-extrabold" style={{ color: whoopRecoveryColor(wellness.readinessScore!), textShadow: '0 0 1px rgba(0,0,0,.55)' }}>{wellness.readinessScore}%</div>
                   {wellness.recoveryCalibrating && <p className="text-xs text-gray-400 mt-1">WHOOP is still calibrating — low confidence</p>}
                   <div className="grid grid-cols-2 gap-3 text-sm mt-3">
                     {wellness.hrv != null && <div><div className="text-gray-400 text-xs uppercase">HRV</div><div className="font-semibold">{wellness.hrv}ms</div></div>}

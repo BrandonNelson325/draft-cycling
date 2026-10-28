@@ -9,6 +9,7 @@ import { dailyAnalysisService } from '../../services/dailyAnalysisService';
 import type { TodaySuggestion } from '../../services/dailyAnalysisService';
 import { trainingService } from '../../services/trainingService';
 import { dailyCheckInService, type DailyReadiness } from '../../services/dailyCheckInService';
+import { whoopRecoveryColor, WHOOP_ATTRIBUTION } from '../../utils/whoopBrand';
 import type { MainTabParamList } from '../../navigation/types';
 
 interface TrainingStatus {
@@ -163,6 +164,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
           </View>
           {tileMeaning ? <Text style={styles.tileMeaning}>{tileMeaning}</Text> : null}
           {pillStats ? <Text style={styles.pillStats} numberOfLines={1}>{pillStats}</Text> : null}
+          {recovery != null ? <Text style={styles.attribution}>{WHOOP_ATTRIBUTION}</Text> : null}
         </TouchableOpacity>
       ) : null}
       {showBody && pillColor ? (
@@ -298,7 +300,7 @@ export default function CoachCard({ onWorkoutPress }: CoachCardProps = {}) {
   );
 }
 
-const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
+const recoveryColor = whoopRecoveryColor;
 const HRV_COLOR: Record<string, string> = { low: '#ef4444', slightly_low: '#eab308', normal: '#22c55e', high: '#22c55e' };
 const HRV_MEANING: Record<string, string> = {
   low: 'HRV low: your body is under stress — go easier than planned.',
@@ -372,6 +374,7 @@ const styles = StyleSheet.create({
   tile: { marginTop: 12, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 12, backgroundColor: '#0f172a', gap: 4 },
   tileTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tileTitle: { color: '#94a3b8', fontSize: 13, fontWeight: '600', flex: 1 },
+  attribution: { color: '#64748b', fontSize: 11, marginTop: 4 },
   tileMeaning: { color: '#e2e8f0', fontSize: 14, fontWeight: '500', lineHeight: 19 },
   pillDot: { width: 10, height: 10, borderRadius: 5 },
   pillLead: { fontSize: 22, fontWeight: '800' },

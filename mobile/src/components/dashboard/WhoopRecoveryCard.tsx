@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Card from '../ui/Card';
+import { whoopRecoveryColor } from '../../utils/whoopBrand';
 import { dailyCheckInService, type WellnessData, type WhoopReadinessStatus } from '../../services/dailyCheckInService';
 
-const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
+const recoveryColor = whoopRecoveryColor;
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
 /**

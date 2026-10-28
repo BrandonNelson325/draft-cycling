@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { dailyCheckInService, type DailyCheckInData } from '../../services/dailyCheckInService';
 import type { DailyAnalysis } from '../../services/dailyAnalysisService';
+import { whoopRecoveryColor } from '../../utils/whoopBrand';
 import type { DailyReadiness } from '../../services/dailyCheckInService';
 
 interface DailyMorningModalProps {
@@ -62,7 +63,7 @@ const OFF_OPTIONS: { value: OffFlag; emoji: string; label: string }[] = [
   { value: 'injured', emoji: '🩹', label: 'Niggle/injury' },
 ];
 
-const recoveryColor = (r: number) => (r >= 67 ? '#22c55e' : r >= 34 ? '#eab308' : '#ef4444');
+const recoveryColor = whoopRecoveryColor;
 const hm = (sec: number) => `${Math.floor(sec / 3600)}h ${Math.round((sec % 3600) / 60)}m`;
 
 const RECOMMENDATION_COLORS: Record<string, string> = {

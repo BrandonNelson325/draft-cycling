@@ -12,6 +12,7 @@ import { healthDataService } from '../../services/healthDataService';
 import type { HealthData } from '../../services/healthDataService';
 import { workoutService } from '../../services/workoutService';
 import { calendarService } from '../../services/calendarService';
+import { whoopRecoveryColor, WHOOP_ATTRIBUTION } from '../../utils/whoopBrand';
 import type { Workout } from '../../services/workoutService';
 
 interface TrainingStatus {
@@ -129,13 +130,14 @@ export function CoachCard() {
         {pillLead && (
           <button onClick={() => setShowBody((x) => !x)} className="w-full rounded-xl bg-gray-50 border px-3.5 py-2.5 text-left hover:bg-gray-100 space-y-1">
             <div className="flex items-center gap-2">
-              <span className={`w-2.5 h-2.5 rounded-full ${pillDot}`} />
-              <span className={`text-xl font-extrabold ${pillText}`}>{pillLead}</span>
+              <span className={`w-2.5 h-2.5 rounded-full ${recovery != null ? '' : pillDot}`} style={recovery != null ? { backgroundColor: whoopRecoveryColor(recovery) } : undefined} />
+              <span className={`text-xl font-extrabold ${recovery != null ? '' : pillText}`} style={recovery != null ? { color: whoopRecoveryColor(recovery), textShadow: '0 0 1px rgba(0,0,0,.55)' } : undefined}>{pillLead}</span>
               <span className="text-sm font-semibold text-gray-500 flex-1">{tileTitle}</span>
               <span className="text-gray-400 text-sm">{showBody ? '⌄' : '›'}</span>
             </div>
             {tileMeaning && <p className="text-sm font-medium text-gray-800">{tileMeaning}</p>}
             {pillStats && <p className="text-[13px] text-gray-500 truncate">{pillStats}</p>}
+            {recovery != null && <p className="text-[11px] text-gray-400">{WHOOP_ATTRIBUTION}</p>}
           </button>
         )}
         {showBody && pillLead && (
