@@ -65,7 +65,7 @@ async function checkBackToBack(
       .in('scheduled_date', [before, after]),
     supabaseAdmin
       .from('strava_activities')
-      .select('name, start_date, perceived_effort, raw_data')
+      .select('name, start_date, perceived_effort, tss, raw_data')
       .eq('athlete_id', athleteId)
       .gte('start_date', `${shiftIso(before, -1)}T00:00:00Z`)
       .lte('start_date', `${shiftIso(after, 1)}T23:59:59Z`),
@@ -77,6 +77,7 @@ async function checkBackToBack(
       .map((r: any) => ({
         name: r.name || '',
         rpe: r.perceived_effort,
+        tss: r.tss,
         intensityFactor:
           r.raw_data?.weighted_average_watts && athlete?.ftp ? r.raw_data.weighted_average_watts / athlete.ftp : null,
       })),

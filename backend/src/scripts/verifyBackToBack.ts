@@ -15,8 +15,9 @@ const sprints = { name: 'Draft - Sprint Efforts · 8 × 15 sec @ 200%', workout_
 const endurance = { name: 'Draft - Endurance Ride', workout_type: 'endurance' };
 const zrlToday = {
   rides: [
-    { name: 'Zwift Racing League 26/27: Fast & Fresh : Open Ruby League Division 1 - Race 5 (B)', rpe: 5, intensityFactor: 0.97 },
-    { name: 'Zwift - Pacer Group Ride with Coco', rpe: 2, intensityFactor: 0.6 },
+    { name: 'Zwift - INEOS Grenadiers Virtual Training Camp | The Pre-Race Warm-up', rpe: 5, intensityFactor: 0.72, tss: 14.9 },
+    { name: 'Zwift Racing League 26/27: Fast & Fresh : Open Ruby League Division 1 - Race 5 (B)', rpe: 5, intensityFactor: 0.91, tss: 60.3 },
+    { name: 'Zwift - Pacer Group Ride with Coco', rpe: 2, intensityFactor: 0.59, tss: 26.1 },
   ],
   planned: [],
 };
@@ -25,8 +26,10 @@ const zrlToday = {
 const real = backToBackConflict(sprints, zrlToday, empty);
 check('Sprints the day after a race → needs confirmation', !!real, real || '');
 check('Message names the race', !!real && /raced/.test(real));
-const withWarmup = backToBackConflict(sprints, { ...zrlToday, rides: [{ name: 'Zwift - The Pre-Race Warm-up', rpe: 5 }, ...zrlToday.rides] }, empty);
-check('Names the race, not the pre-race warm-up', !!withWarmup && /Racing League/.test(withWarmup) && !/Warm-up/.test(withWarmup), withWarmup || '');
+check('Names the race, not the pre-race warm-up', !!real && /raced \("Zwift Racing League/.test(real));
+check('Counts the WHOLE day (3 rides, 101 TSS)', !!real && /3 rides, 101 TSS total/.test(real));
+const threeModerate = { rides: [1, 2, 3].map((i) => ({ name: `Ride ${i}`, rpe: 3, intensityFactor: 0.7, tss: 40 })), planned: [] };
+check('Several moderate rides adding up to a big day count as hard', /big day/.test(hardDayReason(threeModerate) || ''), hardDayReason(threeModerate) || '');
 check('Endurance the day after a race → fine', backToBackConflict(endurance, zrlToday, empty) === null);
 check('Sprints with easy days around → fine', backToBackConflict(sprints, { rides: [{ name: 'Easy spin', rpe: 2 }], planned: [] }, empty) === null);
 check('Hard ride by RPE (4/5) counts', hardDayReason({ rides: [{ name: 'Group ride', rpe: 4 }], planned: [] }) !== null);

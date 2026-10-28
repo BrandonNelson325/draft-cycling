@@ -726,9 +726,10 @@ USE THIS PROFILE TO:
       if (todaysRides.length > 0) {
         const rideNames = todaysRides.map((r: any) => r.name || 'Ride').join(', ');
         const rideTSS = todaysRides.reduce((sum: number, r: any) => sum + (r.tss || 0), 0);
-        prompt += `\n⚠️ ALREADY RODE TODAY: YES — The athlete completed ${todaysRides.length} ride(s) today: ${rideNames} (${rideTSS} TSS total).
+        prompt += `\n⚠️ ALREADY RODE TODAY: YES — The athlete completed ${todaysRides.length} ride(s) today: ${rideNames} (${Math.round(rideTSS)} TSS total).
 CRITICAL RULES when athlete has already ridden today:
 - ALWAYS acknowledge their completed ride first ("Nice work on today's ride" or similar)
+- Treat ALL of today's rides as ONE training day — count every ride (warm-up, race, spin…) and the combined TSS above, not just the headline ride. When ${todaysRides.length} > 1, refer to the whole day ("warm-up, race and a group ride — about ${Math.round(rideTSS)} TSS")
 - NEVER prescribe rest for today or tell them to take the day off — they already trained
 - NEVER suggest today's scheduled workout as if it still needs to be done
 - Focus on recovery advice for tonight and preview tomorrow's plan
