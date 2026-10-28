@@ -7,7 +7,7 @@ export function PrivacyPolicy() {
         </a>
 
         <h1 className="text-4xl font-bold text-white mb-2">Privacy Policy</h1>
-        <p className="text-sm text-gray-500 mb-10">Last updated: March 10, 2026</p>
+        <p className="text-sm text-gray-500 mb-10">Last updated: October 27, 2026</p>
 
         <div className="space-y-8 leading-relaxed">
           <section>
@@ -48,7 +48,7 @@ export function PrivacyPolicy() {
 
             <h3 className="text-lg font-medium text-white mt-4 mb-2">Activity Data from Third-Party Services</h3>
             <p>
-              When you connect a third-party fitness service (such as Strava or Garmin), we receive
+              When you connect a third-party fitness service (such as Strava, Garmin or WHOOP), we receive
               and store activity data including:
             </p>
             <ul className="list-disc ml-6 mt-2 space-y-1">
@@ -151,6 +151,30 @@ export function PrivacyPolicy() {
                 </a>.
               </li>
               <li>
+                <strong className="text-white">WHOOP</strong> — If you connect WHOOP, we receive your
+                recovery score, heart rate variability, resting heart rate, sleep (duration, need and
+                stages), day strain, workouts and basic profile via the WHOOP API. We use it only to
+                show your recovery and to adjust your training recommendations; it is never sold or
+                shared with anyone else. Disconnecting stops all access. See{' '}
+                <a href="https://www.whoop.com/us/en/privacy-policy/" className="text-blue-400 hover:text-blue-300" target="_blank" rel="noopener noreferrer">
+                  WHOOP's Privacy Policy
+                </a>.
+              </li>
+              <li>
+                <strong className="text-white">Wahoo</strong> — If you connect Wahoo, we send your
+                scheduled workouts to your Wahoo account so they appear on your ELEMNT device, and
+                keep them in sync when your plan changes. We read your basic Wahoo profile to link
+                the account. Disconnecting revokes our access and removes upcoming workouts we sent. See{' '}
+                <a href="https://www.wahoofitness.com/privacy-policy" className="text-blue-400 hover:text-blue-300" target="_blank" rel="noopener noreferrer">
+                  Wahoo's Privacy Policy
+                </a>.
+              </li>
+              <li>
+                <strong className="text-white">Intervals.icu</strong> — If you connect Intervals.icu, we
+                send your scheduled workouts to your Intervals.icu calendar and may read wellness data
+                (HRV, resting heart rate, sleep) you have stored there.
+              </li>
+              <li>
                 <strong className="text-white">Stripe</strong> — Your email and account identifier
                 are shared with Stripe for payment processing. See{' '}
                 <a href="https://stripe.com/privacy" className="text-blue-400 hover:text-blue-300" target="_blank" rel="noopener noreferrer">
@@ -181,7 +205,7 @@ export function PrivacyPolicy() {
           <section>
             <h2 className="text-xl font-semibold text-white mb-3">4. Third-Party Integrations</h2>
             <p>
-              When you connect a third-party service (Strava, Garmin, or others), you authorize us
+              When you connect a third-party service (Strava, Garmin, WHOOP, Wahoo, Intervals.icu, or others), you authorize us
               to access specific data from that service. You can disconnect these integrations at
               any time from your account settings, which will stop future data syncing. Previously
               synced data will remain in your account unless you request its deletion.
