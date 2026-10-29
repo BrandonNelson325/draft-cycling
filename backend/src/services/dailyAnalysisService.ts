@@ -5,6 +5,7 @@ import { fatigueProfileService, type FatigueProfile } from './fatigueProfileServ
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { logger } from '../utils/logger';
 import { buildWorkoutFromSpec } from './trainingPlanService';
+import { stickyAdjustmentFor, stickyAdjustmentNote, type StoredAdjustment } from '../utils/stickyAdjustment';
 
 interface DailyAnalysisResult {
   date: string;
@@ -784,8 +785,22 @@ Format as JSON:
       );
     }
 
+    // A swap already offered today stands — the AI must not re-roll it away.
+    const sticky = hasPlannedWorkout && !riddenToday ? stickyAdjustmentFor(todayEntry.data, todayStr) : null;
+    let dismissedToday = false;
+    if (sticky) {
+      const { data: d } = await supabaseAdmin
+        .from('adjustment_dismissals').select('id')
+        .eq('athlete_id', athleteId).eq('dismissed_date', todayStr).maybeSingle();
+      dismissedToday = !!d;
+      context += stickyAdjustmentNote(sticky, dismissedToday);
+    }
+
     // Get AI suggestion — rest days and planned workouts both suppress workout suggestions
     const aiResult = await this.getSuggestionAIAnalysis(context, riddenToday || isRestDay || hasPlannedWorkout);
+    if (sticky) {
+      aiResult.adjustment = { kind: sticky.kind, headline: sticky.headline, reason: sticky.reason, replacement: sticky.replacement };
+    }
 
     // If AI picked a workout, resolve the ID (clone template if needed)
     let resolvedWorkoutId: string | undefined;
@@ -852,12 +867,28 @@ Format as JSON:
         .eq('dismissed_date', todayStr)
         .maybeSingle();
 
+      // First offer today → store it so a cache clear / restart can't make it vanish.
+      if (!sticky && (aiResult.adjustment.kind === 'rest' || aiResult.adjustment.kind === 'easier')) {
+        const stored: StoredAdjustment = {
+          kind: aiResult.adjustment.kind,
+          headline: aiResult.adjustment.headline,
+          reason: aiResult.adjustment.reason,
+          replacement: aiResult.adjustment.replacement,
+          workout_id: todayEntry.data.workout_id,
+          date: todayStr,
+          generatedAt: new Date().toISOString(),
+        };
+        const { error: stickErr } = await supabaseAdmin
+          .from('calendar_entries').update({ suggested_adjustment: stored }).eq('id', todayEntry.data.id);
+        if (stickErr) logger.warn(`[DailySuggestion] could not store adjustment: ${stickErr.message}`);
+      }
+
       if (!dismissal) {
         adjustment = {
           kind: aiResult.adjustment.kind,
           headline: aiResult.adjustment.headline,
           reason: aiResult.adjustment.reason,
-          generatedAt: new Date().toISOString(),
+          generatedAt: sticky?.generatedAt || new Date().toISOString(),
         };
         if (aiResult.adjustment.kind === 'easier') {
           const r = resolveEasierReplacement(

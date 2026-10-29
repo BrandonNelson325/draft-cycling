@@ -23,7 +23,7 @@ const ROOT = path.join(__dirname, '..');
 const REVIEWED: Record<string, { count: number; why: string }> = {
   'services/integrationSyncService.ts': { count: 1, why: 'deleteEntries itself' },
   'services/calendarService.ts': { count: 8, why: 'schedule/bulk-schedule/move/update/rest-day/delete each mirror via integrationSyncService (refs captured before deletes); complete only marks done' },
-  'services/dailyAnalysisService.ts': { count: 1, why: 'creates a workout from a template (not scheduled yet — scheduling syncs it)' },
+  'services/dailyAnalysisService.ts': { count: 2, why: 'creates a workout from a template (not scheduled yet — scheduling syncs it); stores the suggested-adjustment text on today\'s entry (workout unchanged)' },
   'controllers/dailyAnalysisController.ts': { count: 1, why: 'accept suggestion → mirrorMove / deleteRemotes' },
   'services/activityMatchingService.ts': { count: 3, why: 'marks entries completed / links the ride — nothing to sync' },
   'services/ftpTestService.ts': { count: 1, why: 'marks the FTP test completed with its note' },
