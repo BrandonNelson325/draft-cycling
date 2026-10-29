@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
-import { dailyAnalysisService, clearSuggestionCache, resolveEasierReplacement } from '../services/dailyAnalysisService';
+import { dailyAnalysisService, clearSuggestionCache, resolveEasierReplacement, loadMakeupSlot } from '../services/dailyAnalysisService';
 import { buildWorkoutFromSpec } from '../services/trainingPlanService';
 import { workoutService } from '../services/workoutService';
 import { integrationSyncService } from '../services/integrationSyncService';
@@ -98,7 +98,7 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
 
     const { data: entry, error: fetchErr } = await supabaseAdmin
       .from('calendar_entries')
-      .select('id, workout_id, entry_type, workouts(duration_minutes)')
+      .select('id, workout_id, entry_type, workouts(name, workout_type, duration_minutes)')
       .eq('athlete_id', req.user.id)
       .eq('scheduled_date', todayStr)
       .eq('completed', false)
@@ -118,8 +118,13 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
       adjustment_kind: kind,
       adjustment_reason: reason || null,
     };
+    // Same lookup the card used: a hard session moves to the next easy day
+    // (the days swap) instead of being dropped.
+    const makeup = await loadMakeupSlot(req.user.id, todayStr, (entry as any).workouts);
     let update: Record<string, any>;
-    if (kind === 'rest') {
+    if (kind === 'easier' && makeup) {
+      update = { ...snapshot, workout_id: makeup.workout.id, entry_type: 'workout', ai_rationale: reason || 'Coach-suggested easier session' };
+    } else if (kind === 'rest') {
       update = { ...snapshot, workout_id: null, entry_type: 'rest', ai_rationale: reason || 'Coach-suggested rest day' };
     } else {
       const r = resolveEasierReplacement(
@@ -155,6 +160,20 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
       return;
     }
 
+    if (makeup) {
+      const { error: moveErr } = await supabaseAdmin
+        .from('calendar_entries')
+        .update({ workout_id: entry.workout_id, entry_type: 'workout' })
+        .eq('id', makeup.entryId);
+      if (moveErr) logger.error(`Failed to move ${entry.workout_id} to ${makeup.date}:`, moveErr);
+      else {
+        const [y, m, d] = makeup.date.split('-').map(Number);
+        integrationSyncService
+          .mirrorMove(req.user.id, makeup.entryId, entry.workout_id, new Date(y, m - 1, d, 12))
+          .catch((err) => logger.warn(`[Sync] Accept makeup resync failed: ${err.message}`));
+      }
+    }
+
     clearSuggestionCache(req.user.id);
     // Mirror to every connected service (Wahoo, intervals.icu): the old workout
     // must come off the head unit, and the easier one go on.
@@ -174,7 +193,7 @@ export const acceptAdjustment = async (req: AuthRequest, res: Response): Promise
           .eq('calendar_entry_id', entry.id);
       }
     }
-    res.json({ success: true });
+    res.json({ success: true, moved: makeup ? { date: makeup.date, workoutId: entry.workout_id } : null });
   } catch (error: any) {
     logger.error('Error accepting adjustment:', error);
     res.status(500).json({ error: 'Failed to accept adjustment' });

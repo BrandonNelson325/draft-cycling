@@ -5,6 +5,8 @@ import { fatigueProfileService, type FatigueProfile } from './fatigueProfileServ
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { logger } from '../utils/logger';
 import { buildWorkoutFromSpec } from './trainingPlanService';
+import { isHardWorkout } from '../utils/backToBack';
+import { findMakeupSlot, makeupSentence, MAKEUP_LOOKAHEAD_DAYS, type MakeupSlot, type PlannedDay } from '../utils/makeupSlot';
 import { stickyAdjustmentFor, stickyAdjustmentNote, type StoredAdjustment } from '../utils/stickyAdjustment';
 
 interface DailyAnalysisResult {
@@ -42,6 +44,8 @@ export interface AdjustmentSuggestion {
     duration: number;
     tss: number;
   };
+  /** Where today's planned session moves if the athlete accepts (days swap). */
+  makeup?: { date: string; workoutName: string };
   generatedAt: string;
 }
 
@@ -286,6 +290,39 @@ export function clearSuggestionCache(athleteId: string): void {
       suggestionCache.delete(key);
     }
   }
+}
+
+/**
+ * Where today's planned (hard) session could move if the athlete takes the
+ * easier option — see utils/makeupSlot.ts. Used for the card text AND by
+ * accept, so what the card says is what Accept does.
+ */
+export async function loadMakeupSlot(
+  athleteId: string,
+  todayStr: string,
+  original: { name: string; workout_type?: string | null } | null | undefined
+): Promise<MakeupSlot | null> {
+  if (!original) return null;
+  const end = new Date(todayStr + 'T12:00:00Z');
+  end.setUTCDate(end.getUTCDate() + MAKEUP_LOOKAHEAD_DAYS + 1);
+  const { data } = await supabaseAdmin
+    .from('calendar_entries')
+    .select('id, scheduled_date, entry_type, completed, workouts(id, name, workout_type, duration_minutes, tss)')
+    .eq('athlete_id', athleteId)
+    .gt('scheduled_date', todayStr)
+    .lte('scheduled_date', end.toISOString().slice(0, 10))
+    .order('scheduled_date');
+  const byDate = new Map<string, any[]>();
+  for (const e of data || []) byDate.set(e.scheduled_date, [...(byDate.get(e.scheduled_date) || []), e]);
+  const days: PlannedDay[] = [];
+  for (const [date, entries] of byDate) {
+    // Two sessions on one day → never swap into it, but its hardest session
+    // still counts for the back-to-back check.
+    const hard = entries.find((x) => !x.completed && x.workouts && isHardWorkout(x.workouts));
+    const e = hard || entries[0];
+    days.push({ date, locked: entries.length > 1, entry: { id: e.id, entry_type: e.entry_type, completed: e.completed, workout: e.workouts } });
+  }
+  return findMakeupSlot(original, todayStr, days);
 }
 
 export const dailyAnalysisService = {
@@ -890,7 +927,21 @@ Format as JSON:
           reason: aiResult.adjustment.reason,
           generatedAt: sticky?.generatedAt || new Date().toISOString(),
         };
-        if (aiResult.adjustment.kind === 'easier') {
+        const makeup = await loadMakeupSlot(athleteId, todayStr, todayEntry.data.workouts);
+        if (makeup && (aiResult.adjustment.kind === 'easier' || aiResult.adjustment.kind === 'rest')) {
+          adjustment.reason += makeupSentence(todayEntry.data.workouts.name, aiResult.adjustment.kind, makeup, todayStr);
+          adjustment.makeup = { date: makeup.date, workoutName: todayEntry.data.workouts.name };
+        }
+        if (aiResult.adjustment.kind === 'easier' && makeup) {
+          // Days swap: today becomes that day's easy ride.
+          adjustment.alternativeWorkout = {
+            workoutId: makeup.workout.id,
+            name: makeup.workout.name,
+            type: makeup.workout.workout_type,
+            duration: makeup.workout.duration_minutes,
+            tss: makeup.workout.tss,
+          };
+        } else if (aiResult.adjustment.kind === 'easier') {
           const r = resolveEasierReplacement(
             aiResult.adjustment.replacement,
             todayEntry.data.workouts?.duration_minutes,
