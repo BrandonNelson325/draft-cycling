@@ -202,7 +202,7 @@ export function PostRideModal({
   };
 
   const intervalMsg = `Give me a full debrief on my interval workout "${activity.name}" — how did my reps go (pacing, fade, consistency)${planned ? ' and did I hit the plan' : ''}?`;
-  const rideMsg = `Give me a debrief on my ride "${activity.name}" — how hard was it (intensity vs threshold), what were my best efforts (5-min, 20-min power), and how did I execute it? Focus on the ride itself.`;
+  const rideMsg = `Give me a debrief on my ride "${activity.name}" — how hard was it (intensity vs threshold), what were my best efforts (5-min, 20-min power), was it the right dose for what was planned, and what does it mean for my next sessions?`;
 
   const stats = [
     distance ? { label: 'Distance', value: distance } : null,

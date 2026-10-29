@@ -1404,8 +1404,8 @@ export const aiToolExecutor = {
         const curve = await powerAnalysisService.getActivityPowerCurve(athleteId, activity.strava_activity_id);
         if (curve) {
           powerCurve = {
-            '5s': curve.power_5s,
-            '30s': curve.power_30s,
+            '5s': curve.power_5sec,
+            '30s': curve.power_30sec,
             '1min': curve.power_1min,
             '3min': curve.power_3min,
             '5min': curve.power_5min,

@@ -10,6 +10,7 @@ import { fatigueProfileService, type FatigueProfile } from './fatigueProfileServ
 import { logger } from '../utils/logger';
 import { ageFromDob, mastersGuidance } from '../utils/age';
 import { formatLiveState } from '../utils/liveState';
+import { loadRideDebriefBlock } from '../utils/rideDebrief';
 import { findStateContradictions, describeFacts, StateFacts } from '../utils/stateGuard';
 import { localDayToUTCRange } from '../utils/timezone';
 import { summarizeWhoop, WHOOP_COACHING_RULES, WellnessDay } from '../utils/whoopCoaching';
@@ -929,7 +930,8 @@ DEBRIEFING A RIDE (always apply regardless of style):
 - The athlete's own report (RPE, notes like "fell apart", "had to stop", "legs were dead", "felt sick") OUTRANKS averaged data. Lap/interval averages hide stops inside a lap. NEVER call a ride "solid", "consistent" or "on target" when their notes say otherwise — reconcile the two out loud ("the average looks steady, but two stops means…").
 - Address what they told you FIRST, then the numbers that explain it.
 - If the ride was an FTP test (ftp_test_result in the ride details, or "Last FTP test" in your context), state the outcome plainly: what their FTP is now and why. If it was HELD or not completed, say it doesn't count as a valid test, read what the numbers DO suggest, and offer a retest day from their calendar.
-- End with what it means for the next few days (recovery, whether to adjust the next hard session).
+- If the message carries a [RIDE TO DEBRIEF] block, that IS the ride — use its numbers, don't summarize the plan instead. Judge the dose against what was PLANNED that day (more / less / on target, naming the specific efforts — e.g. a Z2 day with 5-min at 97% FTP is not a Z2 day), even when the athlete says "focus on the ride itself".
+- End with what it means for the next few days (recovery, whether to keep, ease or move the next hard session), and offer the calendar change when one is warranted.
 
 RESPONSE TONE (always apply regardless of style):
 - Never open with filler phrases like "Great question!", "Sure!", "Absolutely!", "Of course!", or "That's awesome!"
@@ -1076,10 +1078,15 @@ ride-detail question from the summary alone, and do NOT kick it to a later turn.
 - ✅ Talk about THIS ride: power curve (5s / 1 / 5 / 20 / 60-min best efforts from
   \`power_curve\`), normalized power & IF, the interval breakdown (\`intervals\`) if present,
   notable efforts, HR, how hard it was, how it compares to their numbers.
-- ❌ Do NOT describe the training plan, the calendar, or upcoming workouts (Monday
-  endurance, Tuesday VO2max, "the plan runs Sept–Nov…"). Reciting the plan when the
-  athlete asked about a ride is a HARD FAILURE — it reads as garbage that ignored the
-  question. Only mention the plan if they explicitly ask how this ride affects it.
+- ✅ Judge it against what was PRESCRIBED for that day (the [RIDE TO DEBRIEF] block's
+  "Planned for that day" + "Dose vs plan"): too much, too little or on target, and why.
+  A Z2 day that turned into a group ride with threshold/VO2 surges is MORE than
+  prescribed — say so plainly, even if the averages look easy.
+- ✅ Then the consequence: what it means for the next 1–2 sessions (keep, ease or move
+  tomorrow's workout) — and offer to make the change.
+- ❌ Do NOT recite the plan or the calendar (plan dates, the week's lineup, "the plan runs
+  Sept–Nov…"). That reads as garbage that ignored the question. The ONLY plan content in
+  a debrief is that day's prescribed session and the next 1–2 it affects.
 
 When \`intervals.hasIntervals\` is true, give a REAL rep-by-rep debrief:
 - Open with structure + overall ("Solid 5 × 5:00 at threshold — averaged 291W, 98% FTP").
@@ -1089,7 +1096,8 @@ When \`intervals.hasIntervals\` is true, give a REAL rep-by-rep debrief:
 
 When \`hasIntervals\` is false (race, group ride, free ride), debrief from \`power_curve\` +
 NP/IF: how hard it was vs threshold, standout efforts (e.g. "5-min best 306W, 20-min
-279W — strong for a 4-hour day"), and what it means. End with ONE actionable takeaway.
+279W — strong for a 4-hour day"), whether that matched the prescribed session, and what
+it means for the next session. End with ONE actionable takeaway.
 Reference the ACTUAL numbers from the tool result, never invented ones.
 
 ## COACHING INTELLIGENCE — INTENT DETECTION
@@ -2116,6 +2124,22 @@ Format it clearly so I can follow it during my ride.`;
   },
 
   /**
+   * LIVE STATE plus, for a post-ride "Give me a debrief…" message, the ride vs
+   * what was planned (utils/rideDebrief.ts) — without it the coach answered a
+   * debrief with a plan summary.
+   */
+  async liveStateWithDebrief(athleteId: string, context: AthleteContext, athleteTz: string, clientDate: string | undefined, sinceIso: string | null, message: string): Promise<string> {
+    const [state, debrief] = await Promise.all([
+      this.buildLiveState(athleteId, context, athleteTz, clientDate, sinceIso),
+      loadRideDebriefBlock(athleteId, message, context.athlete.ftp).catch((err) => {
+        logger.warn('[Debrief] ride block failed:', err);
+        return null;
+      }),
+    ]);
+    return debrief ? `${state}\n\n${debrief}` : state;
+  },
+
+  /**
    * Gather the LIVE STATE snapshot (see utils/liveState.ts). Reuses the context
    * already built for this turn; only "what changed" needs fresh queries.
    */
@@ -2287,7 +2311,7 @@ Format it clearly so I can follow it during my ride.`;
 
       const athleteTz = context.athlete.timezone || 'America/Los_Angeles';
       const messages = await this.buildMessageHistory(convId, message, athleteTz, clientDate,
-        (since) => this.buildLiveState(athleteId, context, athleteTz, clientDate, since));
+        (since) => this.liveStateWithDebrief(athleteId, context, athleteTz, clientDate, since, message));
 
       // Persist the user message NOW (before any AI work) so it survives a
       // dropped HTTP connection, AI failure, or backend crash. The assistant
@@ -2618,7 +2642,7 @@ Format it clearly so I can follow it during my ride.`;
 
       const athleteTz = context.athlete.timezone || 'America/Los_Angeles';
       const messages = await this.buildMessageHistory(convId, message, athleteTz, clientDate,
-        (since) => this.buildLiveState(athleteId, context, athleteTz, clientDate, since));
+        (since) => this.liveStateWithDebrief(athleteId, context, athleteTz, clientDate, since, message));
 
       // Persist the user message NOW (before any AI work) so it survives a
       // dropped HTTP connection, AI failure, or backend crash. The assistant
