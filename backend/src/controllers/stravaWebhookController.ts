@@ -175,6 +175,7 @@ async function handleActivityCreated(athleteId: string, stravaActivityId: number
       tss,
       moving_time_seconds: activity.moving_time,
       strava_activity_id: stravaActivityId,
+      name: activity.name,
     }).catch((err) => logger.warn('[Match] Matching failed:', err));
 
     // Invalidate cached suggestion so dashboard shows post-ride state

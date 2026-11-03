@@ -2,6 +2,16 @@ import { supabaseAdmin } from '../utils/supabase';
 import { todayInTimezone, localDayToUTCRange } from '../utils/timezone';
 import { logger } from '../utils/logger';
 import { FTP_TEST_NOTE_PREFIX } from './ftpTestService';
+import { isHardWorkout } from '../utils/backToBack';
+
+/**
+ * Did the uploaded ride carry the planned workout's name? Zwift / Wahoo /
+ * head-unit uploads of a Draft workout keep its name ("Draft - Sprint Efforts").
+ */
+export function rideIsPlannedWorkout(rideName: string | null | undefined, workoutName: string | null | undefined): boolean {
+  const core = String(workoutName || '').replace(/^Draft - /, '').split(' · ')[0].trim().toLowerCase();
+  return !!core && String(rideName || '').toLowerCase().includes(core);
+}
 
 export interface MatchResult {
   calendarEntryId: string;
@@ -134,6 +144,7 @@ export const activityMatchingService = {
       tss: number | null;
       moving_time_seconds: number | null;
       strava_activity_id: number;
+      name?: string | null;
     }
   ): Promise<MatchResult | null> {
     try {
@@ -155,8 +166,16 @@ export const activityMatchingService = {
         .from('calendar_entries').select('notes').eq('id', planned.calendarEntryId).single();
       const isProcessedTest = (existing?.notes || '').startsWith(FTP_TEST_NOTE_PREFIX);
 
+      // A hard session is only "done" when the ride WAS that session. Nov 3
+      // 2026: an 80-min endurance-pace group ride (68 TSS) auto-completed
+      // "Sprint Efforts 8 × 15 sec" (60 min, 67 TSS) on TSS + duration alone,
+      // so the coach then told the athlete the sprints were already done.
+      const hardNeedsName =
+        isHardWorkout({ name: planned.workoutName, workout_type: planned.workoutType }) &&
+        !rideIsPlannedWorkout(activityData.name, planned.workoutName);
+
       // Auto-complete if high confidence
-      if (match.confidence === 'high' && !isProcessedTest) {
+      if (match.confidence === 'high' && !isProcessedTest && !hardNeedsName) {
         const { error } = await supabaseAdmin
           .from('calendar_entries')
           .update({
@@ -226,11 +245,16 @@ export const activityMatchingService = {
     athleteId: string,
     calendarEntryId: string
   ): Promise<void> {
-    // Mark the entry with a note so the coach knows the athlete did something different
+    // Mark the entry with a note so the coach knows the athlete did something
+    // different — and undo any auto-match, or the planned workout still reads
+    // "✓done" to the coach (Nov 3 2026: sprints "done" by a Z2 group ride).
     await supabaseAdmin
       .from('calendar_entries')
       .update({
         notes: 'Athlete did a different ride than planned',
+        completed: false,
+        completed_at: null,
+        strava_activity_id: null,
       })
       .eq('id', calendarEntryId)
       .eq('athlete_id', athleteId);

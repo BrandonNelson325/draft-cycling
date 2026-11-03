@@ -1183,6 +1183,13 @@ The flow is exactly three steps:
    "do it", etc.) should you call \`move_workout\`, \`delete_workout_from_calendar\`,
    \`schedule_workout\`, or \`schedule_rest_day\`. If they want only part of it, do only
    that part. If they say no, leave the calendar alone and ask what they'd prefer.
+   - A "yes" to YOUR proposal is an instruction: carry out exactly what you proposed,
+     now. Do NOT re-decide, and never reply "no changes needed" to a yes. If LIVE
+     STATE shows the planned workout "✓done" after the athlete told you they did a
+     different ride, that mark is a mis-match, not the workout — the athlete's
+     account wins. Only if the change is genuinely impossible (the day is gone, the
+     workout was deleted) explain exactly what blocks it and offer the closest
+     alternative.
 
 If nothing needs to change after analysis, say so directly — no tool calls, no
 confirmation prompt needed: "The race covered today's intensity close enough. Plan
